@@ -1,0 +1,35 @@
+{
+  "name": "recall-learning-platform",
+  "private": true,
+  "packageManager": "pnpm@10.26.2",
+  "scripts": {
+    "dev": "pnpm --filter web dev",
+    "build": "pnpm --filter web build",
+    "build:mobile": "pnpm --filter mobile build",
+    "dev:desktop": "pnpm --filter desktop dev",
+    "build:desktop": "pnpm --filter desktop build",
+    "package:desktop": "pnpm --filter desktop package",
+    "lint": "pnpm --filter web lint && pnpm --filter mobile lint && pnpm --filter desktop lint",
+    "policy": "node scripts/check-policy.mjs && node scripts/check-migrations.mjs",
+    "typecheck": "pnpm --filter web exec tsc --noEmit && pnpm --filter mobile typecheck && pnpm --filter desktop typecheck",
+    "dev:mobile": "pnpm --filter mobile start",
+    "format:check": "pnpm --filter web format:check",
+    "format:write": "pnpm --filter web format:write",
+    "storybook": "pnpm --filter web storybook",
+    "build-storybook": "pnpm --filter web build-storybook",
+    "screenshots": "pnpm --filter web screenshots",
+    "supabase:start": "pnpm exec supabase start",
+    "supabase:stop": "pnpm exec supabase stop",
+    "supabase:reset": "pnpm exec supabase db reset",
+    "supabase:types": "pnpm exec supabase gen types typescript --local > apps/web/src/lib/supabase/database.types.ts"
+  },
+  "devDependencies": {
+    "supabase": "2.119.0"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "electron",
+      "esbuild"
+    ]
+  }
+}

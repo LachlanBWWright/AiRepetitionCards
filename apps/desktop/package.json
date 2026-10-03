@@ -1,0 +1,77 @@
+{
+  "name": "desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Offline-first spaced repetition and AI-assisted learning desktop client.",
+  "author": "Recall Project",
+  "desktopName": "Recall",
+  "type": "module",
+  "main": "./out/main/index.js",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "package": "electron-vite build && electron-builder --dir",
+    "dist:linux": "electron-vite build && electron-builder --linux AppImage",
+    "dist:mac": "electron-vite build && electron-builder --mac dmg zip",
+    "dist:windows": "electron-vite build && electron-builder --win nsis",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint"
+  },
+  "build": {
+    "appId": "com.recall.study",
+    "productName": "Recall",
+    "buildVersion": "0.1.0",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "out/**/*",
+      "package.json"
+    ],
+    "linux": {
+      "category": "Education",
+      "syncDesktopName": true,
+      "target": [
+        "AppImage"
+      ]
+    },
+    "mac": {
+      "target": [
+        "dmg",
+        "zip"
+      ]
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@recall/application": "workspace:*",
+    "@recall/domain": "workspace:*",
+    "@recall/local-store": "workspace:*",
+    "@supabase/supabase-js": "2.117.2",
+    "effect": "^3.22.2",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "@swc/core": "1.16.13",
+    "@types/node": "^24.10.0",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19",
+    "@vitejs/plugin-react": "^5.0.0",
+    "electron": "44.5.1",
+    "electron-builder": "26.15.5",
+    "electron-vite": "5.0.0",
+    "eslint": "^9",
+    "eslint-config-next": "16.3.8",
+    "eslint-config-prettier": "^10.1.8",
+    "typescript": "^5",
+    "vite": "7.3.6"
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "name": "@recall/scheduler",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@recall/domain": "workspace:*",
+    "@recall/sync-core": "workspace:*",
+    "ts-fsrs": "^5.4.2"
+  }
+}

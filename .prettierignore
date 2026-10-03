@@ -1,0 +1,10 @@
+deep-research-report (2).md
+pnpm-lock.yaml
+apps/web/storybook-static/
+apps/web/.next/
+apps/mobile/.expo/
+apps/mobile/dist/
+apps/desktop/out/
+../mobile/.expo/
+../mobile/dist/
+artifacts/storybook-screenshots/

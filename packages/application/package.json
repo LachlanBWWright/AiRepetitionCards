@@ -1,0 +1,19 @@
+{
+  "name": "@recall/application",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@noble/hashes": "^2.4.0",
+    "@recall/ai-core": "workspace:*",
+    "@recall/domain": "workspace:*",
+    "@recall/local-store": "workspace:*",
+    "@recall/scheduler": "workspace:*",
+    "@recall/sync-core": "workspace:*",
+    "effect": "^3.19.0",
+    "fflate": "^0.8.3"
+  }
+}

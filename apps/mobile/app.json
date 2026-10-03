@@ -1,0 +1,28 @@
+{
+  "expo": {
+    "name": "Recall",
+    "slug": "recall-learning",
+    "scheme": "recall",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#c4ed68"
+      }
+    },
+    "plugins": [
+      "expo-sqlite",
+      [
+        "expo-secure-store",
+        {
+          "configureAndroidBackup": true
+        }
+      ],
+      "expo-sharing"
+    ]
+  }
+}
