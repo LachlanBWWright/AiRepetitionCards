@@ -1,9 +1,16 @@
 import { Effect } from "effect";
 import type { LocalStoreFailure, WorkspaceStore } from "@recall/local-store";
-import { WORKSPACE_STORAGE_KEY } from "@/features/workspace/types";
+import { indexedDbWorkspaceStore } from "./indexeddb-workspace-store";
+import { coordinateLocalWrite } from "./local-write-coordinator";
+import { localSnapshotStale } from "./local-snapshot-status";
+import { uncoordinatedMediaStore } from "./browser-media-store";
 
 function storageFailure(operation: LocalStoreFailure["operation"]): LocalStoreFailure {
-  return { _tag: "LocalStoreFailure", operation };
+  return {
+    _tag: "LocalStoreFailure",
+    operation,
+    ...(localSnapshotStale() && operation !== "clear" ? { reason: "stale-snapshot" as const } : {}),
+  };
 }
 
 function desktopReplyValue<A>(
@@ -32,7 +39,7 @@ function desktopCommand(
     : Effect.fail(storageFailure(operation));
 }
 
-export const browserWorkspaceStore: WorkspaceStore = {
+export const uncoordinatedWorkspaceStore: WorkspaceStore = {
   read: Effect.suspend(() => {
     const desktopWorkspace = window.recallDesktop?.workspace;
     return desktopWorkspace
@@ -45,10 +52,7 @@ export const browserWorkspaceStore: WorkspaceStore = {
             ),
           catch: () => storageFailure("read"),
         }).pipe(Effect.flatten)
-      : Effect.try({
-          try: () => window.localStorage.getItem(WORKSPACE_STORAGE_KEY),
-          catch: () => storageFailure("read"),
-        });
+      : indexedDbWorkspaceStore.read;
   }),
   write: (serializedWorkspace) =>
     Effect.suspend(() => {
@@ -59,10 +63,7 @@ export const browserWorkspaceStore: WorkspaceStore = {
               desktopCommand(await desktopWorkspace.write(serializedWorkspace), "write"),
             catch: () => storageFailure("write"),
           }).pipe(Effect.flatten)
-        : Effect.try({
-            try: () => window.localStorage.setItem(WORKSPACE_STORAGE_KEY, serializedWorkspace),
-            catch: () => storageFailure("write"),
-          });
+        : indexedDbWorkspaceStore.write(serializedWorkspace);
     }),
   clear: Effect.suspend(() => {
     const desktopWorkspace = window.recallDesktop?.workspace;
@@ -71,9 +72,32 @@ export const browserWorkspaceStore: WorkspaceStore = {
           try: async () => desktopCommand(await desktopWorkspace.clear(), "clear"),
           catch: () => storageFailure("clear"),
         }).pipe(Effect.flatten)
-      : Effect.try({
-          try: () => window.localStorage.removeItem(WORKSPACE_STORAGE_KEY),
-          catch: () => storageFailure("clear"),
-        });
+      : indexedDbWorkspaceStore.clear;
   }),
+};
+
+export const browserWorkspaceStore: WorkspaceStore = {
+  ...uncoordinatedWorkspaceStore,
+  coordinateMediaCommit: (commit) =>
+    coordinateLocalWrite(
+      commit(uncoordinatedWorkspaceStore, uncoordinatedMediaStore),
+      () => ({ _tag: "WorkspaceMediaCommitFailure", reason: "workspace-write" }) as const,
+    ),
+  read: coordinateLocalWrite(uncoordinatedWorkspaceStore.read, () => storageFailure("read")),
+  write: (serializedWorkspace) =>
+    coordinateLocalWrite(uncoordinatedWorkspaceStore.write(serializedWorkspace), () =>
+      storageFailure("write"),
+    ),
+  clear: coordinateLocalWrite(uncoordinatedWorkspaceStore.clear, () => storageFailure("clear")),
+};
+
+/** Review commits alone can pass the pending-review barrier; all fences still apply. */
+export const browserReviewWorkspaceStore: WorkspaceStore = {
+  ...browserWorkspaceStore,
+  write: (serializedWorkspace) =>
+    coordinateLocalWrite(
+      uncoordinatedWorkspaceStore.write(serializedWorkspace),
+      () => storageFailure("write"),
+      true,
+    ),
 };

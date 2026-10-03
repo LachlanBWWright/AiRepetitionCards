@@ -32,6 +32,20 @@ export const Answer: Story = {
   args: { ...Question.args, showAnswer: true },
 };
 
+export const MultilineAnswer: Story = {
+  name: "Multiline answer",
+  args: {
+    ...Answer.args,
+    card: exampleCard
+      ? {
+          ...exampleCard,
+          front: "How do you solve this equation?\n\n2x + 3 = 11",
+          back: "1. Subtract 3 from both sides.\n   2x = 8\n\n2. Divide both sides by 2.\n   x = 4",
+        }
+      : undefined,
+  },
+};
+
 export const CaughtUp: Story = {
   name: "Caught up · empty state",
   args: { ...Question.args, card: undefined },

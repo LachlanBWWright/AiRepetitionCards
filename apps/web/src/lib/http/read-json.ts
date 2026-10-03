@@ -2,13 +2,21 @@ import { Effect } from "effect";
 
 export type JsonBodyError = {
   readonly _tag: "JsonBodyError";
-  readonly reason: "too-large" | "invalid-json" | "unreadable";
+  readonly reason: "too-large" | "invalid-content-type" | "invalid-json" | "unreadable";
 };
 
 export function readJsonBody(
   request: Request,
   maximumBytes: number,
 ): Effect.Effect<unknown, JsonBodyError> {
+  const contentType = request.headers.get("content-type");
+  if (
+    contentType === null ||
+    contentType.split(";", 1)[0]?.trim().toLowerCase() !== "application/json"
+  ) {
+    return Effect.fail({ _tag: "JsonBodyError", reason: "invalid-content-type" });
+  }
+
   const contentLength = request.headers.get("content-length");
   if (contentLength !== null) {
     const declaredBytes = Number(contentLength);

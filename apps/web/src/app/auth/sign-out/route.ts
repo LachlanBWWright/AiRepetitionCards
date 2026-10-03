@@ -4,6 +4,11 @@ import { readSupabaseConfig } from "@/lib/supabase/config";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
+  if (request.headers.get("origin") !== request.nextUrl.origin)
+    return NextResponse.json(
+      { error: "invalid-origin" },
+      { status: 403, headers: { "cache-control": "private, no-store" } },
+    );
   const config = readSupabaseConfig();
   if (Either.isLeft(config)) {
     return NextResponse.redirect(new URL("/", request.url), { status: 303 });
@@ -15,7 +20,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         config.right.url,
         config.right.publishableKey,
       );
-      return client.auth.signOut();
+      return client.auth.signOut({ scope: "local" });
     },
     catch: () => ({ _tag: "SignOutError" }) as const,
   }).pipe(

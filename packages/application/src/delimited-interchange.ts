@@ -1,17 +1,32 @@
-import type { LearningArea } from "@recall/domain";
+import {
+  createAreaId,
+  createCardId,
+  createObjectiveId,
+  LearningAreaSchema,
+  type LearningArea,
+} from "@recall/domain";
+import { Effect, Either, Schema } from "effect";
+import { toKnowledgeArea } from "./knowledge-area-interchange";
 import { newSchedule } from "@recall/scheduler";
 
 type DelimitedRow = readonly string[];
 type Delimiter = "," | "\t";
 
 export type DelimitedImportError =
+  | "invalid-timestamp"
   | "invalid-quote"
   | "too-many-rows"
   | "too-many-columns"
   | "field-too-large"
   | "input-too-large"
   | "missing-front-back"
-  | "no-cards";
+  | "no-cards"
+  | "too-many-cards"
+  | "too-many-objectives"
+  | "invalid-metadata"
+  | "invalid-content"
+  | "invalid-tag-encoding"
+  | "identity-unavailable";
 
 export type DelimitedImportResult =
   | { readonly _tag: "Success"; readonly area: LearningArea }
@@ -19,8 +34,10 @@ export type DelimitedImportResult =
 
 const MAX_INPUT_CHARACTERS = 2_000_000;
 const MAX_FIELD_CHARACTERS = 1_000_000;
-const MAX_ROWS = 10_001;
+const MAX_ROWS = 501;
 const MAX_COLUMNS = 30;
+// Imported canonical content may contain empty or longer tags than newly authored cards.
+const EncodedTagsSchema = Schema.Array(Schema.String);
 
 function parseRows(
   text: string,
@@ -115,7 +132,13 @@ export function importDelimitedCards(
   delimiter: Delimiter,
   title: string,
   color: string,
+  now: Date,
+  createId: () => string = () => crypto.randomUUID(),
 ): DelimitedImportResult {
+  if (!Number.isFinite(now.getTime())) return { _tag: "Failure", reason: "invalid-timestamp" };
+  const importedTitle = title.trim() || "Imported cards";
+  if (importedTitle.length > 80 || !/^#[0-9a-fA-F]{6}$/.test(color))
+    return { _tag: "Failure", reason: "invalid-metadata" };
   const parsed = parseRows(text, delimiter);
   if (parsed._tag === "Failure") return parsed;
   const [first, ...remaining] = parsed.rows;
@@ -133,68 +156,115 @@ export function importDelimitedCards(
   const tagsIndex = hasHeader
     ? headers.findIndex((header) => header === "tags" || header === "tag")
     : -1;
+  const tagsJsonIndex = hasHeader ? headers.findIndex((header) => header === "tagsjson") : -1;
   if (frontIndex < 0 || backIndex < 0) return { _tag: "Failure", reason: "missing-front-back" };
 
   const records = hasHeader ? remaining : parsed.rows;
-  const cards = records.flatMap((record) => {
-    const front = record[frontIndex]?.trim() ?? "";
-    const back = record[backIndex]?.trim() ?? "";
-    if (!front || !back) return [];
-    const objective = record[objectiveIndex]?.trim() || "Imported cards";
-    const tags = (record[tagsIndex] ?? "")
-      .split(/[|;]/)
-      .map((tag) => tag.trim())
-      .filter(Boolean);
-    return [
-      {
-        id: crypto.randomUUID(),
-        front,
-        back,
-        objective,
-        tags,
-        origin: "imported" as const,
-        schedule: newSchedule(),
-      },
-    ];
-  });
+  const preparedRecords = Effect.runSync(
+    Effect.either(
+      Effect.forEach(records, (record) =>
+        Effect.gen(function* () {
+          const front = record[frontIndex]?.trim() ?? "";
+          const back = record[backIndex]?.trim() ?? "";
+          if (!front || !back) return yield* Effect.fail({ _tag: "DelimitedRowInvalid" } as const);
+          const objective = record[objectiveIndex]?.trim() || "Imported cards";
+          const tags =
+            tagsJsonIndex >= 0
+              ? Schema.decodeUnknown(Schema.parseJson(EncodedTagsSchema))(
+                  record[tagsJsonIndex] || "[]",
+                ).pipe(Effect.mapError(() => ({ _tag: "DelimitedTagsInvalid" }) as const))
+              : Effect.succeed(
+                  (record[tagsIndex] ?? "")
+                    .split(/[|;]/)
+                    .map((tag) => tag.trim())
+                    .filter(Boolean),
+                );
+          const parsedTags = yield* tags;
+          return [{ front, back, objective, tags: parsedTags }];
+        }),
+      ),
+    ),
+  );
+  if (Either.isLeft(preparedRecords))
+    return {
+      _tag: "Failure",
+      reason:
+        preparedRecords.left._tag === "DelimitedRowInvalid"
+          ? "missing-front-back"
+          : "invalid-tag-encoding",
+    };
+  const generatedCards = Effect.runSync(
+    Effect.either(
+      Effect.try({
+        try: () =>
+          preparedRecords.right.flat().map((record) => ({
+            ...record,
+            id: createCardId(createId()),
+            origin: "imported" as const,
+            schedule: newSchedule(now),
+          })),
+        catch: () => ({ _tag: "DelimitedIdentityUnavailable" }) as const,
+      }),
+    ),
+  );
+  if (Either.isLeft(generatedCards)) return { _tag: "Failure", reason: "identity-unavailable" };
+  const cards = generatedCards.right;
   if (cards.length === 0) return { _tag: "Failure", reason: "no-cards" };
 
+  if (cards.length > 500) return { _tag: "Failure", reason: "too-many-cards" };
   const objectiveTitles = [...new Set(cards.map((card) => card.objective))];
-  const objectiveIdByTitle = new Map(
-    objectiveTitles.map((objective) => [objective, crypto.randomUUID()]),
+  if (objectiveTitles.length > 200) return { _tag: "Failure", reason: "too-many-objectives" };
+  const generatedArea = Effect.runSync(
+    Effect.either(
+      Effect.try({
+        try: () => {
+          const objectiveIdByTitle = new Map(
+            objectiveTitles.map((objective) => [objective, createObjectiveId(createId())]),
+          );
+          return {
+            id: createAreaId(createId()),
+            title: importedTitle,
+            color,
+            cards: cards.map((card) => ({
+              ...card,
+              objectiveIds: [
+                objectiveIdByTitle.get(card.objective) ?? createObjectiveId(card.objective),
+              ],
+            })),
+            objectives: objectiveTitles.map((objective) => ({
+              id: objectiveIdByTitle.get(objective) ?? createObjectiveId(objective),
+              title: objective,
+              description: null,
+              prerequisiteIds: [],
+            })),
+            language: "en",
+            tags: [],
+            licence: null,
+          };
+        },
+        catch: () => ({ _tag: "DelimitedIdentityUnavailable" }) as const,
+      }),
+    ),
   );
-  return {
-    _tag: "Success",
-    area: {
-      id: crypto.randomUUID(),
-      title: title.trim() || "Imported cards",
-      color,
-      cards: cards.map((card) => ({
-        ...card,
-        objectiveIds: [objectiveIdByTitle.get(card.objective) ?? ""],
-      })),
-      objectives: objectiveTitles.map((objective) => ({
-        id: objectiveIdByTitle.get(objective) ?? "",
-        title: objective,
-        description: null,
-        prerequisiteIds: [],
-      })),
-      language: "en",
-      tags: [],
-      licence: null,
-    },
-  };
+  if (Either.isLeft(generatedArea)) return { _tag: "Failure", reason: "identity-unavailable" };
+  const decoded = Schema.decodeUnknownEither(LearningAreaSchema)(generatedArea.right);
+  if (Either.isLeft(decoded)) return { _tag: "Failure", reason: "invalid-content" };
+  const portable = Effect.runSync(Effect.either(toKnowledgeArea(decoded.right)));
+  return Either.isLeft(portable)
+    ? { _tag: "Failure", reason: "invalid-content" }
+    : { _tag: "Success", area: decoded.right };
 }
 
-/** Exports CSV or TSV with formula-leading cells escaped for spreadsheet safety. */
+/** Keep a readable legacy tags column and an authoritative JSON column for lossless tag text. */
 export function exportDelimitedCards(area: LearningArea, delimiter: Delimiter): string {
   const rows = [
-    ["front", "back", "objective", "tags"],
+    ["front", "back", "objective", "tags", "tags_json"],
     ...area.cards.map((card) => [
       card.front,
       card.back,
       card.objective,
       card.tags?.join(" | ") ?? "",
+      JSON.stringify(card.tags ?? []),
     ]),
   ];
   return rows.map((row) => row.map((cell) => quote(cell, delimiter)).join(delimiter)).join("\r\n");

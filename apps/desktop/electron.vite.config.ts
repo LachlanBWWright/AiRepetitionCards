@@ -20,7 +20,14 @@ export default defineConfig(({ mode }) => {
     ),
   };
   return {
-    main: { define: publicEnvironment },
+    main: {
+      define: {
+        ...publicEnvironment,
+        "process.env.RECALL_CHATGPT_LOCAL_ENABLED": JSON.stringify(
+          env.RECALL_CHATGPT_LOCAL_ENABLED ?? process.env.RECALL_CHATGPT_LOCAL_ENABLED ?? "false",
+        ),
+      },
+    },
     preload: {
       plugins: [externalizeDepsPlugin()],
       build: { rollupOptions: { output: { format: "cjs", entryFileNames: "index.cjs" } } },

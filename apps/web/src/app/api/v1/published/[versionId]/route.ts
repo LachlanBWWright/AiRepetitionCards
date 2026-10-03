@@ -1,81 +1,109 @@
-import { Either, Schema } from "effect";
+import { anonymousPublicationRateLimit } from "@/lib/http/api-rate-limit";
+import { observeRoute } from "@/lib/http/observe-route";
+import { publishingErrorResponse } from "@/lib/publishing/error-response";
+import { Either, Effect, Schema } from "effect";
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { ReadPublishedKnowledgeAreaResponseSchema } from "@recall/contracts";
+import type { Database } from "@recall/infra-supabase/database.types";
+import {
+  PublicationVersionIdSchema,
+  ReadPublishedKnowledgeAreaRequestSchema,
+  ReadPublishedKnowledgeAreaResponseSchema,
+  PublishedShareTokenQuerySchema,
+  PublishedShareTokenSchema,
+} from "@recall/contracts";
+import { readPublishedKnowledgeAreaVersion } from "@recall/infra-supabase";
 import { readSupabaseConfig } from "@/lib/supabase/config";
-import { contentHash, hashShareToken, parsePortableArea } from "@/lib/publishing/shared";
+import {
+  contentHash,
+  hashShareToken,
+  parsePortableArea,
+  parsePublishedVersionRow,
+} from "@/lib/publishing/shared";
 
 type RouteContext = { readonly params: Promise<{ readonly versionId: string }> };
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-
 function unavailable(): NextResponse {
-  return NextResponse.json({ error: "publication-not-found" }, { status: 404 });
+  return publishingErrorResponse("publication-not-found", 404);
 }
 
-export async function GET(request: NextRequest, context: RouteContext): Promise<NextResponse> {
+async function handleGET(request: NextRequest, context: RouteContext): Promise<NextResponse> {
+  const limited = await anonymousPublicationRateLimit(request);
+  if (limited) return limited;
   const { versionId } = await context.params;
-  if (!UUID.test(versionId)) return unavailable();
+  const decodedVersionId = Schema.decodeUnknownEither(PublicationVersionIdSchema)(versionId);
+  if (Either.isLeft(decodedVersionId)) return unavailable();
+  const tokenValues = request.nextUrl.searchParams.getAll("token");
+  const decodedTokenQuery = Schema.decodeUnknownEither(PublishedShareTokenQuerySchema)({
+    ...(tokenValues.length === 1 ? { token: tokenValues[0] } : {}),
+    ...(tokenValues.length > 1 ? { token: tokenValues } : {}),
+  });
+  if (Either.isLeft(decodedTokenQuery)) return unavailable();
   const config = readSupabaseConfig();
-  if (Either.isLeft(config))
-    return NextResponse.json({ error: "publication-unavailable" }, { status: 503 });
-  const client = createClient(config.right.url, config.right.publishableKey, {
+  if (Either.isLeft(config)) return publishingErrorResponse("publication-unavailable", 503);
+  const client = createClient<Database>(config.right.url, config.right.publishableKey, {
     auth: { autoRefreshToken: false, detectSessionInUrl: false, persistSession: false },
   });
-  let row: Record<string, unknown> | null = null;
+  const authorizationToken = request.headers.get("authorization")?.match(/^Bearer\s+(\S+)$/i)?.[1];
+  const headerCapability =
+    Schema.decodeUnknownEither(PublishedShareTokenSchema)(authorizationToken);
   const rawToken =
-    request.nextUrl.searchParams.get("token") ??
-    request.headers.get("authorization")?.match(/^Bearer\s+(\S+)$/i)?.[1] ??
-    null;
-  if (rawToken !== null) {
-    if (!/^[A-Za-z0-9_-]{43}$/.test(rawToken)) return unavailable();
-    const result = await client.rpc("read_unlisted_knowledge_area_version", {
-      p_version_id: versionId,
-      p_share_token_hash: hashShareToken(rawToken),
-    });
-    if (result.error) return unavailable();
-    const first: unknown = Array.isArray(result.data) ? result.data[0] : null;
-    if (typeof first === "object" && first !== null) row = first as Record<string, unknown>;
-  } else {
-    const result = await client
-      .from("published_knowledge_area_versions")
-      .select(
-        "id, source_area_id, version, content, content_hash, attribution, license, forked_from_version_id, created_at",
-      )
-      .eq("id", versionId)
-      .eq("visibility", "public")
-      .maybeSingle();
-    if (result.error) return unavailable();
-    if (result.data !== null) row = result.data as Record<string, unknown>;
-  }
-  if (!row) return unavailable();
-  const content = parsePortableArea(row.content);
+    decodedTokenQuery.right.token ??
+    (Either.isRight(headerCapability) ? headerCapability.right : null);
+  const decodedRequest = Schema.decodeUnknownEither(ReadPublishedKnowledgeAreaRequestSchema)({
+    versionId: decodedVersionId.right,
+    shareToken: rawToken,
+  });
+  if (Either.isLeft(decodedRequest)) return unavailable();
+  const read = await Effect.runPromise(
+    Effect.either(
+      readPublishedKnowledgeAreaVersion(
+        client,
+        decodedRequest.right.versionId,
+        decodedRequest.right.shareToken === null
+          ? null
+          : hashShareToken(decodedRequest.right.shareToken),
+      ),
+    ),
+  );
+  if (Either.isLeft(read)) return unavailable();
+  const row = read.right;
+  const publication = parsePublishedVersionRow(row);
+  if (!publication) return unavailable();
+  const content = parsePortableArea(publication.content);
   if (
     content === null ||
-    row.id !== versionId ||
-    typeof row.version !== "number" ||
-    typeof row.content_hash !== "string" ||
-    typeof row.created_at !== "string" ||
-    (row.attribution !== null && typeof row.attribution !== "string") ||
-    (row.license !== null && typeof row.license !== "string") ||
-    (row.forked_from_version_id !== null && typeof row.forked_from_version_id !== "string")
+    publication.id !== decodedRequest.right.versionId ||
+    publication.version === undefined ||
+    publication.content_hash === undefined ||
+    publication.created_at === undefined ||
+    publication.attribution === undefined ||
+    publication.license === undefined ||
+    publication.forked_from_version_id === undefined
   )
     return unavailable();
-  if (contentHash(content) !== row.content_hash) return unavailable();
+  if (contentHash(content) !== publication.content_hash) return unavailable();
   const response = Schema.decodeUnknownEither(ReadPublishedKnowledgeAreaResponseSchema)({
+    schemaVersion: 1,
     version: {
-      id: row.id,
-      version: row.version,
+      id: publication.id,
+      version: publication.version,
       content,
-      contentHash: row.content_hash,
-      attribution: row.attribution,
-      license: row.license,
-      forkedFromVersionId: row.forked_from_version_id,
-      createdAt: row.created_at,
+      contentHash: publication.content_hash,
+      attribution: publication.attribution,
+      license: publication.license,
+      forkedFromVersionId: publication.forked_from_version_id,
+      createdAt: publication.created_at,
     },
   });
   return Either.isLeft(response)
     ? unavailable()
     : NextResponse.json(response.right, {
-        headers: { "Cache-Control": rawToken ? "private, no-store" : "public, max-age=60" },
+        headers: {
+          "Cache-Control": decodedRequest.right.shareToken
+            ? "private, no-store"
+            : "public, max-age=60",
+        },
       });
 }
+
+export const GET = observeRoute("publication-read", handleGET);

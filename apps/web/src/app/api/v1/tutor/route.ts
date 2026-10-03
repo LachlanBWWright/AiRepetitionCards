@@ -1,22 +1,58 @@
+import { observeRoute } from "@/lib/http/observe-route";
 import { Effect, Either, Schema } from "effect";
 import { NextResponse, type NextRequest } from "next/server";
+import { privateJson } from "@/lib/http/private-json";
+import { authenticatedApiRateLimit } from "@/lib/http/api-rate-limit";
 import {
-  AiProvider,
   AnswerEvaluationSchema,
   CardProposalSchema,
-  TargetedQuizSchema,
   TargetedQuizSessionSchema,
   type AiProviderError,
   decodeTutorActionRequest,
-  ResolveProposalRequestSchema,
+  ResolveTutorProposalRequestSchema,
+  ResolveTutorProposalResponseSchema,
+  TutorApiRequestSchema,
+  TutorApiResponseSchema,
   TutorActionResponseSchema,
-  TutorContextSchema,
+  TutorSessionStateResponseSchema,
   TutorSessionStateSchema,
-  TutorQuestionSchema,
 } from "@recall/ai-core";
-import { openAiProvider } from "@/lib/ai/openai";
+import {
+  prepareTutorWorkflow,
+  executeTutorWorkflow,
+  validateTutorProposalResolution,
+  type TutorWorkflowFailure,
+  type TutorWorkflowSnapshot,
+  tutorAreaFingerprint,
+} from "@recall/application";
+import { TutorSessionQuerySchema } from "@recall/contracts";
+import { hostedTutorModel, createHostedTutorProvider } from "@/lib/ai/openai";
 import { readSupabaseConfig } from "@/lib/supabase/config";
+import { readJsonBody } from "@/lib/http/read-json";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createTutorApprovalAdmin } from "@/lib/supabase/tutor-approval-admin";
+import {
+  loadTutorSession,
+  readTutorObservationPayload,
+  readTutorObservationHistory,
+  readTutorProposal,
+  readTutorCanonicalArea,
+} from "@recall/infra-supabase/tutor-repository";
+import { toDatabaseJson } from "@recall/infra-supabase/json";
+import {
+  appendTutorMessage,
+  appendTutorObservation,
+  appendTutorProposal,
+  createTutorSession,
+  recordTutorUsage,
+  reserveTutorCall,
+  resolveTutorProposal,
+  linkExistingTutorApprovalRevision,
+  repairTutorSessionApprovalRevisions,
+  updateTutorSession,
+  type TutorWriteError,
+} from "@recall/infra-supabase/tutor-writes";
+import type { Json } from "@recall/infra-supabase/database.types";
 
 type SupabaseServerClient = Awaited<ReturnType<typeof createSupabaseServerClient>>;
 type AuthResult =
@@ -26,36 +62,6 @@ type AuthResult =
       readonly userId: string;
     }
   | { readonly _tag: "AuthFailure"; readonly status: 401 | 502 | 503 };
-
-const StoredSessionSchema = Schema.Struct({
-  id: Schema.String,
-  area_id: Schema.String,
-  area_snapshot: Schema.Unknown,
-  last_quiz: Schema.Unknown,
-  last_observation_id: Schema.NullOr(Schema.String),
-  last_proposal_id: Schema.NullOr(Schema.String),
-});
-const StoredMessageSchema = Schema.Struct({
-  role: Schema.String,
-  kind: Schema.String,
-  content: Schema.Unknown,
-});
-const StoredObservationSchema = Schema.Struct({ payload: Schema.Unknown });
-const ProviderMeteringSchema = Schema.Struct({
-  result: Schema.Unknown,
-  inputTokens: Schema.NullOr(Schema.Number.pipe(Schema.int(), Schema.nonNegative())),
-  outputTokens: Schema.NullOr(Schema.Number.pipe(Schema.int(), Schema.nonNegative())),
-  model: Schema.String.pipe(Schema.minLength(1)),
-});
-
-type LoadedSession = {
-  readonly session: typeof StoredSessionSchema.Type;
-  readonly context: typeof TutorContextSchema.Type;
-};
-type LoadSessionResult =
-  | { readonly _tag: "Loaded"; readonly value: LoadedSession }
-  | { readonly _tag: "Missing" }
-  | { readonly _tag: "Unavailable" };
 
 async function requireUser(): Promise<AuthResult> {
   const config = readSupabaseConfig();
@@ -69,7 +75,7 @@ async function requireUser(): Promise<AuthResult> {
             config.right.publishableKey,
           );
           const claims = await client.auth.getClaims();
-          return { client, userId: claims.data?.claims?.sub ?? null };
+          return { client, userId: claims.data?.claims.sub ?? null };
         },
         catch: () => ({ _tag: "TutorAuthUnavailable" }) as const,
       }),
@@ -81,587 +87,508 @@ async function requireUser(): Promise<AuthResult> {
     : { _tag: "AuthFailure", status: 401 };
 }
 
-async function loadSession(
-  client: SupabaseServerClient,
-  userId: string,
-  sessionId: string,
-): Promise<LoadSessionResult> {
-  const found = await client
-    .from("tutor_sessions")
-    .select("id, area_id, area_snapshot, last_observation_id, last_proposal_id, last_quiz")
-    .eq("id", sessionId)
-    .eq("user_id", userId)
-    .maybeSingle();
-  if (found.error) return { _tag: "Unavailable" };
-  if (!found.data) return { _tag: "Missing" };
-  const session = Schema.decodeUnknownEither(StoredSessionSchema)(found.data);
-  if (Either.isLeft(session)) return { _tag: "Unavailable" };
+async function loadSession(client: SupabaseServerClient, userId: string, sessionId: string) {
+  return Effect.runPromise(Effect.either(loadTutorSession(client, userId, sessionId)));
+}
 
-  const messageResult = await client
-    .from("tutor_messages")
-    .select("role, kind, content")
-    .eq("session_id", sessionId)
-    .eq("user_id", userId)
-    .order("sequence", { ascending: true });
-  if (messageResult.error) return { _tag: "Unavailable" };
-  const messages = Schema.decodeUnknownEither(Schema.Array(StoredMessageSchema))(
-    messageResult.data ?? [],
-  );
-  if (Either.isLeft(messages)) return { _tag: "Unavailable" };
-  const history: Array<{ role: "assistant" | "learner"; content: string }> = [];
-  for (const message of messages.right) {
-    if (typeof message.content !== "string") continue;
-    if (message.role === "learner" && message.kind === "answer") {
-      history.push({ role: "learner", content: message.content });
-    } else if (
-      message.role === "tutor" &&
-      (message.kind === "question" || message.kind === "feedback")
-    ) {
-      history.push({ role: "assistant", content: message.content });
-    }
-  }
-  const context = Schema.decodeUnknownEither(TutorContextSchema)({
-    knowledgeArea: session.right.area_snapshot,
-    history,
-  });
-  return Either.isLeft(context)
-    ? { _tag: "Unavailable" }
-    : { _tag: "Loaded", value: { session: session.right, context: context.right } };
+async function tutorWriteSucceeded(
+  operation: Effect.Effect<unknown, TutorWriteError>,
+): Promise<boolean> {
+  return Either.isRight(await Effect.runPromise(Effect.either(operation)));
 }
 
 function aiFailureResponse(error: AiProviderError): NextResponse {
   const status =
-    error._tag === "AiRateLimited" ? 429 : error._tag === "AiQuotaExceeded" ? 413 : 503;
+    error._tag === "AiRateLimited" || error._tag === "AiBudgetExceeded"
+      ? 429
+      : error._tag === "AiContextBudgetExceeded"
+        ? 413
+        : 503;
   const message =
-    error._tag === "AiRefusal"
-      ? "The tutor could not help with that request. Try rephrasing it."
-      : error._tag === "AiRateLimited"
-        ? "The tutor is busy. Try again shortly."
-        : error._tag === "AiQuotaExceeded"
-          ? "This learning area is too large for a single tutor request."
-          : error._tag === "AiStructuredOutputError"
-            ? "The tutor response could not be validated. Try again."
-            : "AI tutoring is temporarily unavailable.";
-  return NextResponse.json({ error: message }, { status });
+    error._tag === "AiBudgetExceeded"
+      ? "You have reached today’s hosted AI budget. Try again tomorrow."
+      : error._tag === "AiBudgetUnavailable"
+        ? "Hosted AI budgeting is temporarily unavailable. Try again later."
+        : error._tag === "AiRefusal"
+          ? "The tutor could not help with that request. Try rephrasing it."
+          : error._tag === "AiRateLimited"
+            ? "The tutor is busy. Try again shortly."
+            : error._tag === "AiContextBudgetExceeded"
+              ? "Required tutor context is too large. Shorten objective descriptions or AI instructions."
+              : error._tag === "AiQuotaExceeded"
+                ? "The hosted AI account has exhausted its quota. Ask the operator to check API funding."
+                : error._tag === "AiStructuredOutputError"
+                  ? "The tutor response could not be validated. Try again."
+                  : "AI tutoring is temporarily unavailable.";
+  return privateJson({ error: message }, { status });
 }
 
 function unavailable(): NextResponse {
-  return NextResponse.json({ error: "tutor-storage-unavailable" }, { status: 502 });
+  return privateJson({ error: "tutor-storage-unavailable" }, { status: 502 });
 }
 
-async function runProvider(
-  operation: () => Effect.Effect<unknown, AiProviderError, AiProvider>,
-): Promise<Either.Either<unknown, AiProviderError>> {
-  return Effect.runPromise(
-    Effect.either(Effect.provideService(Effect.suspend(operation), AiProvider, openAiProvider)),
-  );
+function workflowFailureResponse(error: TutorWorkflowFailure): NextResponse {
+  if (error.code === "context-budget-exceeded")
+    return aiFailureResponse({ _tag: "AiContextBudgetExceeded" });
+  const status =
+    error.code === "invalid-provider-response" || error.code === "invalid-session"
+      ? 502
+      : error.code === "session-not-found" || error.code === "quiz-question-not-found"
+        ? 404
+        : error.code === "invalid-request" || error.code === "unknown-objective"
+          ? 400
+          : 409;
+  return privateJson({ error: error.code }, { status });
 }
 
-export async function POST(request: NextRequest): Promise<NextResponse> {
+function loadWorkflowSnapshot(client: SupabaseServerClient, userId: string, sessionId: string) {
+  return Effect.gen(function* () {
+    const loaded = yield* loadTutorSession(client, userId, sessionId);
+    const observations = yield* readTutorObservationHistory(client, userId, sessionId);
+    const decode = <A, I>(schema: Schema.Schema<A, I>, input: unknown) =>
+      Schema.decodeUnknown(schema)(input).pipe(
+        Effect.mapError(() => ({ _tag: "TutorSnapshotUnavailable" }) as const),
+      );
+    const evaluation = loaded.session.last_observation_id
+      ? yield* decode(
+          AnswerEvaluationSchema,
+          yield* readTutorObservationPayload(client, userId, loaded.session.last_observation_id),
+        )
+      : null;
+    const quiz =
+      loaded.session.last_quiz === null
+        ? null
+        : yield* decode(TargetedQuizSessionSchema, loaded.session.last_quiz);
+    let proposal: TutorWorkflowSnapshot["state"]["proposal"] = null;
+    if (loaded.session.last_proposal_id) {
+      const stored = yield* readTutorProposal(client, userId, loaded.session.last_proposal_id);
+      if (stored.state === "pending")
+        proposal = {
+          proposalId: stored.id,
+          content: yield* decode(CardProposalSchema, stored.content),
+        };
+    }
+    return {
+      observationId: loaded.session.last_observation_id,
+      snapshot: {
+        context: loaded.context,
+        pendingQuestion: loaded.pendingQuestion,
+        state: {
+          sessionId,
+          history: loaded.context.history,
+          evaluation,
+          observations,
+          proposal,
+          quiz,
+        },
+      },
+    };
+  });
+}
+
+async function handlePOST(request: NextRequest): Promise<NextResponse> {
   const auth = await requireUser();
   if (auth._tag === "AuthFailure") {
-    return NextResponse.json(
+    return privateJson(
       { error: auth.status === 401 ? "unauthenticated" : "auth-unavailable" },
       { status: auth.status },
     );
   }
+  const limited = await authenticatedApiRateLimit(auth.userId, "tutor-write", { request });
+  if (limited) return limited;
 
-  const bodyText = await Effect.runPromise(
-    Effect.either(
-      Effect.tryPromise({
-        try: async () => request.text(),
-        catch: () => ({ _tag: "TutorRequestReadError" }) as const,
-      }),
-    ),
-  );
-  if (Either.isLeft(bodyText)) {
-    return NextResponse.json({ error: "invalid-request" }, { status: 400 });
-  }
-  if (Buffer.byteLength(bodyText.right, "utf8") > 128_000) {
-    return NextResponse.json({ error: "request-too-large" }, { status: 413 });
-  }
-  const body = Effect.runSync(
-    Effect.either(
-      Effect.try({
-        try: () => JSON.parse(bodyText.right) as unknown,
-        catch: () => ({ _tag: "TutorRequestJsonError" }) as const,
-      }),
-    ),
-  );
+  const body = await Effect.runPromise(Effect.either(readJsonBody(request, 128_000)));
   if (Either.isLeft(body)) {
-    return NextResponse.json({ error: "invalid-request" }, { status: 400 });
+    return privateJson(
+      { error: body.left.reason === "too-large" ? "request-too-large" : "invalid-request" },
+      { status: body.left.reason === "too-large" ? 413 : 400 },
+    );
   }
-  const action = Effect.runSync(Effect.either(decodeTutorActionRequest(body.right)));
-  if (Either.isLeft(action)) {
-    return NextResponse.json({ error: "invalid-request" }, { status: 400 });
+  const apiRequest = Schema.decodeUnknownEither(TutorApiRequestSchema)(body.right);
+  if (Either.isLeft(apiRequest)) {
+    return privateJson({ error: "invalid-request" }, { status: 400 });
   }
+  const action = Effect.runSync(Effect.either(decodeTutorActionRequest(apiRequest.right.request)));
+  if (Either.isLeft(action)) return privateJson({ error: "invalid-request" }, { status: 400 });
 
-  const operation = action.right;
-  let sessionId = operation.sessionId;
-  let context: typeof TutorContextSchema.Type;
-  let quizForEvaluation: typeof TargetedQuizSessionSchema.Type | null = null;
-  let quizQuestion: string | null = null;
-  if ((operation.action === "question" || operation.action === "targeted-quiz") && !sessionId) {
-    if (!operation.context)
-      return NextResponse.json({ error: "session-not-found" }, { status: 404 });
-    context = operation.context;
-  } else {
-    if (!sessionId) return NextResponse.json({ error: "session-not-found" }, { status: 404 });
-    const loaded = await loadSession(auth.client, auth.userId, sessionId);
-    if (loaded._tag === "Missing") {
-      return NextResponse.json({ error: "session-not-found" }, { status: 404 });
-    }
-    if (loaded._tag === "Unavailable") return unavailable();
-    if (
-      operation.action === "question" &&
-      operation.context.knowledgeArea.id !== loaded.value.session.area_id
-    ) {
-      return NextResponse.json({ error: "session-area-mismatch" }, { status: 409 });
-    }
-    context = loaded.value.context;
-    if (
-      operation.action === "targeted-quiz" &&
-      !context.knowledgeArea.objectives.some((objective) => objective.id === operation.objectiveId)
-    ) {
-      return NextResponse.json({ error: "unknown-objective" }, { status: 400 });
-    }
-    if (operation.action === "evaluate-quiz-answer") {
-      const decodedQuiz = Schema.decodeUnknownEither(TargetedQuizSessionSchema)(
-        loaded.value.session.last_quiz,
-      );
-      if (Either.isLeft(decodedQuiz))
-        return NextResponse.json({ error: "quiz-not-found" }, { status: 409 });
-      const question = decodedQuiz.right.questions[operation.questionIndex];
-      if (!question)
-        return NextResponse.json({ error: "quiz-question-not-found" }, { status: 404 });
-      if (question.evaluation)
-        return NextResponse.json({ error: "quiz-answer-already-evaluated" }, { status: 409 });
-      quizForEvaluation = decodedQuiz.right;
-      quizQuestion = question.prompt;
-    }
-  }
+  let operation = action.right;
   if (
-    operation.action === "targeted-quiz" &&
-    !context.knowledgeArea.objectives.some((objective) => objective.id === operation.objectiveId)
+    !operation.sessionId &&
+    "canonicalAreaFingerprint" in operation &&
+    operation.canonicalAreaFingerprint &&
+    "context" in operation &&
+    operation.context
   ) {
-    return NextResponse.json({ error: "unknown-objective" }, { status: 400 });
+    const canonical = await Effect.runPromise(
+      Effect.either(
+        readTutorCanonicalArea(auth.client, auth.userId, operation.context.knowledgeArea.id),
+      ),
+    );
+    if (Either.isLeft(canonical)) {
+      return canonical.left._tag === "TutorReadNotFound"
+        ? privateJson(
+            {
+              error:
+                "Sync this learning area before starting hosted tutoring so its full content can be saved.",
+            },
+            { status: 409 },
+          )
+        : unavailable();
+    }
+    if (tutorAreaFingerprint(canonical.right) !== operation.canonicalAreaFingerprint)
+      return privateJson(
+        { error: "Sync your latest learning area changes before starting hosted tutoring." },
+        { status: 409 },
+      );
+    operation = { ...operation, context: { ...operation.context, knowledgeArea: canonical.right } };
   }
-
-  if (!process.env.OPENAI_API_KEY || !process.env.OPENAI_MODEL)
+  let snapshot: TutorWorkflowSnapshot | null = null;
+  let observationId: string | null = null;
+  if (operation.sessionId) {
+    const loaded = await Effect.runPromise(
+      Effect.either(loadWorkflowSnapshot(auth.client, auth.userId, operation.sessionId)),
+    );
+    if (Either.isLeft(loaded))
+      return loaded.left._tag === "TutorSessionNotFound"
+        ? privateJson({ error: "session-not-found" }, { status: 404 })
+        : unavailable();
+    snapshot = loaded.right.snapshot;
+    observationId = loaded.right.observationId;
+  }
+  const prepared = await Effect.runPromise(
+    Effect.either(prepareTutorWorkflow(operation, snapshot, crypto.randomUUID())),
+  );
+  if (Either.isLeft(prepared)) return workflowFailureResponse(prepared.left);
+  const model = hostedTutorModel(
+    operation.action === "evaluate-quiz-answer" ? "evaluate" : operation.action,
+  );
+  if (!process.env.OPENAI_API_KEY || !model)
     return aiFailureResponse({ _tag: "AiProviderUnavailable" });
-
   const aiCallId = crypto.randomUUID();
-  const reservation = await auth.client.rpc("reserve_tutor_ai_call", {
-    p_id: aiCallId,
-    p_operation: operation.action,
-    p_model: process.env.OPENAI_MODEL ?? "unconfigured",
-  });
-  if (reservation.error) return unavailable();
-  if (reservation.data !== true)
-    return NextResponse.json(
+  const provider = createHostedTutorProvider(auth.userId, aiCallId, new Date());
+  if (Either.isLeft(provider)) return aiFailureResponse(provider.left);
+  const reservation = await Effect.runPromise(
+    Effect.either(reserveTutorCall(auth.client, aiCallId, operation.action, model)),
+  );
+  if (Either.isLeft(reservation)) return unavailable();
+  if (!reservation.right)
+    return privateJson(
       { error: "You've reached today's tutor limit. Try again tomorrow." },
       { status: 429 },
     );
-
-  let providerResult: Either.Either<unknown, AiProviderError>;
-  if (operation.action === "question") {
-    providerResult = await runProvider(() =>
-      Effect.gen(function* () {
-        const provider = yield* AiProvider;
-        return yield* provider.generateQuestion(context);
-      }),
-    );
-  } else if (operation.action === "evaluate") {
-    providerResult = await runProvider(() =>
-      Effect.gen(function* () {
-        const provider = yield* AiProvider;
-        return yield* provider.evaluateAnswer({ ...context, answer: operation.answer });
-      }),
-    );
-  } else if (operation.action === "targeted-quiz") {
-    providerResult = await runProvider(() =>
-      Effect.gen(function* () {
-        const provider = yield* AiProvider;
-        return yield* provider.generateTargetedQuiz({
-          ...context,
-          objectiveId: operation.objectiveId,
-        });
-      }),
-    );
-  } else if (operation.action === "evaluate-quiz-answer") {
-    if (!quizForEvaluation || !quizQuestion)
-      return NextResponse.json({ error: "quiz-not-found" }, { status: 409 });
-    providerResult = await runProvider(() =>
-      Effect.gen(function* () {
-        const provider = yield* AiProvider;
-        return yield* provider.evaluateAnswer({
-          ...context,
-          history: [
-            ...context.history,
-            { role: "assistant", content: quizQuestion },
-            {
-              role: "assistant",
-              content: `Use this expected answer as evaluation guidance: ${quizForEvaluation.questions[operation.questionIndex]?.expectedAnswer ?? ""}`,
-            },
-          ],
-          answer: operation.answer,
-        });
-      }),
-    );
-  } else {
-    const observationResult = await auth.client
-      .from("ai_observations")
-      .select("payload")
-      .eq("session_id", operation.sessionId)
-      .eq("user_id", auth.userId)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    if (observationResult.error) return unavailable();
-    if (!observationResult.data) {
-      return NextResponse.json({ error: "observation-not-found" }, { status: 409 });
-    }
-    const storedObservation = Schema.decodeUnknownEither(StoredObservationSchema)(
-      observationResult.data,
-    );
-    if (Either.isLeft(storedObservation)) return unavailable();
-    const observation = Schema.decodeUnknownEither(AnswerEvaluationSchema)(
-      storedObservation.right.payload,
-    );
-    if (Either.isLeft(observation)) return unavailable();
-    if (observation.right.suggestedAction !== "propose-card") {
-      return NextResponse.json({ error: "proposal-not-recommended" }, { status: 409 });
-    }
-    providerResult = await runProvider(() =>
-      Effect.gen(function* () {
-        const provider = yield* AiProvider;
-        return yield* provider.proposeCard({ ...context, observation: observation.right });
-      }),
-    );
-  }
-  if (Either.isLeft(providerResult)) return aiFailureResponse(providerResult.left);
-
-  const decodedMetering = Schema.decodeUnknownEither(ProviderMeteringSchema)(providerResult.right);
-  if (Either.isLeft(decodedMetering))
-    return NextResponse.json({ error: "invalid-provider-response" }, { status: 502 });
-  const metered = decodedMetering.right;
-  if (metered.inputTokens !== null && metered.outputTokens !== null) {
-    const recorded = await auth.client.rpc("record_tutor_ai_usage", {
-      p_id: aiCallId,
-      p_input_tokens: metered.inputTokens,
-      p_output_tokens: metered.outputTokens,
-    });
-    if (recorded.error || recorded.data !== true) return unavailable();
-  }
-
-  let response: unknown;
-  if (operation.action === "question") {
-    const decoded = Schema.decodeUnknownEither(TutorQuestionSchema)(metered.result);
-    if (Either.isLeft(decoded))
-      return NextResponse.json({ error: "invalid-provider-response" }, { status: 502 });
-    if (!sessionId) {
-      sessionId = crypto.randomUUID();
-      const savedSession = await auth.client.from("tutor_sessions").insert({
-        id: sessionId,
-        user_id: auth.userId,
-        area_id: operation.context.knowledgeArea.id,
-        area_title: operation.context.knowledgeArea.title,
-        area_snapshot: operation.context.knowledgeArea,
-      });
-      if (savedSession.error) return unavailable();
-    }
-    const savedMessage = await auth.client.from("tutor_messages").insert({
-      id: crypto.randomUUID(),
-      session_id: sessionId,
-      user_id: auth.userId,
-      role: "tutor",
-      kind: "question",
-      content: decoded.right.question,
-    });
-    if (savedMessage.error) return unavailable();
-    const updatedSession = await auth.client
-      .from("tutor_sessions")
-      .update({
-        updated_at: new Date().toISOString(),
-        last_observation_id: null,
-        last_proposal_id: null,
-        last_quiz: null,
-      })
-      .eq("id", sessionId)
-      .eq("user_id", auth.userId);
-    if (updatedSession.error) return unavailable();
-    response = { action: "question", sessionId, result: decoded.right };
-  } else if (operation.action === "evaluate") {
-    const decoded = Schema.decodeUnknownEither(AnswerEvaluationSchema)(metered.result);
-    if (Either.isLeft(decoded))
-      return NextResponse.json({ error: "invalid-provider-response" }, { status: 502 });
-    const observationId = crypto.randomUUID();
-    const answerMessage = await auth.client.from("tutor_messages").insert({
-      id: crypto.randomUUID(),
-      session_id: sessionId,
-      user_id: auth.userId,
-      role: "learner",
-      kind: "answer",
-      content: operation.answer,
-    });
-    if (answerMessage.error) return unavailable();
-    const feedbackMessage = await auth.client.from("tutor_messages").insert({
-      id: crypto.randomUUID(),
-      session_id: sessionId,
-      user_id: auth.userId,
-      role: "tutor",
-      kind: "feedback",
-      content: decoded.right.feedback,
-    });
-    if (feedbackMessage.error) return unavailable();
-    const observation = await auth.client.from("ai_observations").insert({
-      id: observationId,
-      session_id: sessionId,
-      user_id: auth.userId,
-      objective_id: decoded.right.objectiveId,
-      result: decoded.right.result,
-      confidence: decoded.right.confidence,
-      misconception: decoded.right.misconception,
-      evidence_summary: decoded.right.feedback,
-      suggested_action: decoded.right.suggestedAction,
-      payload: decoded.right,
-    });
-    if (observation.error) return unavailable();
-    const updatedSession = await auth.client
-      .from("tutor_sessions")
-      .update({
-        updated_at: new Date().toISOString(),
-        last_observation_id: observationId,
-        last_proposal_id: null,
-        last_quiz: null,
-      })
-      .eq("id", sessionId)
-      .eq("user_id", auth.userId);
-    if (updatedSession.error) return unavailable();
-    response = { action: "evaluate", sessionId, result: decoded.right };
-  } else if (operation.action === "targeted-quiz") {
-    const decoded = Schema.decodeUnknownEither(TargetedQuizSchema)(metered.result);
-    const objective = context.knowledgeArea.objectives.find(
-      (item) => item.id === operation.objectiveId,
-    );
-    if (Either.isLeft(decoded) || !objective || decoded.right.objectiveId !== objective.id)
-      return NextResponse.json({ error: "invalid-provider-response" }, { status: 502 });
-    const quiz = { ...decoded.right, objectiveTitle: objective.title };
-    const sessionQuiz = {
-      ...quiz,
-      questions: quiz.questions.map((question) => ({
-        ...question,
-        learnerAnswer: null,
-        evaluation: null,
-      })),
-    };
-    if (!sessionId) {
-      sessionId = crypto.randomUUID();
-      const savedSession = await auth.client.from("tutor_sessions").insert({
-        id: sessionId,
-        user_id: auth.userId,
-        area_id: context.knowledgeArea.id,
-        area_title: context.knowledgeArea.title,
-        area_snapshot: context.knowledgeArea,
-      });
-      if (savedSession.error) return unavailable();
-    }
-    const updatedSession = await auth.client
-      .from("tutor_sessions")
-      .update({ last_quiz: sessionQuiz, updated_at: new Date().toISOString() })
-      .eq("id", sessionId)
-      .eq("user_id", auth.userId);
-    if (updatedSession.error) return unavailable();
-    response = { action: "targeted-quiz", sessionId, result: quiz };
-  } else if (operation.action === "evaluate-quiz-answer") {
-    if (!quizForEvaluation) return NextResponse.json({ error: "quiz-not-found" }, { status: 409 });
-    const decoded = Schema.decodeUnknownEither(AnswerEvaluationSchema)(metered.result);
-    if (Either.isLeft(decoded))
-      return NextResponse.json({ error: "invalid-provider-response" }, { status: 502 });
-    const evaluation = {
-      ...decoded.right,
-      objectiveId: quizForEvaluation.objectiveId,
-    };
-    const validatedEvaluation = Schema.decodeUnknownEither(AnswerEvaluationSchema)(evaluation);
-    if (Either.isLeft(validatedEvaluation))
-      return NextResponse.json({ error: "invalid-provider-response" }, { status: 502 });
-    const questionIndex = operation.questionIndex;
-    const updatedQuiz = {
-      ...quizForEvaluation,
-      questions: quizForEvaluation.questions.map((question, index) =>
-        index === questionIndex
-          ? {
-              ...question,
-              learnerAnswer: operation.answer,
-              evaluation: validatedEvaluation.right,
-            }
-          : question,
-      ),
-    };
-    const answerMessage = await auth.client.from("tutor_messages").insert({
-      id: crypto.randomUUID(),
-      session_id: sessionId,
-      user_id: auth.userId,
-      role: "learner",
-      kind: "answer",
-      content: operation.answer,
-    });
-    if (answerMessage.error) return unavailable();
-    const feedbackMessage = await auth.client.from("tutor_messages").insert({
-      id: crypto.randomUUID(),
-      session_id: sessionId,
-      user_id: auth.userId,
-      role: "tutor",
-      kind: "feedback",
-      content: validatedEvaluation.right.feedback,
-    });
-    if (feedbackMessage.error) return unavailable();
-    const observationId = crypto.randomUUID();
-    const observation = await auth.client.from("ai_observations").insert({
-      id: observationId,
-      session_id: sessionId,
-      user_id: auth.userId,
-      objective_id: quizForEvaluation.objectiveId,
-      result: validatedEvaluation.right.result,
-      confidence: validatedEvaluation.right.confidence,
-      misconception: validatedEvaluation.right.misconception,
-      evidence_summary: validatedEvaluation.right.feedback,
-      suggested_action: validatedEvaluation.right.suggestedAction,
-      payload: validatedEvaluation.right,
-    });
-    if (observation.error) return unavailable();
-    const updatedSession = await auth.client
-      .from("tutor_sessions")
-      .update({
-        last_observation_id: observationId,
-        last_proposal_id: null,
-        last_quiz: updatedQuiz,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", sessionId)
-      .eq("user_id", auth.userId);
-    if (updatedSession.error) return unavailable();
-    response = {
-      action: "evaluate-quiz-answer",
-      sessionId,
-      questionIndex,
-      result: validatedEvaluation.right,
-      quiz: updatedQuiz,
-    };
-  } else {
-    const decoded = Schema.decodeUnknownEither(CardProposalSchema)(metered.result);
-    if (Either.isLeft(decoded))
-      return NextResponse.json({ error: "invalid-provider-response" }, { status: 502 });
-    const latestObservation = await auth.client
-      .from("ai_observations")
-      .select("id")
-      .eq("session_id", sessionId)
-      .eq("user_id", auth.userId)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    if (latestObservation.error || !latestObservation.data) return unavailable();
-    const proposalId = crypto.randomUUID();
-    const savedProposal = await auth.client.from("generated_card_proposals").insert({
-      id: proposalId,
-      session_id: sessionId,
-      observation_id: latestObservation.data.id,
-      user_id: auth.userId,
-      content: decoded.right,
-      state: "pending",
-    });
-    if (savedProposal.error) return unavailable();
-    const updatedSession = await auth.client
-      .from("tutor_sessions")
-      .update({ last_proposal_id: proposalId, updated_at: new Date().toISOString() })
-      .eq("id", sessionId)
-      .eq("user_id", auth.userId);
-    if (updatedSession.error) return unavailable();
-    const savedMessage = await auth.client.from("tutor_messages").insert({
-      id: crypto.randomUUID(),
-      session_id: sessionId,
-      user_id: auth.userId,
-      role: "tutor",
-      kind: "proposal",
-      content: decoded.right.front,
-    });
-    if (savedMessage.error) return unavailable();
-    response = { action: "propose-card", sessionId, proposalId, result: decoded.right };
-  }
-
-  const validated = Schema.decodeUnknownEither(TutorActionResponseSchema)(response);
-  if (Either.isLeft(validated))
-    return NextResponse.json({ error: "invalid-provider-response" }, { status: 502 });
-  return NextResponse.json(validated.right);
-}
-
-export async function PATCH(request: NextRequest): Promise<NextResponse> {
-  const auth = await requireUser();
-  if (auth._tag === "AuthFailure") {
-    return NextResponse.json(
-      { error: auth.status === 401 ? "unauthenticated" : "auth-unavailable" },
-      { status: auth.status },
-    );
-  }
-  const body = await Effect.runPromise(
+  const transition = await Effect.runPromise(
     Effect.either(
-      Effect.tryPromise({
-        try: async () => (await request.json()) as unknown,
-        catch: () => ({ _tag: "ProposalRequestReadError" }) as const,
-      }),
+      executeTutorWorkflow(prepared.right, provider.right, crypto.randomUUID(), (metering) =>
+        metering.inputTokens !== null && metering.outputTokens !== null
+          ? recordTutorUsage(
+              auth.client,
+              aiCallId,
+              metering.inputTokens,
+              metering.outputTokens,
+            ).pipe(Effect.asVoid)
+          : Effect.void,
+      ),
     ),
   );
-  if (Either.isLeft(body)) return NextResponse.json({ error: "invalid-request" }, { status: 400 });
-  const decoded = Schema.decodeUnknownEither(ResolveProposalRequestSchema)(body.right);
-  if (Either.isLeft(decoded))
-    return NextResponse.json({ error: "invalid-request" }, { status: 400 });
-  if (decoded.right.state === "approved" && !decoded.right.cardId)
-    return NextResponse.json({ error: "invalid-request" }, { status: 400 });
-  const result = await auth.client.rpc("resolve_card_proposal", {
-    p_proposal_id: decoded.right.proposalId,
-    p_state: decoded.right.state,
-    p_content: decoded.right.state === "approved" ? (decoded.right.content ?? null) : null,
-    p_card_id: decoded.right.state === "approved" ? (decoded.right.cardId ?? null) : null,
+  if (Either.isLeft(transition)) {
+    const error = transition.left;
+    if (error._tag === "TutorWorkflowFailure") return workflowFailureResponse(error);
+    if (error._tag === "TutorWriteUnavailable") return unavailable();
+    return aiFailureResponse(error);
+  }
+  const { response, snapshot: next } = transition.right;
+  const sessionId = response.sessionId;
+  if (prepared.right.createsSession) {
+    const snapshotJson = await Effect.runPromise(
+      Effect.either(toDatabaseJson(next.context.knowledgeArea)),
+    );
+    if (Either.isLeft(snapshotJson) || snapshotJson.right === null) return unavailable();
+    if (
+      !(await tutorWriteSucceeded(
+        createTutorSession(auth.client, auth.userId, {
+          id: sessionId,
+          area_id: next.context.knowledgeArea.id,
+          area_title: next.context.knowledgeArea.title,
+          area_snapshot: snapshotJson.right,
+        }),
+      ))
+    )
+      return unavailable();
+  }
+  for (const message of transition.right.appendedHistory) {
+    if (
+      !(await tutorWriteSucceeded(
+        appendTutorMessage(auth.client, auth.userId, {
+          id: crypto.randomUUID(),
+          session_id: sessionId,
+          role: message.role === "assistant" ? "tutor" : "learner",
+          kind:
+            message.role === "learner"
+              ? "answer"
+              : response.action === "question"
+                ? "question"
+                : "feedback",
+          content: message.content,
+        }),
+      ))
+    )
+      return unavailable();
+  }
+  if (response.action === "question") {
+    if (
+      !(await tutorWriteSucceeded(
+        updateTutorSession(auth.client, auth.userId, sessionId, {
+          updated_at: new Date().toISOString(),
+          last_observation_id: null,
+          last_proposal_id: null,
+          last_quiz: null,
+        }),
+      ))
+    )
+      return unavailable();
+  } else if (response.action === "targeted-quiz") {
+    const quizJson = await Effect.runPromise(Effect.either(toDatabaseJson(next.state.quiz)));
+    if (Either.isLeft(quizJson) || quizJson.right === null) return unavailable();
+    if (
+      !(await tutorWriteSucceeded(
+        updateTutorSession(auth.client, auth.userId, sessionId, {
+          updated_at: new Date().toISOString(),
+          last_quiz: quizJson.right,
+          last_observation_id: null,
+          last_proposal_id: null,
+        }),
+      ))
+    )
+      return unavailable();
+  } else if (response.action === "evaluate" || response.action === "evaluate-quiz-answer") {
+    const payload = await Effect.runPromise(Effect.either(toDatabaseJson(response.result)));
+    const quizJson = await Effect.runPromise(Effect.either(toDatabaseJson(next.state.quiz)));
+    if (Either.isLeft(payload) || payload.right === null || Either.isLeft(quizJson))
+      return unavailable();
+    const newObservationId = crypto.randomUUID();
+    if (
+      !(await tutorWriteSucceeded(
+        appendTutorObservation(auth.client, auth.userId, {
+          id: newObservationId,
+          session_id: sessionId,
+          objective_id: response.result.objectiveId,
+          result: response.result.result,
+          confidence: response.result.confidence,
+          misconception: response.result.misconception,
+          evidence_summary: response.result.feedback,
+          suggested_action: response.result.suggestedAction,
+          payload: payload.right,
+        }),
+      ))
+    )
+      return unavailable();
+    if (
+      !(await tutorWriteSucceeded(
+        updateTutorSession(auth.client, auth.userId, sessionId, {
+          updated_at: new Date().toISOString(),
+          last_observation_id: newObservationId,
+          last_proposal_id: null,
+          last_quiz: quizJson.right,
+        }),
+      ))
+    )
+      return unavailable();
+  } else {
+    if (!observationId) return unavailable();
+    const content = await Effect.runPromise(Effect.either(toDatabaseJson(response.result)));
+    if (Either.isLeft(content) || content.right === null) return unavailable();
+    if (
+      !(await tutorWriteSucceeded(
+        appendTutorProposal(auth.client, auth.userId, {
+          id: response.proposalId,
+          session_id: sessionId,
+          observation_id: observationId,
+          content: content.right,
+          state: "pending",
+        }),
+      )) ||
+      !(await tutorWriteSucceeded(
+        updateTutorSession(auth.client, auth.userId, sessionId, {
+          last_proposal_id: response.proposalId,
+          updated_at: new Date().toISOString(),
+        }),
+      )) ||
+      !(await tutorWriteSucceeded(
+        appendTutorMessage(auth.client, auth.userId, {
+          id: crypto.randomUUID(),
+          session_id: sessionId,
+          role: "tutor",
+          kind: "proposal",
+          content: response.result.front,
+        }),
+      ))
+    )
+      return unavailable();
+  }
+  const validated = Schema.decodeUnknownEither(TutorActionResponseSchema)(response);
+  if (Either.isLeft(validated))
+    return privateJson({ error: "invalid-provider-response" }, { status: 502 });
+  const apiResponse = Schema.decodeUnknownEither(TutorApiResponseSchema)({
+    schemaVersion: 1,
+    response: validated.right,
   });
-  if (result.error) return unavailable();
-  if (!result.data) return NextResponse.json({ error: "proposal-not-pending" }, { status: 409 });
-  return NextResponse.json({ proposalId: decoded.right.proposalId, state: decoded.right.state });
+  return Either.isLeft(apiResponse)
+    ? privateJson({ error: "invalid-provider-response" }, { status: 502 })
+    : privateJson(apiResponse.right);
 }
 
-export async function GET(request: NextRequest): Promise<NextResponse> {
+async function handlePATCH(request: NextRequest): Promise<NextResponse> {
   const auth = await requireUser();
   if (auth._tag === "AuthFailure") {
-    return NextResponse.json(
+    return privateJson(
       { error: auth.status === 401 ? "unauthenticated" : "auth-unavailable" },
       { status: auth.status },
     );
   }
-  const sessionId = new URL(request.url).searchParams.get("sessionId");
-  if (
-    !sessionId ||
-    !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(sessionId)
-  ) {
-    return NextResponse.json({ error: "invalid-session-id" }, { status: 400 });
+  const limited = await authenticatedApiRateLimit(auth.userId, "tutor-write", { request });
+  if (limited) return limited;
+  const body = await Effect.runPromise(Effect.either(readJsonBody(request, 64_000)));
+  if (Either.isLeft(body)) {
+    return privateJson(
+      { error: body.left.reason === "too-large" ? "request-too-large" : "invalid-request" },
+      { status: body.left.reason === "too-large" ? 413 : 400 },
+    );
+  }
+  const apiRequest = Schema.decodeUnknownEither(ResolveTutorProposalRequestSchema)(body.right);
+  if (Either.isLeft(apiRequest)) return privateJson({ error: "invalid-request" }, { status: 400 });
+  const decoded = await Effect.runPromise(
+    Effect.either(validateTutorProposalResolution(apiRequest.right.request)),
+  );
+  if (Either.isLeft(decoded)) return workflowFailureResponse(decoded.left);
+  let approvedCardId: string | undefined;
+  let approvedContent: Exclude<Json, null> | undefined;
+  if (decoded.right.state === "approved") {
+    if (!decoded.right.cardId) return privateJson({ error: "invalid-request" }, { status: 400 });
+    approvedCardId = decoded.right.cardId;
+    if (decoded.right.content) {
+      const encodedContent = await Effect.runPromise(
+        Effect.either(toDatabaseJson(decoded.right.content)),
+      );
+      if (Either.isLeft(encodedContent) || encodedContent.right === null) return unavailable();
+      approvedContent = encodedContent.right;
+    }
+  }
+  const result = await Effect.runPromise(
+    Effect.either(
+      resolveTutorProposal(
+        auth.client,
+        decoded.right.proposalId,
+        decoded.right.state,
+        approvedContent,
+        approvedCardId,
+      ),
+    ),
+  );
+  if (Either.isLeft(result)) return unavailable();
+  if (!result.right) {
+    const persisted = await Effect.runPromise(
+      Effect.either(readTutorProposal(auth.client, auth.userId, decoded.right.proposalId)),
+    );
+    if (Either.isLeft(persisted)) {
+      if (persisted.left._tag !== "TutorReadNotFound") return unavailable();
+      return privateJson({ error: "proposal-not-pending" }, { status: 409 });
+    }
+    const stateMatches = persisted.right.state === decoded.right.state;
+    const approvalMatches =
+      decoded.right.state !== "approved" ||
+      (persisted.right.approved_card_id === decoded.right.cardId &&
+        (decoded.right.content === undefined ||
+          sameProposalContent(persisted.right.content, decoded.right.content)));
+    if (!stateMatches || !approvalMatches)
+      return privateJson({ error: "proposal-not-pending" }, { status: 409 });
+  }
+  if (decoded.right.state === "approved") {
+    const linked = await Effect.runPromise(
+      Effect.either(
+        linkExistingTutorApprovalRevision(
+          auth.client,
+          createTutorApprovalAdmin(),
+          auth.userId,
+          decoded.right.proposalId,
+        ),
+      ),
+    );
+    if (Either.isLeft(linked)) return unavailable();
+  }
+  const response = Schema.decodeUnknownEither(ResolveTutorProposalResponseSchema)({
+    schemaVersion: 1,
+    proposalId: decoded.right.proposalId,
+    state: decoded.right.state,
+  });
+  return Either.isLeft(response)
+    ? privateJson({ error: "proposal-response-invalid" }, { status: 502 })
+    : privateJson(response.right);
+}
+
+function sameProposalContent(left: unknown, right: typeof CardProposalSchema.Type): boolean {
+  const decoded = Schema.decodeUnknownEither(CardProposalSchema)(left);
+  return (
+    Either.isRight(decoded) &&
+    decoded.right.front === right.front &&
+    decoded.right.back === right.back &&
+    decoded.right.objectiveId === right.objectiveId &&
+    decoded.right.rationale === right.rationale
+  );
+}
+
+async function handleGET(request: NextRequest): Promise<NextResponse> {
+  const auth = await requireUser();
+  if (auth._tag === "AuthFailure") {
+    return privateJson(
+      { error: auth.status === 401 ? "unauthenticated" : "auth-unavailable" },
+      { status: auth.status },
+    );
+  }
+  const limited = await authenticatedApiRateLimit(auth.userId, "tutor-read", { request });
+  if (limited) return limited;
+  const query = new URL(request.url).searchParams;
+  const decodedQuery = Schema.decodeUnknownEither(TutorSessionQuerySchema)({
+    sessionId: query.getAll("sessionId"),
+  });
+  if (Either.isLeft(decodedQuery)) {
+    return privateJson({ error: "invalid-session-id" }, { status: 400 });
+  }
+  const sessionId = decodedQuery.right.sessionId[0];
+  if (sessionId === undefined) {
+    return privateJson({ error: "invalid-session-id" }, { status: 400 });
   }
   const loaded = await loadSession(auth.client, auth.userId, sessionId);
-  if (loaded._tag === "Missing") {
-    return NextResponse.json({ error: "session-not-found" }, { status: 404 });
+  if (Either.isLeft(loaded) && loaded.left._tag === "TutorSessionNotFound") {
+    return privateJson({ error: "session-not-found" }, { status: 404 });
   }
-  if (loaded._tag === "Unavailable") return unavailable();
+  if (Either.isLeft(loaded)) return unavailable();
+  const session = loaded.right;
+
+  const repaired = await Effect.runPromise(
+    Effect.either(
+      repairTutorSessionApprovalRevisions(
+        auth.client,
+        createTutorApprovalAdmin(),
+        auth.userId,
+        sessionId,
+      ),
+    ),
+  );
+  if (Either.isLeft(repaired)) return unavailable();
+
+  const observations = await Effect.runPromise(
+    Effect.either(readTutorObservationHistory(auth.client, auth.userId, sessionId)),
+  );
+  if (Either.isLeft(observations)) return unavailable();
 
   let evaluation: typeof AnswerEvaluationSchema.Type | null = null;
-  const observationId = loaded.value.session.last_observation_id;
+  const observationId = session.session.last_observation_id;
   if (observationId) {
-    const result = await auth.client
-      .from("ai_observations")
-      .select("payload")
-      .eq("id", observationId)
-      .eq("user_id", auth.userId)
-      .maybeSingle();
-    if (result.error || !result.data) return unavailable();
-    const stored = Schema.decodeUnknownEither(StoredObservationSchema)(result.data);
-    if (Either.isLeft(stored)) return unavailable();
-    const decoded = Schema.decodeUnknownEither(AnswerEvaluationSchema)(stored.right.payload);
+    const result = await Effect.runPromise(
+      Effect.either(readTutorObservationPayload(auth.client, auth.userId, observationId)),
+    );
+    if (Either.isLeft(result)) return unavailable();
+    const decoded = Schema.decodeUnknownEither(AnswerEvaluationSchema)(result.right);
     if (Either.isLeft(decoded)) return unavailable();
     evaluation = decoded.right;
   }
@@ -670,38 +597,47 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     readonly proposalId: string;
     readonly content: typeof CardProposalSchema.Type;
   } | null = null;
-  const proposalId = loaded.value.session.last_proposal_id;
+  const proposalId = session.session.last_proposal_id;
   if (proposalId) {
-    const result = await auth.client
-      .from("generated_card_proposals")
-      .select("id, content, state")
-      .eq("id", proposalId)
-      .eq("user_id", auth.userId)
-      .maybeSingle();
-    if (result.error || !result.data) return unavailable();
-    if (result.data.state === "pending") {
-      const content = Schema.decodeUnknownEither(CardProposalSchema)(result.data.content);
+    const result = await Effect.runPromise(
+      Effect.either(readTutorProposal(auth.client, auth.userId, proposalId)),
+    );
+    if (Either.isLeft(result)) return unavailable();
+    if (result.right.state === "pending") {
+      const content = Schema.decodeUnknownEither(CardProposalSchema)(result.right.content);
       if (Either.isLeft(content)) return unavailable();
       proposal = { proposalId, content: content.right };
     }
   }
 
   let quiz: typeof TargetedQuizSessionSchema.Type | null = null;
-  if (loaded.value.session.last_quiz !== null) {
+  if (session.session.last_quiz !== null) {
     const decodedQuiz = Schema.decodeUnknownEither(TargetedQuizSessionSchema)(
-      loaded.value.session.last_quiz,
+      session.session.last_quiz,
     );
     if (Either.isLeft(decodedQuiz)) return unavailable();
     quiz = decodedQuiz.right;
   }
   const state = Schema.decodeUnknownEither(TutorSessionStateSchema)({
     sessionId,
-    history: loaded.value.context.history,
+    history: session.context.history,
     evaluation,
+    observations: observations.right,
     proposal,
     quiz,
   });
-  return Either.isLeft(state)
-    ? NextResponse.json({ error: "tutor-state-invalid" }, { status: 502 })
-    : NextResponse.json(state.right);
+  if (Either.isLeft(state)) return privateJson({ error: "tutor-state-invalid" }, { status: 502 });
+  const response = Schema.decodeUnknownEither(TutorSessionStateResponseSchema)({
+    schemaVersion: 1,
+    state: state.right,
+  });
+  return Either.isLeft(response)
+    ? privateJson({ error: "tutor-state-invalid" }, { status: 502 })
+    : privateJson(response.right);
 }
+
+export const GET = observeRoute("tutor-read", handleGET);
+
+export const POST = observeRoute("tutor-action", handlePOST);
+
+export const PATCH = observeRoute("tutor-proposal-resolve", handlePATCH);

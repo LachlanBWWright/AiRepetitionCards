@@ -1,10 +1,12 @@
 import type { Workspace } from "./types";
+import { Schema } from "effect";
+import { WorkspaceSchema } from "@recall/domain";
 import { newSchedule } from "@recall/scheduler";
 
 const today = new Date("2020-10-03T09:00:00.000Z");
 const nextWeek = new Date("2099-10-10T09:00:00.000Z");
 
-export const mockWorkspace: Workspace = {
+const mockWorkspaceValue = {
   schemaVersion: 1,
   reviews: 12,
   reviewEvents: Array.from({ length: 12 }, (_, index) => ({
@@ -90,7 +92,10 @@ export const mockWorkspace: Workspace = {
   ],
 };
 
-export const caughtUpWorkspace: Workspace = {
+export const mockWorkspace: Workspace =
+  Schema.decodeUnknownSync(WorkspaceSchema)(mockWorkspaceValue);
+
+const caughtUpWorkspaceValue = {
   schemaVersion: 1,
   reviews: 24,
   reviewEvents:
@@ -101,9 +106,15 @@ export const caughtUpWorkspace: Workspace = {
   })),
 };
 
-export const emptyWorkspace: Workspace = {
+export const caughtUpWorkspace: Workspace =
+  Schema.decodeUnknownSync(WorkspaceSchema)(caughtUpWorkspaceValue);
+
+const emptyWorkspaceValue = {
   schemaVersion: 1,
   reviews: 0,
   reviewEvents: [],
   areas: [],
 };
+
+export const emptyWorkspace: Workspace =
+  Schema.decodeUnknownSync(WorkspaceSchema)(emptyWorkspaceValue);

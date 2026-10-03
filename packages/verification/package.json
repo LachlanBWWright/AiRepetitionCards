@@ -1,0 +1,27 @@
+{
+  "name": "@recall/verification",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node scripts/run.mjs",
+    "test:integration": "node scripts/run-integration.mjs",
+    "typecheck": "tsc --noEmit --project tsconfig.json"
+  },
+  "devDependencies": {
+    "@recall/ai-core": "workspace:*",
+    "@recall/application": "workspace:*",
+    "@recall/contracts": "workspace:*",
+    "@recall/domain": "workspace:*",
+    "@recall/infra-openai": "workspace:*",
+    "@recall/scheduler": "workspace:*",
+    "@recall/sync-core": "workspace:*",
+    "@types/node": "24.19.1",
+    "effect": "^3.22.2",
+    "esbuild": "0.28.2",
+    "fast-check": "3.23.2",
+    "typescript": "5.9.3",
+    "fflate": "0.8.3",
+    "@noble/hashes": "2.4.0"
+  }
+}

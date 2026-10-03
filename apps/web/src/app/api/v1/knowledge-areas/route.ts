@@ -1,131 +1,248 @@
-import { randomUUID } from "node:crypto";
+import { authenticatedApiRateLimit } from "@/lib/http/api-rate-limit";
+import { supabaseApiAuthFailureStatus } from "@recall/infra-supabase";
+import { observeRoute } from "@/lib/http/observe-route";
+import { publishingErrorResponse } from "@/lib/publishing/error-response";
 import { Effect, Either, Schema } from "effect";
 import { NextResponse, type NextRequest } from "next/server";
+import { privateJson } from "@/lib/http/private-json";
 import {
   PublishKnowledgeAreaRequestSchema,
   PublishKnowledgeAreaResponseSchema,
 } from "@recall/contracts";
 import { authenticateApiRequest } from "@/lib/supabase/api-auth";
-import { readJsonBody } from "@/lib/http/read-json";
 import {
-  contentHash,
-  parsePortableArea,
-  newShareToken,
-  hashShareToken,
-} from "@/lib/publishing/shared";
+  verifyMediaAsset,
+  preparePublication,
+  publicationOperationIdentity,
+  publicationRequestFingerprint,
+} from "@recall/application";
+import { toDatabaseJson } from "@recall/infra-supabase/json";
+import {
+  publishKnowledgeArea,
+  readPublicationMedia,
+  readPublicationOperation,
+} from "@recall/infra-supabase/knowledge-area-publication";
+import { readJsonBody } from "@/lib/http/read-json";
+import { contentHash, parsePortableArea, hashShareToken } from "@/lib/publishing/shared";
 
-export async function POST(request: NextRequest): Promise<NextResponse> {
+async function handlePOST(request: NextRequest): Promise<NextResponse> {
   const auth = await authenticateApiRequest(request);
   if (auth._tag === "ContextError") {
-    const status =
-      auth.reason === "not-configured" ? 503 : auth.reason === "unauthenticated" ? 401 : 502;
-    return NextResponse.json({ error: auth.reason }, { status });
+    const status = supabaseApiAuthFailureStatus(auth.reason);
+    return publishingErrorResponse(auth.reason, status);
   }
+  const limited = await authenticatedApiRateLimit(auth.userId, "workspace-sync", {
+    request,
+    namespace: "publication-write",
+    publication: true,
+  });
+  if (limited) return limited;
   const body = await Effect.runPromise(Effect.either(readJsonBody(request, 1_000_000)));
   if (Either.isLeft(body)) {
     const tooLarge = body.left.reason === "too-large";
-    return NextResponse.json(
-      { error: tooLarge ? "request-too-large" : "invalid-request" },
-      { status: tooLarge ? 413 : 400 },
+    return publishingErrorResponse(
+      tooLarge ? "request-too-large" : "invalid-request",
+      tooLarge ? 413 : 400,
     );
   }
   const requestValue = Schema.decodeUnknownEither(PublishKnowledgeAreaRequestSchema)(body.right);
   if (Either.isLeft(requestValue)) {
-    return NextResponse.json({ error: "invalid-request" }, { status: 400 });
+    return publishingErrorResponse("invalid-request", 400);
   }
-  const { sourceAreaId, visibility } = requestValue.right;
-  const attribution = requestValue.right.attribution ?? null;
-  const license = requestValue.right.license ?? null;
-  const forkedFromVersionId = requestValue.right.forkedFromVersionId ?? null;
-  const area = parsePortableArea(requestValue.right.content);
+  const prepared = Effect.runSync(Effect.either(preparePublication(requestValue.right)));
+  if (Either.isLeft(prepared))
+    return publishingErrorResponse(
+      prepared.left.reason === "lineage-mismatch"
+        ? "publication-lineage-mismatch"
+        : prepared.left.reason === "rights-required"
+          ? "publication-rights-required"
+          : "invalid-publication",
+      400,
+    );
+  const { sourceAreaId, visibility, attribution, license, forkedFromVersionId } = prepared.right;
+  const area = parsePortableArea(prepared.right.content);
   if (area === null || area.id !== sourceAreaId) {
-    return NextResponse.json({ error: "invalid-publication" }, { status: 400 });
-  }
-  if (area.cards.some((card) => (card.media?.length ?? 0) > 0)) {
-    return NextResponse.json({ error: "media-publishing-unavailable" }, { status: 422 });
-  }
-  if (area.cards.some((card) => card.kind !== "basic")) {
-    return NextResponse.json({ error: "card-type-not-supported" }, { status: 422 });
+    return publishingErrorResponse("invalid-publication", 400);
   }
 
   const { client, userId } = auth;
-  const owned = await client
-    .from("knowledge_areas")
-    .select("id")
-    .eq("id", sourceAreaId)
-    .eq("owner_id", userId)
-    .is("deleted_at", null)
-    .maybeSingle();
-  if (owned.error) return NextResponse.json({ error: "publication-unavailable" }, { status: 502 });
-  if (!owned.data) return NextResponse.json({ error: "area-not-found" }, { status: 404 });
-
-  if (forkedFromVersionId !== null) {
-    const parent = await client
-      .from("published_knowledge_area_versions")
-      .select("id")
-      .eq("id", forkedFromVersionId)
-      .maybeSingle();
-    if (parent.error)
-      return NextResponse.json({ error: "publication-unavailable" }, { status: 502 });
-    if (!parent.data)
-      return NextResponse.json({ error: "source-version-not-found" }, { status: 404 });
-  }
-
-  // The unique (source_area_id, version) constraint arbitrates concurrent publishers.
-  const latest = await client
-    .from("published_knowledge_area_versions")
-    .select("version")
-    .eq("source_area_id", sourceAreaId)
-    .order("version", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (latest.error) return NextResponse.json({ error: "publication-unavailable" }, { status: 502 });
-  const version = (typeof latest.data?.version === "number" ? latest.data.version : 0) + 1;
-  const token = visibility === "unlisted" ? newShareToken() : null;
-  const row = {
-    id: randomUUID(),
-    source_area_id: sourceAreaId,
-    owner_id: userId,
-    version,
-    content: area,
-    content_hash: contentHash(area),
-    visibility,
-    attribution,
-    license,
-    forked_from_version_id: forkedFromVersionId,
-    share_token_hash: token ? hashShareToken(token) : null,
-    created_by: userId,
-  };
-  const inserted = await client
-    .from("published_knowledge_area_versions")
-    .insert(row)
-    .select(
-      "id, source_area_id, version, content, content_hash, visibility, attribution, license, forked_from_version_id, created_at",
-    )
-    .single();
-  if (inserted.error) {
-    const conflict = inserted.error.code === "23505";
-    return NextResponse.json(
-      { error: conflict ? "version-conflict" : "publication-save-failed" },
-      { status: conflict ? 409 : 502 },
+  const identity = await Effect.runPromise(
+    Effect.either(publicationOperationIdentity(userId, prepared.right)),
+  );
+  if (Either.isLeft(identity)) return publishingErrorResponse("invalid-publication", 400);
+  const token = prepared.right.shareToken ?? null;
+  const recover = async (): Promise<NextResponse | null> => {
+    const existing = await Effect.runPromise(
+      Effect.either(readPublicationOperation(client, userId, identity.right.versionId)),
     );
+    if (Either.isLeft(existing)) return publishingErrorResponse("publication-unavailable", 502);
+    if (existing.right === null) return null;
+    const decoded = Schema.decodeUnknownEither(
+      Schema.Struct({
+        id: Schema.String,
+        source_area_id: Schema.String,
+        owner_id: Schema.String,
+        version: Schema.Number,
+        content: Schema.Unknown,
+        content_hash: Schema.String,
+        visibility: Schema.Literal("private", "public", "unlisted"),
+        attribution: Schema.NullOr(Schema.String),
+        license: Schema.NullOr(Schema.String),
+        forked_from_version_id: Schema.NullOr(Schema.String),
+        created_at: Schema.String,
+        share_token_hash: Schema.NullOr(Schema.String),
+      }),
+    )(existing.right);
+    if (Either.isLeft(decoded)) return publishingErrorResponse("publication-response-invalid", 502);
+    const row = decoded.right;
+    const previous = Effect.runSync(
+      Effect.either(
+        preparePublication({
+          operationId: prepared.right.operationId,
+          sourceAreaId: row.source_area_id,
+          content: row.content,
+          visibility: row.visibility,
+          attribution: row.attribution,
+          license: row.license,
+          forkedFromVersionId: row.forked_from_version_id,
+          reuseConfirmed: true,
+          ...(row.visibility === "unlisted" && token ? { shareToken: token } : {}),
+        }),
+      ),
+    );
+    if (
+      Either.isLeft(previous) ||
+      row.owner_id.toLowerCase() !== userId.toLowerCase() ||
+      row.id !== identity.right.versionId ||
+      publicationRequestFingerprint(previous.right) !== identity.right.fingerprint ||
+      contentHash(previous.right.content) !== row.content_hash
+    )
+      return publishingErrorResponse("publication-operation-conflict", 409);
+    const activeToken = token && row.share_token_hash === hashShareToken(token) ? token : null;
+    const response = Schema.decodeUnknownEither(PublishKnowledgeAreaResponseSchema)({
+      schemaVersion: 1,
+      operationId: prepared.right.operationId,
+      version: {
+        id: row.id,
+        sourceAreaId: row.source_area_id,
+        version: row.version,
+        content: previous.right.content,
+        contentHash: row.content_hash,
+        visibility: row.visibility,
+        attribution: row.attribution,
+        license: row.license,
+        forkedFromVersionId: row.forked_from_version_id,
+        createdAt: row.created_at,
+      },
+      ...(activeToken ? { shareToken: activeToken } : {}),
+    });
+    return Either.isLeft(response)
+      ? publishingErrorResponse("publication-response-invalid", 502)
+      : privateJson(response.right);
+  };
+  const recovered = await recover();
+  if (recovered) return recovered;
+  const mediaReferences = [
+    ...new Map(
+      area.cards.flatMap((card) => card.media ?? []).map((reference) => [reference.id, reference]),
+    ).values(),
+  ];
+  const totalMediaBytes = mediaReferences.reduce(
+    (total, reference) => total + reference.byteLength,
+    0,
+  );
+  if (mediaReferences.length > 128 || totalMediaBytes > 40_000_000) {
+    return publishingErrorResponse("media-limits-exceeded", 413);
   }
+  for (const reference of mediaReferences) {
+    const downloadResult = await Effect.runPromise(
+      Effect.either(readPublicationMedia(client, userId, reference.id)),
+    );
+    if (Either.isLeft(downloadResult)) {
+      return publishingErrorResponse("media-storage-unavailable", 502);
+    }
+    const downloaded = downloadResult.right;
+    if (downloaded._tag === "Missing") {
+      return publishingErrorResponse("media-not-uploaded", 422);
+    }
+    if (!verifyMediaAsset({ reference, bytes: downloaded.bytes })) {
+      return publishingErrorResponse("media-integrity-failed", 422);
+    }
+  }
+  const databaseContent = await Effect.runPromise(Effect.either(toDatabaseJson(area)));
+  if (Either.isLeft(databaseContent)) return publishingErrorResponse("invalid-publication", 400);
+  const content = databaseContent.right;
+  if (content === null) return publishingErrorResponse("invalid-publication", 400);
+  const saved = await Effect.runPromise(
+    Effect.either(
+      publishKnowledgeArea(client, {
+        id: identity.right.versionId,
+        sourceAreaId,
+        ownerId: userId,
+        content,
+        contentHash: contentHash(area),
+        visibility,
+        attribution,
+        license,
+        forkedFromVersionId,
+        shareTokenHash: token ? hashShareToken(token) : null,
+      }),
+    ),
+  );
+  if (Either.isLeft(saved)) {
+    const recoveredAfterSave = await recover();
+    if (recoveredAfterSave) return recoveredAfterSave;
+    switch (saved.left._tag) {
+      case "KnowledgeAreaPublicationUnavailable":
+        return publishingErrorResponse("publication-unavailable", 502);
+      case "KnowledgeAreaVersionConflict":
+        return publishingErrorResponse("version-conflict", 409);
+      case "KnowledgeAreaPublicationSaveFailed":
+        return publishingErrorResponse("publication-save-failed", 502);
+    }
+  }
+  switch (saved.right._tag) {
+    case "AreaNotFound":
+      return publishingErrorResponse("area-not-found", 404);
+    case "SourceVersionNotFound":
+      return publishingErrorResponse("source-version-not-found", 404);
+    case "Published":
+      break;
+  }
+  const inserted = Schema.decodeUnknownEither(
+    Schema.Struct({
+      id: Schema.String,
+      source_area_id: Schema.String,
+      version: Schema.Number,
+      content_hash: Schema.String,
+      visibility: Schema.Literal("private", "public", "unlisted"),
+      attribution: Schema.NullOr(Schema.String),
+      license: Schema.NullOr(Schema.String),
+      forked_from_version_id: Schema.NullOr(Schema.String),
+      created_at: Schema.String,
+    }),
+  )(saved.right.row);
+  if (Either.isLeft(inserted)) return publishingErrorResponse("publication-save-failed", 502);
   const response = Schema.decodeUnknownEither(PublishKnowledgeAreaResponseSchema)({
+    schemaVersion: 1,
+    operationId: prepared.right.operationId,
     version: {
-      id: inserted.data.id,
-      sourceAreaId: inserted.data.source_area_id,
-      version: inserted.data.version,
+      id: inserted.right.id,
+      sourceAreaId: inserted.right.source_area_id,
+      version: inserted.right.version,
       content: area,
-      contentHash: inserted.data.content_hash,
-      visibility: inserted.data.visibility,
-      attribution: inserted.data.attribution,
-      license: inserted.data.license,
-      forkedFromVersionId: inserted.data.forked_from_version_id,
-      createdAt: inserted.data.created_at,
+      contentHash: inserted.right.content_hash,
+      visibility: inserted.right.visibility,
+      attribution: inserted.right.attribution,
+      license: inserted.right.license,
+      forkedFromVersionId: inserted.right.forked_from_version_id,
+      createdAt: inserted.right.created_at,
     },
     ...(token ? { shareToken: token } : {}),
   });
   return Either.isLeft(response)
-    ? NextResponse.json({ error: "publication-response-invalid" }, { status: 502 })
-    : NextResponse.json(response.right, { status: 201 });
+    ? publishingErrorResponse("publication-response-invalid", 502)
+    : privateJson(response.right, { status: 201 });
 }
+
+export const POST = observeRoute("publication-create", handlePOST);

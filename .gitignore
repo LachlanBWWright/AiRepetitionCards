@@ -5,6 +5,8 @@ build/
 dist/
 .turbo/
 .vercel/
+supabase/.temp/
+supabase/.branches/
 apps/web/storybook-static/
 apps/desktop/release/
 .env*

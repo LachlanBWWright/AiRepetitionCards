@@ -1,0 +1,17 @@
+{
+  "name": "@recall/infra-openai",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@recall/ai-core": "workspace:*",
+    "effect": "^3.19.0",
+    "jose": "6.2.12"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit --project tsconfig.json"
+  }
+}

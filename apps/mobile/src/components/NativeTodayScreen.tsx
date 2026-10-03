@@ -9,45 +9,17 @@ import {
   View,
 } from "react-native";
 import { designTokens } from "@recall/design-tokens";
+import { NativeButton, NativeEmptyState, NativeStatusBadge } from "@recall/ui-native";
+import { NativePracticeInsights } from "./NativePracticeInsights";
 import { NativeAudioAttachment } from "./NativeAudioAttachment";
 import type { Workspace, StudyCard } from "@recall/domain";
 import type { ReviewRating } from "@recall/scheduler";
+import type { ReactNode } from "react";
 
 const palette = designTokens.color;
 
 function dueNow(card: StudyCard, now: number): boolean {
   return Date.parse(card.schedule.due) <= now;
-}
-
-function NativeButton({
-  label,
-  onPress,
-  tone = "dark",
-  disabled = false,
-}: {
-  readonly label: string;
-  readonly onPress: () => void;
-  readonly tone?: "dark" | "soft" | "rating";
-  readonly disabled?: boolean;
-}) {
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityState={{ disabled }}
-      disabled={disabled}
-      onPress={onPress}
-      style={({ pressed }) => [
-        styles.button,
-        tone === "dark" && styles.buttonDark,
-        tone === "soft" && styles.buttonSoft,
-        tone === "rating" && styles.buttonRating,
-        disabled && styles.buttonDisabled,
-        pressed && !disabled && styles.buttonPressed,
-      ]}
-    >
-      <Text style={[styles.buttonLabel, tone === "soft" && styles.buttonLabelDark]}>{label}</Text>
-    </Pressable>
-  );
 }
 
 export type NativeTodayScreenProps = {
@@ -60,11 +32,15 @@ export type NativeTodayScreenProps = {
   readonly mediaUris?: Readonly<Record<string, string>>;
   readonly showAnswer: boolean;
   readonly canReset: boolean;
+  readonly reviewPending?: boolean;
   readonly onSelectArea: (areaId: string) => void;
   readonly onHideAnswer: () => void;
   readonly onShowAnswer: () => void;
   readonly onReview: (rating: ReviewRating) => void;
   readonly onReset: () => void;
+  readonly onImportAnki: () => void;
+  readonly tutorPanel?: ReactNode;
+  readonly authoringPanel?: ReactNode;
 };
 
 export function NativeTodayScreen({
@@ -77,11 +53,15 @@ export function NativeTodayScreen({
   mediaUris = {},
   showAnswer,
   canReset,
+  reviewPending = false,
   onSelectArea,
   onHideAnswer,
   onShowAnswer,
   onReview,
   onReset,
+  onImportAnki,
+  tutorPanel,
+  authoringPanel,
 }: NativeTodayScreenProps) {
   if (!ready || !workspace) {
     return (
@@ -97,6 +77,7 @@ export function NativeTodayScreen({
   const card = dueCards[0];
   const totalDue = activeArea?.cards.filter((item) => dueNow(item, now)).length ?? 0;
   const totalReviews = workspace.reviews;
+  const retainedCards = (workspace.retainedReviewAreas ?? []).flatMap((area) => area.cards).length;
   const displayedDate =
     dateLabel ??
     new Date(now).toLocaleDateString(undefined, {
@@ -113,10 +94,7 @@ export function NativeTodayScreen({
             <Text style={styles.brandGlyph}>R</Text>
           </View>
           <Text style={styles.brand}>Recall</Text>
-          <View style={styles.offlineBadge}>
-            <View style={styles.onlineDot} />
-            <Text style={styles.offlineText}>OFFLINE READY</Text>
-          </View>
+          <NativeStatusBadge label="OFFLINE READY" style={styles.offlineBadge} />
         </View>
 
         <Text style={styles.eyebrow}>YOUR STUDY SPACE</Text>
@@ -134,6 +112,8 @@ export function NativeTodayScreen({
             {workspace.areas.map((area) => (
               <Pressable
                 key={area.id}
+                disabled={reviewPending}
+                accessibilityState={{ disabled: reviewPending }}
                 onPress={() => {
                   onSelectArea(area.id);
                   onHideAnswer();
@@ -205,6 +185,11 @@ export function NativeTodayScreen({
                   <NativeAudioAttachment key={reference.id} uri={uri} />
                 );
               })}
+              {reviewPending && (
+                <Text accessibilityLiveRegion="polite" style={styles.muted}>
+                  Saving review…
+                </Text>
+              )}
               {showAnswer ? (
                 <View style={styles.ratingList}>
                   {(
@@ -218,30 +203,38 @@ export function NativeTodayScreen({
                     <Pressable
                       key={rating}
                       accessibilityRole="button"
+                      disabled={reviewPending}
+                      accessibilityState={{ disabled: reviewPending, busy: reviewPending }}
                       onPress={() => onReview(rating)}
-                      style={[styles.ratingButton, { backgroundColor: color }]}
+                      style={[
+                        styles.ratingButton,
+                        { backgroundColor: color, opacity: reviewPending ? 0.5 : 1 },
+                      ]}
                     >
                       <Text style={styles.ratingText}>{label}</Text>
                     </Pressable>
                   ))}
                 </View>
               ) : (
-                <NativeButton label="Show answer" onPress={() => onShowAnswer()} />
+                <NativeButton
+                  label="Show answer"
+                  disabled={reviewPending}
+                  onPress={() => onShowAnswer()}
+                />
               )}
             </View>
           </View>
         ) : (
-          <View style={styles.caughtUp}>
-            <View style={styles.caughtUpIcon}>
-              <Text style={styles.caughtUpGlyph}>✓</Text>
-            </View>
-            <Text style={styles.caughtUpTitle}>You’re all caught up</Text>
-            <Text style={styles.caughtUpBody}>
-              There are no cards due in {activeArea?.title ?? "this area"}. Come back later for your
-              next review.
-            </Text>
-          </View>
+          <NativeEmptyState
+            title="You’re all caught up"
+            description={`There are no cards due in ${activeArea?.title ?? "this area"}. Come back later for your next review.`}
+          />
         )}
+
+        <NativePracticeInsights workspace={workspace} now={now} />
+
+        {authoringPanel}
+        {tutorPanel}
 
         <View style={styles.librarySection}>
           <View style={styles.sectionHeading}>
@@ -253,6 +246,8 @@ export function NativeTodayScreen({
             return (
               <Pressable
                 key={area.id}
+                disabled={reviewPending}
+                accessibilityState={{ disabled: reviewPending }}
                 onPress={() => {
                   onSelectArea(area.id);
                   onHideAnswer();
@@ -270,12 +265,28 @@ export function NativeTodayScreen({
             );
           })}
           <NativeButton
+            label="Import Anki deck"
+            onPress={onImportAnki}
+            tone="soft"
+            disabled={reviewPending}
+          />
+          <NativeButton
             label="Reset sample library"
             onPress={onReset}
             tone="soft"
-            disabled={!canReset}
+            disabled={!canReset || reviewPending}
           />
         </View>
+        {retainedCards > 0 && (
+          <View style={styles.statsCard}>
+            <Text style={styles.areaName}>Deleted content awaiting sync</Text>
+            <Text style={styles.footer}>
+              {retainedCards} deleted card{retainedCards === 1 ? "" : "s"} retained privately until
+              reviews and deletions are acknowledged. These cards stay out of your library and study
+              queue; sync again to finish.
+            </Text>
+          </View>
+        )}
         <Text style={styles.footer}>
           Your cards and review history stay on this device until you choose to sync.
         </Text>
@@ -318,19 +329,7 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     letterSpacing: -0.5,
   },
-  offlineBadge: {
-    marginLeft: "auto",
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 7,
-    borderColor: palette.line,
-    borderWidth: 1,
-    borderRadius: 999,
-    paddingVertical: 8,
-    paddingHorizontal: 11,
-  },
-  onlineDot: { height: 7, width: 7, borderRadius: 4, backgroundColor: palette.darkGreen },
-  offlineText: { fontSize: 9, color: palette.muted, fontWeight: "800", letterSpacing: 0.8 },
+  offlineBadge: { marginLeft: "auto" },
   eyebrow: {
     color: palette.muted,
     fontSize: 10,
@@ -443,20 +442,6 @@ const styles = StyleSheet.create({
     marginVertical: 18,
     backgroundColor: palette.green,
   },
-  button: {
-    alignItems: "center",
-    justifyContent: "center",
-    minHeight: 48,
-    paddingHorizontal: 18,
-    borderRadius: 15,
-  },
-  buttonDark: { backgroundColor: palette.ink },
-  buttonSoft: { backgroundColor: "#f0efe9", marginTop: 8 },
-  buttonRating: { flex: 1, minWidth: "45%" },
-  buttonDisabled: { opacity: 0.45 },
-  buttonPressed: { opacity: 0.7, transform: [{ scale: 0.99 }] },
-  buttonLabel: { color: palette.surface, fontSize: 13, fontWeight: "700" },
-  buttonLabelDark: { color: palette.ink },
   ratingList: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   ratingButton: {
     flexGrow: 1,
@@ -467,36 +452,6 @@ const styles = StyleSheet.create({
     borderRadius: 14,
   },
   ratingText: { color: palette.ink, fontSize: 13, fontWeight: "700" },
-  caughtUp: {
-    minHeight: 240,
-    marginTop: 30,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: 26,
-    borderColor: palette.line,
-    borderWidth: 1,
-    backgroundColor: palette.surface,
-    padding: 28,
-  },
-  caughtUpIcon: {
-    height: 42,
-    width: 42,
-    borderRadius: 21,
-    backgroundColor: palette.green,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 14,
-  },
-  caughtUpGlyph: { fontSize: 22, color: palette.darkGreen, fontWeight: "800" },
-  caughtUpTitle: { color: palette.ink, fontSize: 19, fontWeight: "700" },
-  caughtUpBody: {
-    color: palette.muted,
-    fontSize: 13,
-    lineHeight: 20,
-    textAlign: "center",
-    marginTop: 8,
-    maxWidth: 300,
-  },
   librarySection: { marginTop: 31 },
   libraryCount: { color: palette.muted, fontSize: 9, fontWeight: "800", letterSpacing: 1.1 },
   areaRow: {

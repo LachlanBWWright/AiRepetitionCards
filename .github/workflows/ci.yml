@@ -9,6 +9,27 @@ permissions:
   contents: read
 
 jobs:
+  integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.26.2
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Start disposable local Supabase
+        run: pnpm exec supabase start > "$RUNNER_TEMP/recall-supabase-start.log" 2>&1
+      - name: Configure local integration credentials
+        run: node scripts/configure-integration-ci.mjs
+      - run: pnpm test:integration
+      - name: Stop disposable services
+        if: always()
+        run: pnpm exec supabase stop --no-backup
   checks:
     runs-on: ubuntu-latest
     steps:
@@ -21,11 +42,15 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm policy
+      - run: pnpm policy:static
+      - run: node scripts/check-migrations.mjs
       - run: pnpm typecheck
+      - run: pnpm test
       - run: pnpm lint
       - run: pnpm format:check
       - run: pnpm build
       - run: pnpm build:mobile
       - run: pnpm package:desktop
       - run: pnpm build-storybook
+      - run: pnpm --filter web exec playwright install --with-deps chromium
+      - run: pnpm screenshots

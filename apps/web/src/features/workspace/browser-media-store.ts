@@ -2,6 +2,7 @@ import { Effect, Either, Schema } from "effect";
 import { MediaReferenceSchema } from "@recall/domain";
 import type { MediaStore, MediaStoreFailure, StoredMediaAsset } from "@recall/local-store";
 import { desktopMediaStore } from "./desktop-media-store";
+import { coordinateLocalWrite } from "./local-write-coordinator";
 
 const mediaDatabaseName = "recall-media";
 const mediaObjectStore = "assets";
@@ -137,7 +138,7 @@ function hasDesktopMediaBridge(): boolean {
   return typeof window !== "undefined" && window.recallDesktop?.media !== undefined;
 }
 
-export const browserMediaStore: MediaStore = {
+export const uncoordinatedMediaStore: MediaStore = {
   get: (id) =>
     Effect.suspend(() =>
       hasDesktopMediaBridge() ? desktopMediaStore.get(id) : indexedDbMediaStore.get(id),
@@ -153,4 +154,10 @@ export const browserMediaStore: MediaStore = {
   list: Effect.suspend(() =>
     hasDesktopMediaBridge() ? desktopMediaStore.list : indexedDbMediaStore.list,
   ),
+};
+
+export const browserMediaStore: MediaStore = {
+  ...uncoordinatedMediaStore,
+  put: (asset) => coordinateLocalWrite(uncoordinatedMediaStore.put(asset), () => failure("write")),
+  delete: (id) => coordinateLocalWrite(uncoordinatedMediaStore.delete(id), () => failure("delete")),
 };

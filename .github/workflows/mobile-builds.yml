@@ -1,0 +1,57 @@
+name: Mobile builds
+
+on:
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: EAS build profile
+        type: choice
+        options: [preview, production]
+        default: preview
+      platform:
+        description: Native build platform
+        type: choice
+        options: [android, ios, all]
+        default: android
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mobile-build-${{ github.ref }}-${{ inputs.profile }}-${{ inputs.platform }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    environment: mobile-${{ inputs.profile }}
+    env:
+      EAS_PROJECT_ID: ${{ vars.EAS_PROJECT_ID }}
+      EXPO_ACCOUNT_OWNER: ${{ vars.EXPO_ACCOUNT_OWNER }}
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+      EXPO_PUBLIC_RECALL_API_URL: ${{ vars.EXPO_PUBLIC_RECALL_API_URL }}
+      EXPO_PUBLIC_SUPABASE_URL: ${{ vars.EXPO_PUBLIC_SUPABASE_URL }}
+      EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ vars.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.26.2
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Check release configuration
+        working-directory: apps/mobile
+        env:
+          RECALL_BUILD_PROFILE: ${{ inputs.profile }}
+          RECALL_BUILD_PLATFORM: ${{ inputs.platform }}
+        run: node scripts/eas-release.mjs check "$RECALL_BUILD_PROFILE" "$RECALL_BUILD_PLATFORM"
+      - name: Build native artifacts on EAS
+        working-directory: apps/mobile
+        env:
+          RECALL_BUILD_PROFILE: ${{ inputs.profile }}
+          RECALL_BUILD_PLATFORM: ${{ inputs.platform }}
+        run: node scripts/eas-release.mjs build "$RECALL_BUILD_PROFILE" "$RECALL_BUILD_PLATFORM"

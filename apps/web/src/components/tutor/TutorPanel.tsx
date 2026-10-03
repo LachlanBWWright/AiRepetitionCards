@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Effect, Fiber } from "effect";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Effect, Either, Fiber, Schema } from "effect";
 import {
   type AnswerEvaluation,
   type CardProposal,
@@ -10,19 +10,35 @@ import {
   type TutorActionRequest,
   type TutorActionResponse,
   type TutorContext,
+  CardProposalSchema,
+  cardIdForTutorProposal,
+  combineObjectiveGapsWithTutorEvidence,
+  selectTutorContextHistory,
+  selectTutorInferenceContext,
 } from "@recall/ai-core";
+import { tutorApiFailureMessage } from "@recall/application";
 import type { KnowledgeArea } from "@recall/domain";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { tutorApi } from "@/lib/tutor-api";
+import { tutorPrivacyApi } from "@/lib/tutor-privacy-api";
+import {
+  coordinateLocalWrite,
+  localWritesBlocked,
+} from "@/features/workspace/local-write-coordinator";
+import { TutorPrivacyControls } from "./TutorPrivacyControls";
 
 type DialogueEntry = TutorContext["history"][number];
 export type TutorPanelInitialState = {
+  readonly sessionId?: string | null;
   readonly history?: readonly DialogueEntry[];
   readonly evaluation?: AnswerEvaluation | null;
+  readonly observations?: readonly AnswerEvaluation[];
   readonly proposal?: CardProposal | null;
   readonly proposalId?: string | null;
   readonly quiz?: TargetedQuizSession | null;
   readonly message?: string | null;
+  readonly answer?: string;
+  readonly approvalSaved?: boolean;
 };
 
 export function TutorPanel({
@@ -31,36 +47,76 @@ export function TutorPanel({
   initialState,
   objectiveGaps = [],
   demo = false,
+  api = tutorApi,
+  sessionNamespace = "hosted",
+  privacyApi = tutorPrivacyApi,
 }: {
   knowledgeArea: KnowledgeArea;
-  onApprove: (proposal: CardProposal, cardId: string) => void;
+  onApprove: (
+    proposal: CardProposal,
+    cardId: string,
+    proposalId: string,
+    sessionId: string,
+  ) => Promise<CardProposal | null>;
   initialState?: TutorPanelInitialState;
   objectiveGaps?: readonly KnowledgeGap[];
   demo?: boolean;
+  api?: typeof tutorApi;
+  sessionNamespace?: string;
+  privacyApi?: typeof tutorPrivacyApi;
 }) {
+  const restoreEpoch = useRef(0);
   const [history, setHistory] = useState<DialogueEntry[]>([...(initialState?.history ?? [])]);
-  const [answer, setAnswer] = useState("");
+  const [answer, setAnswer] = useState(initialState?.answer ?? "");
   const [evaluation, setEvaluation] = useState<AnswerEvaluation | null>(
     initialState?.evaluation ?? null,
   );
   const [proposal, setProposal] = useState<CardProposal | null>(initialState?.proposal ?? null);
-  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [sessionId, setSessionId] = useState<string | null>(initialState?.sessionId ?? null);
   const [proposalId, setProposalId] = useState<string | null>(initialState?.proposalId ?? null);
   const [quiz, setQuiz] = useState<TargetedQuizSession | null>(initialState?.quiz ?? null);
+  const [sessionEvidence, setSessionEvidence] = useState<readonly AnswerEvaluation[]>([
+    ...(initialState?.observations ?? []),
+    ...(initialState?.evaluation ? [initialState.evaluation] : []),
+    ...(initialState?.quiz?.questions.flatMap((question) =>
+      question.evaluation ? [question.evaluation] : [],
+    ) ?? []),
+  ]);
   const [busy, setBusy] = useState(false);
+  const [pendingQuizQuestionIndex, setPendingQuizQuestionIndex] = useState<number | null>(null);
   const [message, setMessage] = useState<string | null>(initialState?.message ?? null);
+
+  const proposalKey =
+    proposalId && sessionId ? `${knowledgeArea.id}:${sessionId}:${proposalId}` : null;
+  const [savedApproval, setSavedApproval] = useState<{
+    readonly key: string;
+    readonly content: CardProposal;
+  } | null>(
+    initialState?.approvalSaved && initialState.proposal && proposalKey
+      ? { key: proposalKey, content: initialState.proposal }
+      : null,
+  );
+  const approvalSaved = savedApproval?.key === proposalKey;
+  const approvalEpoch = useRef(0);
+  useEffect(() => {
+    approvalEpoch.current += 1;
+    return () => {
+      approvalEpoch.current += 1;
+    };
+  }, [proposalKey]);
 
   useEffect(() => {
     if (demo) return;
     let mounted = true;
-    const storageKey = `recall-tutor-session:${knowledgeArea.id}`;
+    const epoch = restoreEpoch.current;
+    const storageKey = `recall-tutor-session:${sessionNamespace}:${knowledgeArea.id}`;
     const restore = Effect.gen(function* () {
       const storedSessionId = yield* Effect.try({
         try: () => window.localStorage.getItem(storageKey),
         catch: () => ({ _tag: "TutorSessionCacheReadError" }) as const,
       });
       if (!storedSessionId) return { _tag: "NoStoredSession" } as const;
-      const state = yield* tutorApi.readSession(storedSessionId);
+      const state = yield* api.readSession(storedSessionId);
       if (!state) {
         yield* Effect.try({
           try: () => window.localStorage.removeItem(storageKey),
@@ -71,11 +127,16 @@ export function TutorPanel({
       return { _tag: "Restored", state } as const;
     }).pipe(
       Effect.match({
-        onFailure: () => {
-          if (mounted) setMessage("Your previous tutor session could not be restored.");
+        onFailure: (error) => {
+          if (mounted && epoch === restoreEpoch.current)
+            setMessage(
+              error._tag === "TutorApiFailure" || error._tag === "TutorTransportError"
+                ? tutorApiFailureMessage(error)
+                : "Your previous tutor session could not be restored.",
+            );
         },
         onSuccess: (result) => {
-          if (!mounted) return;
+          if (!mounted || epoch !== restoreEpoch.current) return;
           if (result._tag === "Restored") {
             setSessionId(result.state.sessionId);
             setHistory([...result.state.history]);
@@ -83,6 +144,13 @@ export function TutorPanel({
             setProposal(result.state.proposal?.content ?? null);
             setProposalId(result.state.proposal?.proposalId ?? null);
             setQuiz(result.state.quiz);
+            setSessionEvidence([
+              ...(result.state.observations ?? []),
+              ...(result.state.evaluation ? [result.state.evaluation] : []),
+              ...(result.state.quiz?.questions.flatMap((question) =>
+                question.evaluation ? [question.evaluation] : [],
+              ) ?? []),
+            ]);
           }
         },
       }),
@@ -92,9 +160,10 @@ export function TutorPanel({
       mounted = false;
       Effect.runFork(Fiber.interrupt(fiber));
     };
-  }, [demo, knowledgeArea.id]);
+  }, [api, demo, knowledgeArea.id, sessionNamespace]);
 
   function send(input: TutorActionRequest) {
+    const submittedAnswer = answer;
     if (demo) {
       const mockedSessionId = "bcb3aeb4-91be-4c65-bcb6-2e52041a6824";
       if (input.action === "question") {
@@ -187,47 +256,45 @@ export function TutorPanel({
       return;
     }
     setBusy(true);
+    setPendingQuizQuestionIndex(
+      input.action === "evaluate-quiz-answer" ? input.questionIndex : null,
+    );
     setMessage(null);
-    const program = tutorApi.request(input).pipe(
+    const program = api.request(input).pipe(
       Effect.match({
-        onFailure: (error) => {
-          if (error._tag === "TutorTransportError") {
-            setMessage("Connection failed. Try again.");
-          } else if (error.reason === "invalid-response") {
-            setMessage("The tutor returned an invalid response.");
-          } else {
-            setMessage(
-              error.code === "unauthenticated"
-                ? "Sign in to use the AI tutor."
-                : (error.code ?? "Tutor request failed."),
-            );
-          }
-        },
-        onSuccess: applyResponse,
+        onFailure: (error) => setMessage(tutorApiFailureMessage(error)),
+        onSuccess: (response) => applyResponse(response, submittedAnswer),
       }),
-      Effect.ensuring(Effect.sync(() => setBusy(false))),
+      Effect.ensuring(
+        Effect.sync(() => {
+          setBusy(false);
+          setPendingQuizQuestionIndex(null);
+        }),
+      ),
     );
     Effect.runFork(program);
   }
 
-  function applyResponse(response: TutorActionResponse) {
+  function applyResponse(response: TutorActionResponse, submittedAnswer = answer) {
     setSessionId(response.sessionId);
-    if (!demo) {
-      const persisted = Effect.try({
-        try: () =>
-          window.localStorage.setItem(
-            `recall-tutor-session:${knowledgeArea.id}`,
-            response.sessionId,
-          ),
-        catch: () => ({ _tag: "TutorSessionCacheWriteError" }) as const,
-      }).pipe(
+    if (!demo && !localWritesBlocked()) {
+      const persisted = coordinateLocalWrite(
+        Effect.try({
+          try: () =>
+            window.localStorage.setItem(
+              `recall-tutor-session:${sessionNamespace}:${knowledgeArea.id}`,
+              response.sessionId,
+            ),
+          catch: () => ({ _tag: "TutorSessionCacheWriteError" }) as const,
+        }),
+        () => ({ _tag: "TutorSessionCacheWriteError" }) as const,
+      ).pipe(
         Effect.match({
-          onFailure: () =>
-            setMessage("Session saved online, but it could not be pinned on this device."),
+          onFailure: () => setMessage("Session saved, but it could not be pinned on this device."),
           onSuccess: () => undefined,
         }),
       );
-      Effect.runSync(persisted);
+      Effect.runFork(persisted);
     }
     if (response.action === "question") {
       setHistory((current) => [
@@ -241,12 +308,13 @@ export function TutorPanel({
     }
     if (response.action === "evaluate") {
       setEvaluation(response.result);
+      setSessionEvidence((current) => [...current, response.result]);
       setHistory((current) => [
         ...current,
-        { role: "learner", content: answer.trim() },
+        { role: "learner", content: submittedAnswer.trim() },
         { role: "assistant", content: response.result.feedback },
       ]);
-      setAnswer("");
+      setAnswer((current) => (current === submittedAnswer ? "" : current));
       setQuiz(null);
       return;
     }
@@ -264,7 +332,33 @@ export function TutorPanel({
       return;
     }
     if (response.action === "evaluate-quiz-answer") {
-      setQuiz(response.quiz);
+      setQuiz((current) => {
+        const sameQuiz =
+          current?.objectiveId === response.quiz.objectiveId &&
+          current.questions.length === response.quiz.questions.length &&
+          current.questions.every((question, index) => {
+            const returned = response.quiz.questions[index];
+            return (
+              returned?.prompt === question.prompt &&
+              returned.expectedAnswer === question.expectedAnswer
+            );
+          });
+        if (!sameQuiz) return response.quiz;
+        return {
+          ...response.quiz,
+          questions: response.quiz.questions.map((question, index) => {
+            const local = current.questions[index];
+            if (!question.evaluation && local?.evaluation) return local;
+            return !question.evaluation &&
+              local?.learnerAnswer !== null &&
+              local?.learnerAnswer !== undefined
+              ? { ...question, learnerAnswer: local.learnerAnswer }
+              : question;
+          }),
+        };
+      });
+      setEvaluation(response.result);
+      setSessionEvidence((current) => [...current, response.result]);
       return;
     }
     setProposalId(response.proposalId);
@@ -272,83 +366,126 @@ export function TutorPanel({
   }
 
   function resolveProposal(state: "approved" | "rejected") {
-    if (!proposalId || !proposal) return;
-    const cardId = demo ? "7f07f0d6-6912-48c4-b31b-61a0dbe514ac" : crypto.randomUUID();
-    const approvedProposal = {
+    if (!proposalId || !proposal || !sessionId) return;
+    const cardId = demo
+      ? "7f07f0d6-6912-48c4-b31b-61a0dbe514ac"
+      : cardIdForTutorProposal(proposalId);
+    if (!cardId) {
+      setMessage("This proposal has an invalid identifier and cannot be approved.");
+      return;
+    }
+    const decoded = Schema.decodeUnknownEither(CardProposalSchema)({
       ...proposal,
       front: proposal.front.trim(),
       back: proposal.back.trim(),
-    };
-    if (state === "approved" && (!approvedProposal.front || !approvedProposal.back)) {
-      setMessage("Add a question and answer before approving this card.");
+      rationale: proposal.rationale.trim(),
+    });
+    if (
+      state === "approved" &&
+      (Either.isLeft(decoded) ||
+        (decoded.right.objectiveId !== null &&
+          !knowledgeArea.objectives.some(
+            (objective) => objective.id === decoded.right.objectiveId,
+          )))
+    ) {
+      setMessage(
+        "Write a question, answer and rationale within the field limits, and choose an objective from this area.",
+      );
       return;
     }
-    if (demo) {
-      if (state === "approved") onApprove(approvedProposal, cardId);
-      setProposal(null);
-      setProposalId(null);
-      setEvaluation(null);
-      return;
-    }
+    const approvedProposal = Either.isRight(decoded) ? decoded.right : proposal;
+    const epoch = approvalEpoch.current;
+    const key = proposalKey;
+    if (!key) return;
+    const currentApproval = () => approvalEpoch.current === epoch;
     setBusy(true);
     setMessage(null);
-    const program = tutorApi
-      .resolveProposal({
+    const program = Effect.gen(function* () {
+      let savedProposal = approvedProposal;
+      if (state === "approved") {
+        const saved =
+          savedApproval?.key === key
+            ? savedApproval.content
+            : yield* Effect.tryPromise({
+                try: () => onApprove(approvedProposal, cardId, proposalId, sessionId),
+                catch: () => ({ _tag: "TutorLocalApprovalFailed" }) as const,
+              });
+        if (!currentApproval()) return yield* Effect.fail({ _tag: "TutorApprovalStale" } as const);
+        if (!saved) return yield* Effect.fail({ _tag: "TutorLocalApprovalFailed" } as const);
+        savedProposal = saved;
+        setSavedApproval({ key, content: saved });
+        setProposal(saved);
+        if (
+          saved.front !== approvedProposal.front ||
+          saved.back !== approvedProposal.back ||
+          saved.objectiveId !== approvedProposal.objectiveId ||
+          saved.rationale !== approvedProposal.rationale
+        )
+          return yield* Effect.fail({ _tag: "TutorSavedContentRestored" } as const);
+      }
+      if (demo) return;
+      return yield* api.resolveProposal({
         proposalId,
         state,
-        ...(state === "approved" ? { content: approvedProposal, cardId } : {}),
-      })
-      .pipe(
-        Effect.match({
-          onFailure: (error) => {
-            setMessage(
-              error._tag === "TutorApiFailure" && error.reason === "http" && error.code
-                ? error.code
-                : "This proposal could not be saved yet. Try again.",
-            );
-          },
-          onSuccess: () => {
-            if (state === "approved") onApprove(approvedProposal, cardId);
-            setProposal(null);
-            setProposalId(null);
-            setEvaluation(null);
-          },
+        ...(state === "approved" ? { content: savedProposal, cardId } : {}),
+      });
+    }).pipe(
+      Effect.match({
+        onFailure: (error) => {
+          if (!currentApproval()) return;
+          setMessage(
+            error._tag === "TutorSavedContentRestored"
+              ? "This proposal already has a saved card. Its durable content has been restored without overwriting it. Retry approval to confirm that saved card."
+              : error._tag === "TutorLocalApprovalFailed"
+                ? "The card could not be saved locally. Your proposal and edits are still available to retry."
+                : error._tag === "TutorApiFailure" || error._tag === "TutorTransportError"
+                  ? tutorApiFailureMessage(error)
+                  : "This proposal could not be saved yet. Try again.",
+          );
+        },
+        onSuccess: () => {
+          if (!currentApproval()) return;
+          setProposal(null);
+          setProposalId(null);
+          setEvaluation(null);
+        },
+      }),
+      Effect.ensuring(
+        Effect.sync(() => {
+          if (currentApproval()) setBusy(false);
         }),
-        Effect.ensuring(Effect.sync(() => setBusy(false))),
-      );
+      ),
+    );
     Effect.runFork(program);
   }
 
-  const context: TutorContext = { knowledgeArea, history };
+  const contextPreview = useMemo(
+    () =>
+      Effect.runSync(
+        Effect.either(
+          selectTutorInferenceContext(
+            {
+              knowledgeArea,
+              history: selectTutorContextHistory(history),
+            },
+            undefined,
+            evaluation?.objectiveId,
+          ),
+        ),
+      ),
+    [knowledgeArea, history, evaluation?.objectiveId],
+  );
+  const context: TutorContext = {
+    knowledgeArea,
+    history: selectTutorContextHistory(history),
+  };
   const objectiveTitle = (id: string | null) =>
     knowledgeArea.objectives.find((objective) => objective.id === id)?.title ?? "General";
-  const visibleGaps = [...objectiveGaps];
-  if (evaluation && evaluation.result !== "mastered" && evaluation.objectiveId) {
-    const observation = evaluation.misconception ?? evaluation.feedback;
-    const existingIndex = visibleGaps.findIndex(
-      (gap) => gap.objectiveId === evaluation.objectiveId,
-    );
-    if (existingIndex < 0) {
-      visibleGaps.unshift({
-        objectiveId: evaluation.objectiveId,
-        objectiveTitle: objectiveTitle(evaluation.objectiveId),
-        kind: "tutor-observation",
-        severity: evaluation.result === "incorrect" ? "high" : "medium",
-        cardCount: 0,
-        dueCardCount: 0,
-        recentFailureCount: 0,
-        evidenceSummary: observation,
-      });
-    } else {
-      const existing = visibleGaps[existingIndex];
-      if (existing)
-        visibleGaps[existingIndex] = {
-          ...existing,
-          severity: evaluation.result === "incorrect" ? "high" : existing.severity,
-          evidenceSummary: `${existing.evidenceSummary} Tutor feedback: ${observation}`,
-        };
-    }
-  }
+  const visibleGaps = combineObjectiveGapsWithTutorEvidence(knowledgeArea, objectiveGaps, [
+    ...sessionEvidence,
+    ...(quiz?.questions.flatMap((question) => (question.evaluation ? [question.evaluation] : [])) ??
+      []),
+  ]);
 
   function startTargetedQuiz(gap: KnowledgeGap) {
     send({
@@ -358,12 +495,46 @@ export function TutorPanel({
     });
   }
 
+  function clearTutorState() {
+    restoreEpoch.current += 1;
+    setHistory([]);
+    setAnswer("");
+    setEvaluation(null);
+    setProposal(null);
+    setSessionId(null);
+    setProposalId(null);
+    setQuiz(null);
+    setSessionEvidence([]);
+    setMessage(null);
+    if (demo) return;
+    Effect.runFork(
+      Effect.try({
+        try: () => {
+          const prefix = `recall-tutor-session:${sessionNamespace}:`;
+          const keys = Array.from({ length: window.localStorage.length }, (_, index) =>
+            window.localStorage.key(index),
+          );
+          for (const key of keys) if (key?.startsWith(prefix)) window.localStorage.removeItem(key);
+        },
+        catch: () => ({ _tag: "TutorSessionCacheWriteError" }) as const,
+      }).pipe(
+        Effect.catchAll(() =>
+          Effect.sync(() =>
+            setMessage(
+              "History cleared. This device could not remove cached session links; they will be checked before restoring.",
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   return (
     <section className="tutor-panel" aria-labelledby="tutor-panel-title">
       <div className="tutor-panel-heading">
         <div>
           <p className="eyebrow">OPTIONAL AI PRACTICE</p>
-          <h3 id="tutor-panel-title">Study with a tutor</h3>
+          <h2 id="tutor-panel-title">Study with a tutor</h2>
         </div>
         {history.length === 0 ? (
           <button
@@ -389,6 +560,19 @@ export function TutorPanel({
           </button>
         )}
       </div>
+      <p className="tutor-context-status" role="status">
+        {Either.isRight(contextPreview)
+          ? `Tutor context: ${contextPreview.right.knowledgeArea.cards.length} of ${knowledgeArea.cards.length} cards, with objective definitions and AI instructions retained.`
+          : "Required context exceeds the tutor budget. Shorten objective descriptions or AI instructions."}
+      </p>
+      <TutorPrivacyControls
+        api={privacyApi}
+        demo={demo}
+        local={sessionNamespace.startsWith("chatgpt:")}
+        disabled={busy}
+        onBusyChange={setBusy}
+        onCleared={clearTutorState}
+      />
       {visibleGaps.length > 0 && (
         <div className="tutor-gaps" aria-labelledby="tutor-gaps-title">
           <p className="eyebrow" id="tutor-gaps-title">
@@ -496,6 +680,7 @@ export function TutorPanel({
                   </label>
                   <textarea
                     id={`tutor-quiz-answer-${index}`}
+                    disabled={busy && pendingQuizQuestionIndex === index}
                     value={item.learnerAnswer ?? ""}
                     onChange={(event) => {
                       const learnerAnswer = event.target.value;
@@ -546,7 +731,7 @@ export function TutorPanel({
             id="tutor-proposal-front"
             value={proposal.front}
             maxLength={1000}
-            disabled={busy}
+            disabled={busy || approvalSaved}
             onChange={(event) => setProposal({ ...proposal, front: event.target.value })}
           />
           <label htmlFor="tutor-proposal-back">Answer</label>
@@ -554,15 +739,50 @@ export function TutorPanel({
             id="tutor-proposal-back"
             value={proposal.back}
             maxLength={3000}
-            disabled={busy}
+            disabled={busy || approvalSaved}
             onChange={(event) => setProposal({ ...proposal, back: event.target.value })}
           />
-          <small>{proposal.rationale}</small>
+          <label htmlFor="tutor-proposal-objective">Learning objective</label>
+          <select
+            id="tutor-proposal-objective"
+            value={proposal.objectiveId ?? ""}
+            disabled={busy || approvalSaved}
+            onChange={(event) =>
+              setProposal({ ...proposal, objectiveId: event.target.value || null })
+            }
+          >
+            <option value="">No objective</option>
+            {proposal.objectiveId &&
+              !knowledgeArea.objectives.some(
+                (objective) => objective.id === proposal.objectiveId,
+              ) && (
+                <option value={proposal.objectiveId}>Unavailable objective: choose another</option>
+              )}
+            {knowledgeArea.objectives.map((objective) => (
+              <option key={objective.id} value={objective.id}>
+                {objective.title}
+              </option>
+            ))}
+          </select>
+          <label htmlFor="tutor-proposal-rationale">Why this card helps</label>
+          <textarea
+            id="tutor-proposal-rationale"
+            value={proposal.rationale}
+            maxLength={1000}
+            disabled={busy || approvalSaved}
+            onChange={(event) => setProposal({ ...proposal, rationale: event.target.value })}
+          />
+          {approvalSaved && (
+            <small>
+              This card is saved on this device. Retry approval using the saved content; another
+              card will not be created.
+            </small>
+          )}
           <div>
             <button
               className="text-button"
               type="button"
-              disabled={busy || !proposalId}
+              disabled={busy || !proposalId || approvalSaved}
               onClick={() => resolveProposal("rejected")}
             >
               Discard
@@ -573,7 +793,7 @@ export function TutorPanel({
               disabled={busy || !proposalId}
               onClick={() => resolveProposal("approved")}
             >
-              {busy ? "Saving…" : "Approve card"}
+              {busy ? "Saving…" : approvalSaved ? "Retry approval" : "Approve card"}
             </button>
           </div>
         </div>

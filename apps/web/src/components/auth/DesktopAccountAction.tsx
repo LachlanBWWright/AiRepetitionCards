@@ -150,7 +150,7 @@ export function DesktopAccountAction() {
       ) : (
         <span className="saved-state">
           {!configured
-            ? "Set the Supabase desktop environment values to enable cloud features."
+            ? "Learning on this device. Cloud sign-in and sync are optional."
             : "Set up an OS keyring to store your encrypted sign-in session."}
         </span>
       )}

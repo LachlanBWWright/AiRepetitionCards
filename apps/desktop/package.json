@@ -11,11 +11,15 @@
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "package": "electron-vite build && electron-builder --dir",
-    "dist:linux": "electron-vite build && electron-builder --linux AppImage",
-    "dist:mac": "electron-vite build && electron-builder --mac dmg zip",
-    "dist:windows": "electron-vite build && electron-builder --win nsis",
+    "dist:linux": "electron-vite build && electron-builder --linux AppImage --x64 --publish never",
+    "dist:mac": "electron-vite build && electron-builder --mac dmg zip --x64 --publish never -c.mac.identity=null",
+    "dist:mac:arm64": "electron-vite build && electron-builder --mac dmg zip --arm64 --publish never -c.mac.identity=null",
+    "dist:windows": "electron-vite build && electron-builder --win nsis --x64 --publish never",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint"
+    "lint": "eslint --max-warnings=0",
+    "dist:mac:signed": "electron-vite build && electron-builder --mac dmg zip --x64 --publish never -c.forceCodeSigning=true -c.mac.hardenedRuntime=true -c.mac.notarize=true",
+    "dist:mac:arm64:signed": "electron-vite build && electron-builder --mac dmg zip --arm64 --publish never -c.forceCodeSigning=true -c.mac.hardenedRuntime=true -c.mac.notarize=true",
+    "dist:windows:signed": "electron-vite build && electron-builder --win nsis --x64 --publish never -c.forceCodeSigning=true -c.win.signExecutable=true"
   },
   "build": {
     "appId": "com.recall.study",
@@ -39,17 +43,38 @@
       "target": [
         "dmg",
         "zip"
-      ]
+      ],
+      "hardenedRuntime": false,
+      "notarize": false,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
+      "timestamp": "http://timestamp.apple.com/ts01"
     },
     "win": {
       "target": [
         "nsis"
-      ]
+      ],
+      "signExecutable": false,
+      "signtoolOptions": {
+        "signingHashAlgorithms": [
+          "sha256"
+        ],
+        "rfc3161TimeStampServer": "http://timestamp.digicert.com"
+      }
     },
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true
-    }
+    },
+    "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
+    "protocols": [
+      {
+        "name": "Recall",
+        "schemes": [
+          "recall"
+        ]
+      }
+    ]
   },
   "dependencies": {},
   "devDependencies": {
@@ -72,6 +97,8 @@
     "eslint-config-next": "16.3.8",
     "eslint-config-prettier": "^10.1.8",
     "typescript": "^5",
-    "vite": "7.3.6"
+    "vite": "7.3.6",
+    "@recall/ui-web": "workspace:*",
+    "jose": "6.2.12"
   }
 }

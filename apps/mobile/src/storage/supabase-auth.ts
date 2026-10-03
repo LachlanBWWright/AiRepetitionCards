@@ -48,16 +48,29 @@ export function sendNativeMagicLink(email: string): Effect.Effect<boolean, Nativ
 export function confirmNativeMagicLink(url: string): Effect.Effect<boolean, NativeAuthFailure> {
   if (!supabaseAuthClient) return Effect.succeed(false);
   const parsed = Effect.try({
-    try: () => Linking.parse(url),
+    try: () => ({
+      value: Linking.parse(url),
+      expectedCallback: Linking.parse(Linking.createURL("auth/confirm")),
+    }),
     catch: (): NativeAuthFailure => ({
       _tag: "NativeAuthFailure",
       operation: "verify-magic-link",
     }),
   });
-  return Effect.flatMap(parsed, (value) => {
+  return Effect.flatMap(parsed, ({ value, expectedCallback }) => {
     const tokenHash = value.queryParams?.token_hash;
     const type = value.queryParams?.type;
-    if (typeof tokenHash !== "string" || type !== "email") return Effect.succeed(false);
+    if (
+      value.scheme !== expectedCallback.scheme ||
+      value.hostname !== expectedCallback.hostname ||
+      value.path !== expectedCallback.path ||
+      typeof tokenHash !== "string" ||
+      tokenHash.length === 0 ||
+      tokenHash.length > 2_000 ||
+      type !== "email"
+    ) {
+      return Effect.succeed(false);
+    }
     return Effect.map(
       Effect.tryPromise({
         try: () => supabaseAuthClient.auth.verifyOtp({ token_hash: tokenHash, type: "email" }),

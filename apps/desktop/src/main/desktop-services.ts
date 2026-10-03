@@ -2,24 +2,46 @@ import { Buffer } from "node:buffer";
 import type { DatabaseSync } from "node:sqlite";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { Effect, Either, Schema } from "effect";
+import { MediaReferenceSchema } from "@recall/domain";
+import type { MediaReference } from "@recall/domain";
+import { verifyMediaAsset } from "@recall/application";
 import { ipcMain, safeStorage } from "electron";
 import type { BrowserWindow, IpcMainInvokeEvent } from "electron";
 
 const DesktopRequestSchema = Schema.Struct({
   path: Schema.String.pipe(Schema.maxLength(512)),
-  method: Schema.Union(Schema.Literal("GET"), Schema.Literal("POST"), Schema.Literal("PATCH")),
+  method: Schema.Literal("GET", "POST", "PATCH", "DELETE"),
   body: Schema.NullOr(Schema.String.pipe(Schema.maxLength(5_000_000))),
+  expectedOwnerId: Schema.optional(Schema.UUID),
 });
 const DesktopApiPathPatterns = {
-  GET: /^\/api\/v1\/(?:workspace|sync(?:\?cursor=\d{1,20})?|tutor(?:\?sessionId=[0-9a-f-]{1,80})?|account\/export)$/i,
-  POST: /^\/api\/v1\/(?:workspace|sync|workspace\/area-tombstones|tutor|account\/delete)$/,
-  PATCH: /^\/api\/v1\/tutor$/,
+  GET: /^\/api\/v1\/(?:workspace|sync(?:\?cursor=\d{1,20})?|tutor(?:\?sessionId=[0-9a-f-]{1,80})?|tutor\/privacy|account\/export|published\/[0-9a-f-]{36}(?:\/updates(?:\?(?:sourceAreaId=[0-9a-f-]{36}(?:&token=[A-Za-z0-9_-]{43})?|token=[A-Za-z0-9_-]{43}))?|\?token=[A-Za-z0-9_-]{43})?)$/i,
+  POST: /^\/api\/v1\/(?:workspace|sync|workspace\/(?:area-tombstones|review-identities)|tutor|account\/delete|knowledge-areas|published\/[0-9a-f-]{36}\/fork)$/i,
+  DELETE: /^\/api\/v1\/tutor\/privacy$/i,
+  PATCH: /^\/api\/v1\/tutor$|^\/api\/v1\/published\/[0-9a-f-]{36}\/token$/i,
 } as const;
+const DesktopMediaRequestSchema = Schema.Struct({
+  path: Schema.String.pipe(Schema.maxLength(512)),
+  method: Schema.Union(Schema.Literal("GET"), Schema.Literal("POST")),
+  referenceJson: Schema.NullOr(Schema.String.pipe(Schema.maxLength(2_048))),
+  bytes: Schema.NullOr(Schema.Uint8ArrayFromSelf),
+  expectedOwnerId: Schema.optional(Schema.UUID),
+});
+const maxPublishedMediaBytes = 20_000_000;
+const maxApiResponseBytes = 25_000_000;
+const apiRequestTimeoutMs = 60_000;
+const publishedMediaGetPattern =
+  /^\/api\/v1\/published\/([0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\/media\/([a-f0-9]{64})(?:\?token=([A-Za-z0-9_-]{43}))?$/i;
+const publishedMediaPostPattern = /^\/api\/v1\/publishing\/media\/([a-f0-9]{64})$/;
+const workspaceMediaPattern = /^\/api\/v1\/workspace\/media\/([a-f0-9]{64})$/;
+type DesktopMediaRequest = typeof DesktopMediaRequestSchema.Type;
+export type DesktopMediaResponse = { readonly status: number; readonly bytes: Uint8Array | null };
 export type DesktopReply<T> =
   { readonly _tag: "Success"; readonly value: T } | { readonly _tag: "Failure" };
 export type DesktopAuthStatus = {
   readonly configured: boolean;
   readonly email: string | null;
+  readonly ownerId: string | null;
   readonly secureStorageAvailable: boolean;
 };
 export type DesktopApiResponse = { readonly status: number; readonly body: string };
@@ -27,6 +49,38 @@ export type DesktopApiResponse = { readonly status: number; readonly body: strin
 type CredentialFailure = { readonly _tag: "CredentialStorageFailure" };
 type AuthFailure = { readonly _tag: "DesktopAuthFailure" };
 type ApiFailure = { readonly _tag: "DesktopApiFailure" };
+
+async function readBoundedResponseText(response: Response): Promise<string | null> {
+  const contentLength = response.headers.get("content-length");
+  if (contentLength && /^\d+$/.test(contentLength) && Number(contentLength) > maxApiResponseBytes) {
+    await response.body?.cancel().catch(() => undefined);
+    return null;
+  }
+  const reader = response.body?.getReader();
+  if (!reader) {
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    return bytes.byteLength <= maxApiResponseBytes ? new TextDecoder().decode(bytes) : null;
+  }
+  const chunks: Uint8Array[] = [];
+  let totalBytes = 0;
+  while (true) {
+    const chunk = await reader.read();
+    if (chunk.done) break;
+    totalBytes += chunk.value.byteLength;
+    if (totalBytes > maxApiResponseBytes) {
+      void reader.cancel().catch(() => undefined);
+      return null;
+    }
+    chunks.push(chunk.value);
+  }
+  const bytes = new Uint8Array(totalBytes);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return new TextDecoder().decode(bytes);
+}
 
 const secureStorageAvailability = (): Effect.Effect<boolean, CredentialFailure> =>
   Effect.tryPromise({
@@ -157,13 +211,13 @@ export function registerDesktopServices(
   const secureAuth = makeAuthClient(database);
   const authClient = secureAuth.client;
 
-  function publishAuthState(email: string | null): void {
-    getWindow()?.webContents.send("auth:state", { email });
+  function publishAuthState(email: string | null, ownerId: string | null): void {
+    getWindow()?.webContents.send("auth:state", { email, ownerId });
   }
 
   if (authClient) {
     authClient.auth.onAuthStateChange((_event, session) => {
-      publishAuthState(session?.user.email ?? null);
+      publishAuthState(session?.user.email ?? null, session?.user.id ?? null);
     });
   }
 
@@ -184,7 +238,7 @@ export function registerDesktopServices(
     if (!authClient) {
       return {
         _tag: "Success",
-        value: { configured: false, email: null, secureStorageAvailable: false },
+        value: { configured: false, email: null, ownerId: null, secureStorageAvailable: false },
       };
     }
     const availability = await Effect.runPromise(Effect.either(secureStorageAvailability()));
@@ -203,6 +257,7 @@ export function registerDesktopServices(
       value: {
         configured: true,
         email: sessionResult.right.data.session?.user.email ?? null,
+        ownerId: sessionResult.right.data.session?.user.id ?? null,
         secureStorageAvailable: availability.right && secureAuth.storageHealthy(),
       },
     };
@@ -292,14 +347,18 @@ export function registerDesktopServices(
               }
               const response = await fetch(target, {
                 method: decoded.right.method,
+                signal: AbortSignal.timeout(apiRequestTimeoutMs),
                 headers: {
                   authorization: `Bearer ${token}`,
                   "content-type": "application/json",
+                  ...(decoded.right.expectedOwnerId
+                    ? { "x-recall-workspace-owner": decoded.right.expectedOwnerId }
+                    : {}),
                 },
                 ...(decoded.right.body === null ? {} : { body: decoded.right.body }),
               });
-              const body = await response.text();
-              if (Buffer.byteLength(body, "utf8") > 25_000_000) {
+              const body = await readBoundedResponseText(response);
+              if (body === null) {
                 return { status: 502, body: JSON.stringify({ error: "response-too-large" }) };
               }
               if (decoded.right.path === "/api/v1/account/delete" && response.ok) {
@@ -316,6 +375,140 @@ export function registerDesktopServices(
     return { _tag: "Success", value: result.right };
   };
 
+  const mediaRequest = async (
+    event: IpcMainInvokeEvent,
+    input: unknown,
+  ): Promise<DesktopReply<DesktopMediaResponse>> => {
+    if (!trustedSender(event) || !authClient || !recallApiUrl) return failure();
+    const decoded = Schema.decodeUnknownEither(DesktopMediaRequestSchema)(input);
+    if (Either.isLeft(decoded)) return failure();
+    const mediaRequest: DesktopMediaRequest = decoded.right;
+    const parsedReference = Effect.runSync(
+      Effect.either(
+        Effect.try({
+          try: () => JSON.parse(mediaRequest.referenceJson ?? "null") as unknown,
+          catch: (): ApiFailure => ({ _tag: "DesktopApiFailure" }),
+        }),
+      ),
+    );
+    if (Either.isLeft(parsedReference)) return failure();
+    const referenceResult = Schema.decodeUnknownEither(MediaReferenceSchema)(parsedReference.right);
+    if (Either.isLeft(referenceResult)) return failure();
+    const reference: MediaReference = referenceResult.right;
+
+    let expectedMediaId: string | null = null;
+    if (mediaRequest.method === "GET") {
+      const publishedMatch = publishedMediaGetPattern.exec(mediaRequest.path);
+      const workspaceMatch = workspaceMediaPattern.exec(mediaRequest.path);
+      const mediaId = publishedMatch?.[2] ?? workspaceMatch?.[1];
+      if (!mediaId || mediaRequest.bytes !== null || mediaId !== reference.id) return failure();
+      expectedMediaId = mediaId;
+    } else {
+      const match =
+        publishedMediaPostPattern.exec(mediaRequest.path) ??
+        workspaceMediaPattern.exec(mediaRequest.path);
+      if (
+        !match ||
+        match[1] !== reference.id ||
+        mediaRequest.bytes === null ||
+        mediaRequest.bytes.byteLength > maxPublishedMediaBytes ||
+        mediaRequest.bytes.byteLength !== reference.byteLength ||
+        !verifyMediaAsset({ reference, bytes: mediaRequest.bytes })
+      ) {
+        return failure();
+      }
+      expectedMediaId = match[1];
+    }
+    if (expectedMediaId === null) return failure();
+
+    const baseUrl = Effect.runSync(
+      Effect.either(
+        Effect.try({
+          try: () => new URL(recallApiUrl),
+          catch: (): ApiFailure => ({ _tag: "DesktopApiFailure" }),
+        }),
+      ),
+    );
+    if (Either.isLeft(baseUrl)) return failure();
+    const loopback =
+      baseUrl.right.hostname === "localhost" ||
+      baseUrl.right.hostname === "127.0.0.1" ||
+      baseUrl.right.hostname === "[::1]";
+    if (baseUrl.right.protocol !== "https:" && !(baseUrl.right.protocol === "http:" && loopback)) {
+      return failure();
+    }
+    const targetUrl = Effect.runSync(
+      Effect.either(
+        Effect.try({
+          try: () => new URL(mediaRequest.path, baseUrl.right),
+          catch: (): ApiFailure => ({ _tag: "DesktopApiFailure" }),
+        }),
+      ),
+    );
+    if (Either.isLeft(targetUrl) || targetUrl.right.origin !== baseUrl.right.origin) {
+      return failure();
+    }
+
+    const result = await Effect.runPromise(
+      Effect.either(
+        Effect.tryPromise({
+          try: async (): Promise<DesktopMediaResponse | null> => {
+            const token = await currentAccessToken();
+            const headers = new Headers();
+            if (token !== null) headers.set("authorization", `Bearer ${token}`);
+            headers.set("x-recall-media-reference", JSON.stringify(reference));
+            if (mediaRequest.expectedOwnerId)
+              headers.set("x-recall-workspace-owner", mediaRequest.expectedOwnerId);
+            if (mediaRequest.method === "POST") {
+              headers.set("content-type", "application/octet-stream");
+            }
+            const response = await fetch(targetUrl.right, {
+              method: mediaRequest.method,
+              signal: AbortSignal.timeout(apiRequestTimeoutMs),
+              headers,
+              ...(mediaRequest.method === "POST" && mediaRequest.bytes !== null
+                ? { body: Buffer.from(mediaRequest.bytes) }
+                : {}),
+            });
+            const reader = response.body?.getReader();
+            if (!reader) return { status: response.status, bytes: new Uint8Array() };
+            const chunks: Uint8Array[] = [];
+            let totalBytes = 0;
+            while (true) {
+              const part = await reader.read();
+              if (part.done) break;
+              totalBytes += part.value.byteLength;
+              if (totalBytes > maxPublishedMediaBytes) {
+                void reader.cancel().catch(() => undefined);
+                return null;
+              }
+              chunks.push(part.value);
+            }
+            const responseBytes = new Uint8Array(totalBytes);
+            let offset = 0;
+            for (const chunk of chunks) {
+              responseBytes.set(chunk, offset);
+              offset += chunk.byteLength;
+            }
+            if (mediaRequest.method === "GET" && response.ok) {
+              if (
+                responseBytes.byteLength !== reference.byteLength ||
+                !verifyMediaAsset({ reference, bytes: responseBytes })
+              ) {
+                return null;
+              }
+            }
+            return { status: response.status, bytes: responseBytes };
+          },
+          catch: (): ApiFailure => ({ _tag: "DesktopApiFailure" }),
+        }),
+      ),
+    );
+    return Either.isLeft(result) || result.right === null
+      ? failure()
+      : { _tag: "Success", value: result.right };
+  };
+
   async function handleAuthUrl(value: string): Promise<boolean> {
     if (!authClient) return false;
     const callback = Effect.flatMap(
@@ -327,9 +520,16 @@ export function registerDesktopServices(
         if (url.protocol !== "recall:" || url.hostname !== "auth" || url.pathname !== "/confirm") {
           return Effect.succeed(false);
         }
-        const tokenHash = url.searchParams.get("token_hash");
-        const type = url.searchParams.get("type");
-        if (!tokenHash || tokenHash.length > 2_000 || type !== "email") {
+        const tokenHashes = url.searchParams.getAll("token_hash");
+        const types = url.searchParams.getAll("type");
+        const tokenHash = tokenHashes[0];
+        if (
+          tokenHashes.length !== 1 ||
+          types.length !== 1 ||
+          !tokenHash ||
+          tokenHash.length > 2_000 ||
+          types[0] !== "email"
+        ) {
           return Effect.succeed(false);
         }
         return Effect.map(
@@ -351,6 +551,7 @@ export function registerDesktopServices(
   ipcMain.handle("auth:magic-link", (event, email: unknown) => requestMagicLink(event, email));
   ipcMain.handle("auth:sign-out", signOut);
   ipcMain.handle("desktop-api:request", apiRequest);
+  ipcMain.handle("desktop-api:request-media", mediaRequest);
 
   return { handleAuthUrl };
 }

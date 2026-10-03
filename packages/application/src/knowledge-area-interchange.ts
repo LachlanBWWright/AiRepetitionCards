@@ -5,9 +5,10 @@ import type {
   LearningArea,
   StudyCard,
 } from "@recall/domain";
-import { KnowledgeAreaSchema } from "@recall/domain";
+import { createAreaId, createCardId, createObjectiveId, KnowledgeAreaSchema } from "@recall/domain";
 import { newSchedule } from "@recall/scheduler";
 import { stableSyncId } from "@recall/sync-core";
+import { expandCloze, renderClozeCard, type ClozeFailure } from "./cloze";
 
 const defaultPolicy = {
   tutorInstructions: "",
@@ -15,14 +16,14 @@ const defaultPolicy = {
   cardGenerationInstructions: null,
 } as const;
 
-function objectiveId(title: string, index: number): string {
+function objectiveId(title: string, index: number): ReturnType<typeof createObjectiveId> {
   const slug = title
     .normalize("NFKD")
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-|-$/g, "");
-  return `objective-${slug || "learning"}-${index + 1}`;
+  return createObjectiveId(`objective-${slug || "learning"}-${String(index + 1)}`);
 }
 
 export type KnowledgeAreaExportError = {
@@ -42,7 +43,7 @@ export function toKnowledgeArea(
     area.objectives ??
     Array.from(new Set(area.cards.map((card) => card.objective))).map((title, index) => ({
       id: syncIds
-        ? stableSyncId(`objective:${area.sourceId ?? area.id}:${title}`)
+        ? createObjectiveId(stableSyncId(`objective:${area.sourceId ?? area.id}:${title}`))
         : objectiveId(title, index),
       title,
       description: null,
@@ -51,7 +52,7 @@ export function toKnowledgeArea(
   const documentIdByLocalId = new Map(
     objectives.map((objective) => [
       objective.id,
-      syncIds ? objective.id : (objective.sourceId ?? objective.id),
+      syncIds ? objective.id : createObjectiveId(objective.sourceId ?? objective.id),
     ]),
   );
   const documentObjectives = objectives.map((objective) => ({
@@ -64,16 +65,18 @@ export function toKnowledgeArea(
   const document = {
     schemaVersion: "1.0.0",
     id: syncIds ? area.id : (area.sourceId ?? area.id),
+    ...(area.sourceId ? { sourceId: area.sourceId } : {}),
     title: area.title,
     description: area.description ?? null,
     language: area.language ?? "en",
     objectives: documentObjectives,
     ai: area.ai ?? defaultPolicy,
     cards: area.cards.map((card) => ({
-      kind: "basic",
+      ...(card.cloze
+        ? { kind: "cloze", text: card.cloze.text, deletionIndex: card.cloze.deletionIndex }
+        : { kind: "basic", front: card.front, back: card.back }),
       id: syncIds ? card.id : (card.sourceId ?? card.id),
-      front: card.front,
-      back: card.back,
+      ...(card.sourceId ? { sourceId: card.sourceId } : {}),
       ...(card.media ? { media: card.media } : {}),
       objectiveIds: (
         card.objectiveIds ?? [
@@ -88,19 +91,38 @@ export function toKnowledgeArea(
     ...(area.attribution !== undefined ? { attribution: area.attribution } : {}),
     ...(area.forkedFromVersionId ? { forkedFromVersionId: area.forkedFromVersionId } : {}),
   };
-  return Schema.decodeUnknown(KnowledgeAreaSchema)(document).pipe(
-    Effect.mapError((): KnowledgeAreaExportError => ({
-      _tag: "KnowledgeAreaExportError",
-      reason: "invalid-area",
-    })),
-  );
+  return Effect.gen(function* () {
+    for (const card of area.cards) {
+      if (!card.cloze) continue;
+      const rendered = yield* renderClozeCard(card.cloze.text, card.cloze.deletionIndex).pipe(
+        Effect.mapError((): KnowledgeAreaExportError => ({
+          _tag: "KnowledgeAreaExportError",
+          reason: "invalid-area",
+        })),
+      );
+      if (rendered.front !== card.front || rendered.back !== card.back) {
+        return yield* Effect.fail({
+          _tag: "KnowledgeAreaExportError",
+          reason: "invalid-area",
+        } as const);
+      }
+    }
+    return yield* Schema.decodeUnknown(KnowledgeAreaSchema)(document).pipe(
+      Effect.mapError((): KnowledgeAreaExportError => ({
+        _tag: "KnowledgeAreaExportError",
+        reason: "invalid-area",
+      })),
+    );
+  });
 }
 
 export type KnowledgeAreaImportError =
   | KnowledgeAreaDecodeError
+  | ClozeFailure
   | {
       readonly _tag: "KnowledgeAreaImportError";
-      readonly reason: "unsupported-card-type" | "media-requires-package";
+      readonly reason:
+        "unsupported-card-type" | "media-requires-package" | "limits-exceeded" | "invalid-document";
     };
 
 export function fromKnowledgeArea(
@@ -108,60 +130,107 @@ export function fromKnowledgeArea(
   color: string,
   preserveIds: boolean,
   createId: () => string,
+  now: Date,
   mediaAvailable = false,
 ): Effect.Effect<LearningArea, KnowledgeAreaImportError> {
+  if (!Number.isFinite(now.getTime())) {
+    return Effect.fail({ _tag: "KnowledgeAreaImportError", reason: "invalid-document" });
+  }
   if (!mediaAvailable && document.cards.some((card) => (card.media?.length ?? 0) > 0)) {
     return Effect.fail({ _tag: "KnowledgeAreaImportError", reason: "media-requires-package" });
-  }
-  if (document.cards.some((card) => card.kind === "cloze")) {
-    return Effect.fail({ _tag: "KnowledgeAreaImportError", reason: "unsupported-card-type" });
   }
   const titleById = new Map(
     document.objectives.map((objective) => [objective.id, objective.title]),
   );
   const localObjectiveIdByDocumentId = new Map(
-    document.objectives.map((objective) => [objective.id, preserveIds ? objective.id : createId()]),
+    document.objectives.map((objective) => [
+      objective.id,
+      preserveIds ? objective.id : createObjectiveId(createId()),
+    ]),
   );
   const objectives = document.objectives.map((objective) => ({
     ...objective,
     id: localObjectiveIdByDocumentId.get(objective.id) ?? objective.id,
-    ...(preserveIds ? {} : { sourceId: objective.id }),
+    ...(preserveIds
+      ? objective.sourceId
+        ? { sourceId: objective.sourceId }
+        : {}
+      : { sourceId: objective.sourceId ?? objective.id }),
     prerequisiteIds: objective.prerequisiteIds.map(
       (id) => localObjectiveIdByDocumentId.get(id) ?? id,
     ),
   }));
-  const cards: StudyCard[] = document.cards.flatMap((card) => {
-    if (card.kind !== "basic") return [];
-    return [
-      {
-        id: preserveIds ? card.id : createId(),
-        ...(preserveIds ? {} : { sourceId: card.id }),
-        front: card.front,
-        back: card.back,
-        ...(card.media ? { media: card.media } : {}),
-        objective:
-          card.objectiveIds.map((id) => titleById.get(id) ?? "Learning objective").join(" · ") ||
-          "Learning objective",
-        objectiveIds: card.objectiveIds.map((id) => localObjectiveIdByDocumentId.get(id) ?? id),
-        tags: card.tags,
-        origin: "imported",
-        schedule: newSchedule(),
-      },
-    ];
-  });
-  return Effect.succeed({
-    id: preserveIds ? document.id : createId(),
-    ...(preserveIds ? {} : { sourceId: document.id }),
-    title: document.title,
-    color,
-    cards,
-    objectives,
-    description: document.description,
-    language: document.language,
-    ai: document.ai,
-    tags: document.tags,
-    licence: document.licence,
-    ...(document.attribution !== undefined ? { attribution: document.attribution } : {}),
-    ...(document.forkedFromVersionId ? { forkedFromVersionId: document.forkedFromVersionId } : {}),
+  return Effect.gen(function* () {
+    const cards: StudyCard[] = [];
+    const outputIds = new Set<string>();
+    for (const card of document.cards) {
+      const content =
+        card.kind === "basic"
+          ? [{ front: card.front, back: card.back }]
+          : yield* expandCloze(card.text, card.deletionIndex);
+      if (cards.length + content.length > 500) {
+        return yield* Effect.fail({
+          _tag: "KnowledgeAreaImportError",
+          reason: "limits-exceeded",
+        } as const);
+      }
+      for (const [variantIndex, rendered] of content.entries()) {
+        const expanded = card.kind === "cloze" && card.deletionIndex === undefined;
+        const deletionIndex = "deletionIndex" in rendered ? rendered.deletionIndex : undefined;
+        const variantSourceId = expanded
+          ? stableSyncId(`cloze:${card.sourceId ?? card.id}:${String(deletionIndex)}`)
+          : (card.sourceId ?? card.id);
+        const id = preserveIds
+          ? expanded && variantIndex > 0
+            ? createCardId(stableSyncId(`cloze:${card.id}:${String(deletionIndex)}`))
+            : card.id
+          : createCardId(createId());
+        if (outputIds.has(id)) {
+          return yield* Effect.fail({
+            _tag: "KnowledgeAreaImportError",
+            reason: "invalid-document",
+          } as const);
+        }
+        outputIds.add(id);
+        cards.push({
+          id,
+          ...(expanded || !preserveIds || card.sourceId ? { sourceId: variantSourceId } : {}),
+          front: rendered.front,
+          back: rendered.back,
+          ...(card.kind === "cloze" && typeof deletionIndex === "number"
+            ? { cloze: { text: card.text, deletionIndex } }
+            : {}),
+          ...(card.media ? { media: card.media } : {}),
+          objective:
+            card.objectiveIds.map((id) => titleById.get(id) ?? "Learning objective").join(" · ") ||
+            "Learning objective",
+          objectiveIds: card.objectiveIds.map((id) => localObjectiveIdByDocumentId.get(id) ?? id),
+          tags: card.tags,
+          origin: preserveIds || card.kind === "cloze" ? card.origin : "imported",
+          schedule: newSchedule(now),
+        });
+      }
+    }
+    return {
+      id: preserveIds ? document.id : createAreaId(createId()),
+      ...(document.sourceId
+        ? { sourceId: document.sourceId }
+        : preserveIds
+          ? {}
+          : { sourceId: document.id }),
+      title: document.title,
+      color,
+      cards,
+      objectives,
+      description: document.description,
+      language: document.language,
+      ai: document.ai,
+      tags: document.tags,
+      licence: document.licence,
+      ...(document.attribution !== undefined ? { attribution: document.attribution } : {}),
+      ...(document.forkedFromVersionId
+        ? { forkedFromVersionId: document.forkedFromVersionId }
+        : {}),
+    };
   });
 }

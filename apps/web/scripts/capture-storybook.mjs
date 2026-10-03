@@ -9,10 +9,833 @@ const outputDir = path.resolve(appRoot, "../../artifacts/storybook-screenshots")
 const port = Number(process.env.STORYBOOK_PORT ?? 6006);
 const baseUrl = `http://127.0.0.1:${port}`;
 const requested = [
+  ...[
+    ["Navigation · Local account (native)", "native-local-account.png"],
+    ["Navigation · Local tutor unavailable (native)", "native-local-tutor.png"],
+    ["Navigation · Local sharing (native)", "native-local-sharing.png"],
+  ].map(([name, file]) => ({
+    title: "Screens/Native App Shell",
+    name,
+    file,
+    viewport: { width: 390, height: 1000 },
+  })),
+  {
+    title: "Screens/Sign In",
+    name: "Sign in · local study without an account",
+    file: "web-local-study.png",
+    viewport: { width: 1440, height: 1000 },
+  },
+  {
+    title: "Screens/Native App Shell",
+    name: "Navigation · Card attachments (native)",
+    file: "native-card-attachments.png",
+    viewport: { width: 390, height: 1200 },
+  },
+  {
+    title: "Screens/Native App Shell",
+    name: "Navigation · Today (native)",
+    file: "native-navigation-today.png",
+    viewport: { width: 390, height: 844 },
+  },
+  {
+    title: "Screens/Native App Shell",
+    name: "Navigation · Library (native)",
+    file: "native-navigation-library.png",
+    viewport: { width: 390, height: 844 },
+  },
+  {
+    title: "Screens/Native App Shell",
+    name: "Navigation · Tutor (native)",
+    file: "native-navigation-tutor.png",
+    viewport: { width: 390, height: 844 },
+  },
+  {
+    title: "Screens/Native App Shell",
+    name: "Navigation · Sharing (native)",
+    file: "native-navigation-sharing.png",
+    viewport: { width: 390, height: 844 },
+  },
+  {
+    title: "Screens/Native App Shell",
+    name: "Navigation · Account (native)",
+    file: "native-navigation-account.png",
+    viewport: { width: 390, height: 844 },
+  },
+  {
+    title: "Screens/AI Tutor",
+    name: "Tutor · request throttled preserves draft",
+    file: "web-tutor-throttled.png",
+    viewport: { width: 1440, height: 1100 },
+  },
+  {
+    title: "Screens/AI Tutor",
+    name: "Tutor · limiter unavailable preserves draft",
+    file: "web-tutor-limiter-unavailable.png",
+    viewport: { width: 1440, height: 1100 },
+  },
+  {
+    title: "Screens/Native AI Tutor",
+    name: "Tutor · request throttled preserves draft (native)",
+    file: "native-tutor-throttled.png",
+    viewport: { width: 390, height: 1200 },
+  },
+  {
+    title: "Screens/Native AI Tutor",
+    name: "Tutor · limiter unavailable preserves draft (native)",
+    file: "native-tutor-limiter-unavailable.png",
+    viewport: { width: 390, height: 1200 },
+  },
+
+  {
+    title: "Knowledge/Area settings",
+    name: "Conflict",
+    file: "area-settings-stale-draft.png",
+    viewport: { width: 1440, height: 1100 },
+  },
+  {
+    title: "Knowledge/Area settings",
+    name: "Save Failure",
+    file: "area-settings-save-failure.png",
+    viewport: { width: 1440, height: 1100 },
+  },
+  {
+    title: "Knowledge/Review settings",
+    name: "Conflict",
+    file: "review-settings-stale-draft.png",
+    viewport: { width: 1440, height: 1000 },
+  },
+  {
+    title: "Knowledge/Review settings",
+    name: "Save Failure",
+    file: "review-settings-save-failure.png",
+    viewport: { width: 1440, height: 1000 },
+  },
+  {
+    title: "Knowledge/Area settings",
+    name: "Imported Tags",
+    file: "area-settings-imported-tags.png",
+    viewport: { width: 1440, height: 1100 },
+  },
+  {
+    title: "Screens/Native Workspace Authoring",
+    name: "Imported Card Tags",
+    file: "native-authoring-imported-card-tags.png",
+    viewport: { width: 390, height: 844 },
+  },
+  {
+    title: "Screens/Native Workspace Authoring",
+    name: "Imported Area Tags",
+    file: "native-authoring-imported-area-tags.png",
+    viewport: { width: 390, height: 844 },
+  },
+  {
+    title: "Screens/Native Workspace Authoring",
+    name: "Review Retention Default",
+    file: "native-authoring-review-retention-default.png",
+    viewport: { width: 390, height: 844 },
+  },
+  {
+    title: "Screens/Native Workspace Authoring",
+    name: "Review Retention High",
+    file: "native-authoring-review-retention-high.png",
+    viewport: { width: 390, height: 844 },
+  },
+  {
+    title: "Screens/Native Workspace Authoring",
+    name: "Review Retention Save Failure",
+    file: "native-authoring-review-retention-save-failure.png",
+    viewport: { width: 390, height: 844 },
+  },
+  {
+    title: "Screens/Native Workspace Authoring",
+    name: "Objective Filtered Library",
+    file: "native-authoring-objective-filtered-library.png",
+    viewport: { width: 390, height: 844 },
+  },
+  {
+    title: "Screens/Native Workspace Authoring",
+    name: "Combined Search And Objective Filter",
+    file: "native-authoring-combined-search-and-objective-filter.png",
+    viewport: { width: 390, height: 844 },
+  },
+  {
+    title: "Screens/Native Practice Insights",
+    name: "Recorded History",
+    file: "native-practice-recorded-history.png",
+    viewport: { width: 390, height: 844 },
+  },
+  {
+    title: "Screens/Native Practice Insights",
+    name: "Empty History",
+    file: "native-practice-empty-history.png",
+    viewport: { width: 390, height: 844 },
+  },
+  {
+    title: "Screens/Native Practice Insights",
+    name: "Deleted Area History",
+    file: "native-practice-deleted-area-history.png",
+    viewport: { width: 390, height: 844 },
+  },
+  {
+    title: "Screens/Native AI Tutor",
+    name: "Tutor · tentative evaluation (native)",
+    file: "native-tutor-tentative-evaluation.png",
+    viewport: { width: 390, height: 844 },
+  },
+  {
+    title: "Screens/Native AI Tutor",
+    name: "Tutor · tentative completed quiz feedback (native)",
+    file: "native-tutor-tentative-completed-quiz-feedback.png",
+    viewport: { width: 390, height: 844 },
+  },
+  {
+    title: "Screens/AI Tutor",
+    name: "Tutor · hosted daily token budget exhausted",
+    file: "tutor-hosted-daily-token-budget-exhausted.png",
+    viewport: { width: 1440, height: 1000 },
+  },
+  {
+    title: "Screens/AI Tutor",
+    name: "Tutor · hosted budget storage unavailable",
+    file: "tutor-hosted-budget-storage-unavailable.png",
+    viewport: { width: 1440, height: 1000 },
+  },
+  {
+    title: "Screens/Native Workspace Authoring",
+    name: "Card Library",
+    file: "native-authoring-card-library.png",
+    viewport: { width: 390, height: 844 },
+  },
+  {
+    title: "Screens/Native Workspace Authoring",
+    name: "Empty Library",
+    file: "native-authoring-empty-library.png",
+    viewport: { width: 390, height: 844 },
+  },
+  {
+    title: "Screens/Native Workspace Authoring",
+    name: "Basic Card Editor",
+    file: "native-authoring-basic-card-editor.png",
+    viewport: { width: 390, height: 844 },
+  },
+  {
+    title: "Screens/Native Workspace Authoring",
+    name: "Cloze Card Editor",
+    file: "native-authoring-cloze-card-editor.png",
+    viewport: { width: 390, height: 844 },
+  },
+  {
+    title: "Screens/Native Workspace Authoring",
+    name: "Area Metadata And Objectives",
+    file: "native-authoring-area-metadata-and-objectives.png",
+    viewport: { width: 390, height: 844 },
+  },
+  {
+    title: "Screens/Native Workspace Authoring",
+    name: "Rename Area",
+    file: "native-authoring-rename-area.png",
+    viewport: { width: 390, height: 844 },
+  },
+  {
+    title: "Screens/Native Workspace Authoring",
+    name: "Confirm Area Deletion",
+    file: "native-authoring-confirm-area-deletion.png",
+    viewport: { width: 390, height: 844 },
+  },
+  {
+    title: "Screens/Native Workspace Authoring",
+    name: "Confirm Card Deletion",
+    file: "native-authoring-confirm-card-deletion.png",
+    viewport: { width: 390, height: 844 },
+  },
+  {
+    title: "Screens/Native Workspace Authoring",
+    name: "Persistence Failure",
+    file: "native-authoring-persistence-failure.png",
+    viewport: { width: 390, height: 844 },
+  },
+  {
+    title: "Screens/Native Workspace Authoring",
+    name: "Saving Disabled",
+    file: "native-authoring-saving-disabled.png",
+    viewport: { width: 390, height: 844 },
+  },
+  {
+    title: "Screens/Native AI Tutor",
+    name: "Tutor · edited Basic proposal (native)",
+    file: "native-tutor-edited-proposal.png",
+    viewport: { width: 390, height: 844 },
+  },
+  {
+    title: "Screens/Native AI Tutor",
+    name: "Tutor · invalid proposal edit (native)",
+    file: "native-tutor-invalid-proposal-draft.png",
+    viewport: { width: 390, height: 844 },
+  },
+  {
+    title: "Screens/Native AI Tutor",
+    name: "Tutor · edited proposal save failure (native)",
+    file: "native-tutor-proposal-save-failure.png",
+    viewport: { width: 390, height: 844 },
+  },
+  {
+    title: "Screens/Mobile Client",
+    name: "Today · deleted card review waiting for sync (native)",
+    file: "native-deleted-card-review-pending.png",
+    viewport: { width: 390, height: 844 },
+  },
+  {
+    title: "Screens/Mobile Client",
+    name: "Today · deleted area review waiting for sync (native)",
+    file: "native-deleted-area-review-pending.png",
+    viewport: { width: 390, height: 844 },
+  },
+  {
+    title: "Screens/Mobile Client",
+    name: "Today · missing deleted review content recovery (native)",
+    file: "native-deleted-review-recovery.png",
+    viewport: { width: 390, height: 844 },
+  },
+  {
+    title: "Screens/Recall Dashboard",
+    name: "Library · changed area preserves draft",
+    file: "area-stale-draft.png",
+    viewport: { width: 1440, height: 1000 },
+  },
+  {
+    title: "Screens/Recall Dashboard",
+    name: "Library · area save failure preserves draft",
+    file: "area-save-failure.png",
+    viewport: { width: 1440, height: 1000 },
+  },
+  {
+    title: "Screens/Recall Dashboard",
+    name: "Library · retry failed area deletion",
+    file: "area-delete-failure.png",
+    viewport: { width: 1440, height: 1000 },
+  },
+  {
+    title: "Screens/Recall Dashboard",
+    name: "Library · retry failed card deletion",
+    file: "card-delete-failure.png",
+    viewport: { width: 1440, height: 1000 },
+  },
+  {
+    title: "Screens/Recall Dashboard",
+    name: "Insights · offline deleted card pending first sync",
+    file: "insights-deleted-card-pending-sync.png",
+    viewport: { width: 1440, height: 1000 },
+  },
+  {
+    title: "Screens/Recall Dashboard",
+    name: "Insights · offline deleted area pending first sync",
+    file: "insights-deleted-area-pending-sync.png",
+    viewport: { width: 1440, height: 1000 },
+  },
+  {
+    title: "Screens/Recall Dashboard",
+    name: "Insights · older deleted review content recovery",
+    file: "insights-deleted-review-recovery.png",
+    viewport: { width: 1440, height: 1000 },
+  },
+  {
+    title: "Screens/Recall Dashboard",
+    name: "Today · saving review before advancing",
+    file: "today-review-saving.png",
+    viewport: { width: 1440, height: 1000 },
+  },
+  {
+    title: "Screens/Recall Dashboard",
+    name: "Today · retry failed review save",
+    file: "today-review-save-recovery.png",
+    viewport: { width: 1440, height: 1000 },
+  },
+  {
+    title: "Screens/Recall Dashboard",
+    name: "Explore · pending review recovery",
+    file: "explore-review-save-recovery.png",
+    viewport: { width: 1440, height: 1000 },
+  },
+  ...[
+    ["upstream update available", "upstream-update-available"],
+    ["no public upstream update", "no-public-upstream-update"],
+    ["upstream source unavailable", "upstream-source-unavailable"],
+    ["upstream check failed", "upstream-check-failed"],
+  ].flatMap(([label, file]) => [
+    {
+      title: "Screens/Knowledge Area Sharing",
+      name: `Share · ${label}`,
+      file: `share-${file}.png`,
+      viewport: { width: 1440, height: 1000 },
+    },
+    {
+      title: "Screens/Native Publishing",
+      name: `Publishing · ${label} (native)`,
+      file: `native-${file}.png`,
+      viewport: { width: 390, height: 844 },
+    },
+  ]),
+  {
+    title: "Screens/Native AI Tutor",
+    name: "Tutor · weak second objective (native)",
+    file: "native-tutor-weak-second-objective.png",
+    viewport: { width: 390, height: 844 },
+  },
+  {
+    title: "Screens/Recall Dashboard",
+    name: "Today · newer workspace saved in another tab",
+    file: "today-stale-tab-recovery.png",
+    viewport: { width: 1440, height: 1000 },
+  },
+  {
+    title: "Screens/Recall Dashboard",
+    name: "Today · different account workspace",
+    file: "today-workspace-account-mismatch.png",
+    viewport: { width: 1440, height: 1000 },
+  },
+  {
+    title: "Screens/Recall Dashboard",
+    name: "Today · confirm older workspace ownership",
+    file: "today-workspace-owner-adoption.png",
+    viewport: { width: 1440, height: 1000 },
+  },
+  {
+    title: "Screens/Recall Dashboard",
+    name: "Today · account binding storage failure",
+    file: "today-workspace-binding-storage-failure.png",
+    viewport: { width: 1440, height: 1000 },
+  },
+  {
+    title: "Screens/AI Tutor",
+    name: "Tutor · 500-card context selection",
+    file: "tutor-500-card-context.png",
+    viewport: { width: 1440, height: 1000 },
+  },
+  {
+    title: "Screens/Knowledge Area Sharing",
+    name: "Share · recover interrupted publication",
+    file: "share-publication-recovery.png",
+    viewport: { width: 1440, height: 1000 },
+  },
+  {
+    title: "Screens/Knowledge Area Sharing",
+    name: "Share · changed pending publication",
+    file: "share-publication-changed-draft.png",
+    viewport: { width: 1440, height: 1000 },
+  },
+  {
+    title: "Screens/Knowledge Area Sharing",
+    name: "Share · preserve inherited rights",
+    file: "share-inherited-rights.png",
+    viewport: { width: 1440, height: 1000 },
+  },
+  {
+    title: "Screens/Knowledge Area Sharing",
+    name: "Share · choose permission and license",
+    file: "share-unknown-rights.png",
+    viewport: { width: 1440, height: 1000 },
+  },
+  {
+    title: "Screens/Recall Dashboard",
+    name: "Today · local cleanup recovery",
+    file: "today-local-cleanup-recovery.png",
+    viewport: { width: 1440, height: 1000 },
+  },
+  {
+    title: "Screens/AI Tutor",
+    name: "Tutor · approval storage failure",
+    file: "tutor-approval-storage-failure.png",
+    viewport: { width: 1440, height: 1000 },
+  },
+  {
+    title: "Screens/AI Tutor",
+    name: "Tutor · approval retry",
+    file: "tutor-approval-retry.png",
+    viewport: { width: 1440, height: 1000 },
+  },
+  {
+    title: "Screens/AI Tutor",
+    name: "Tutor · corrected proposal objective",
+    file: "tutor-proposal-objective-correction.png",
+    viewport: { width: 1440, height: 1000 },
+  },
+  {
+    title: "Screens/AI Tutor",
+    name: "Tutor · multiple quiz answer drafts",
+    file: "tutor-multiple-quiz-drafts.png",
+    viewport: { width: 1440, height: 1000 },
+  },
+  {
+    title: "Screens/AI Tutor",
+    name: "Tutor · next answer draft retained after evaluation",
+    file: "tutor-quiz-draft-after-evaluation.png",
+    viewport: { width: 1440, height: 1000 },
+  },
+  {
+    title: "Screens/AI Tutor",
+    name: "Tutor · unavailable proposal objective",
+    file: "tutor-proposal-unavailable-objective.png",
+    viewport: { width: 1440, height: 1000 },
+  },
+  {
+    title: "Screens/AI Tutor",
+    name: "Tutor · long session context window",
+    file: "tutor-long-session-window.png",
+    viewport: { width: 1440, height: 1000 },
+  },
+  {
+    title: "Shared UI/Button",
+    name: "Full-screen · composition and variants",
+    file: "shared-ui-button-composition.png",
+    viewport: { width: 1440, height: 1000 },
+  },
+  {
+    title: "Screens/Tutor Privacy",
+    name: "Retention Policy",
+    file: "tutor-privacy-retention.png",
+    viewport: { width: 1440, height: 1000 },
+  },
+  {
+    title: "Screens/Tutor Privacy",
+    name: "Confirm Clear",
+    file: "tutor-privacy-confirm-clear.png",
+    viewport: { width: 1440, height: 1000 },
+  },
+  {
+    title: "Screens/Tutor Privacy",
+    name: "Clear Failed",
+    file: "tutor-privacy-clear-failed.png",
+    viewport: { width: 1440, height: 1000 },
+  },
+  {
+    title: "Screens/Tutor Privacy",
+    name: "Cleared",
+    file: "tutor-privacy-cleared.png",
+    viewport: { width: 1440, height: 1000 },
+  },
+  {
+    title: "Screens/Tutor Privacy",
+    name: "Local Account",
+    file: "tutor-privacy-local-account.png",
+    viewport: { width: 1440, height: 1000 },
+  },
+  {
+    title: "Screens/Desktop ChatGPT Plan",
+    name: "Connect",
+    file: "desktop-chatgpt-connect.png",
+    viewport: { width: 1440, height: 1000 },
+  },
+  {
+    title: "Screens/Desktop ChatGPT Plan",
+    name: "Plan Ready",
+    file: "desktop-chatgpt-ready.png",
+    viewport: { width: 1440, height: 1000 },
+  },
+  {
+    title: "Screens/Desktop ChatGPT Plan",
+    name: "Multiple Accounts",
+    file: "desktop-chatgpt-accounts.png",
+    viewport: { width: 1440, height: 1000 },
+  },
+  {
+    title: "Screens/Desktop ChatGPT Plan",
+    name: "Usage Limit",
+    file: "desktop-chatgpt-usage-limit.png",
+    viewport: { width: 1440, height: 1000 },
+  },
+  {
+    title: "Screens/Desktop ChatGPT Plan",
+    name: "Ineligible Account",
+    file: "desktop-chatgpt-ineligible.png",
+    viewport: { width: 1440, height: 1000 },
+  },
+  {
+    title: "Screens/Desktop ChatGPT Plan",
+    name: "Permission Restriction",
+    file: "desktop-chatgpt-permission.png",
+    viewport: { width: 1440, height: 1000 },
+  },
+  {
+    title: "Screens/Desktop ChatGPT Plan",
+    name: "Temporarily Unavailable",
+    file: "desktop-chatgpt-unavailable.png",
+    viewport: { width: 1440, height: 1000 },
+  },
+  {
+    title: "Screens/Desktop ChatGPT Plan",
+    name: "Revocation Unconfirmed",
+    file: "desktop-chatgpt-revocation-unconfirmed.png",
+    viewport: { width: 1440, height: 1000 },
+  },
+  {
+    title: "Screens/Desktop ChatGPT Plan",
+    name: "Plan Selected Without Access",
+    file: "desktop-chatgpt-selected-without-access.png",
+    viewport: { width: 1440, height: 1000 },
+  },
+  {
+    title: "Screens/Desktop ChatGPT Plan",
+    name: "Models Unavailable",
+    file: "desktop-chatgpt-models-unavailable.png",
+    viewport: { width: 1440, height: 1000 },
+  },
+  {
+    title: "Screens/Desktop ChatGPT Plan",
+    name: "Usage Paused",
+    file: "desktop-chatgpt-usage-paused.png",
+    viewport: { width: 1440, height: 1000 },
+  },
+  {
+    title: "Screens/Desktop ChatGPT Plan",
+    name: "First Plan Sign In",
+    file: "desktop-chatgpt-first-sign-in.png",
+    viewport: { width: 1440, height: 1000 },
+  },
+  {
+    title: "Screens/Desktop ChatGPT Plan",
+    name: "First Sign In With Catalog Unavailable",
+    file: "desktop-chatgpt-first-sign-in-catalog-unavailable.png",
+    viewport: { width: 1440, height: 1000 },
+  },
+  {
+    title: "Screens/Sign In",
+    name: "Sign in · ChatGPT available",
+    file: "sign-in-chatgpt-available.png",
+    viewport: { width: 1440, height: 1000 },
+  },
+  {
+    title: "Screens/Sign In",
+    name: "Sign in · ChatGPT unavailable",
+    file: "sign-in-chatgpt-unavailable.png",
+    viewport: { width: 1440, height: 1000 },
+  },
+  {
+    title: "Screens/Sign In",
+    name: "Sign in · authorization cancelled",
+    file: "sign-in-chatgpt-cancelled.png",
+    viewport: { width: 1440, height: 1000 },
+  },
+  {
+    title: "Screens/Sign In",
+    name: "Sign in · temporary provider outage",
+    file: "sign-in-chatgpt-temporarily-unavailable.png",
+    viewport: { width: 1440, height: 1000 },
+  },
+  {
+    title: "Screens/ChatGPT Account Connection",
+    name: "Account · link ChatGPT",
+    file: "account-link-chatgpt.png",
+    viewport: { width: 1440, height: 1000 },
+  },
+  {
+    title: "Screens/ChatGPT Account Connection",
+    name: "Account · ChatGPT linked",
+    file: "account-chatgpt-linked.png",
+    viewport: { width: 1440, height: 1000 },
+  },
+  {
+    title: "Screens/ChatGPT Account Connection",
+    name: "Account · ChatGPT already linked elsewhere",
+    file: "account-chatgpt-conflict.png",
+    viewport: { width: 1440, height: 1000 },
+  },
+  {
+    title: "Native UI/Primitives",
+    name: "Study Actions",
+    file: "native-ui-study-actions.png",
+    viewport: { width: 390, height: 844 },
+  },
+  {
+    title: "Native UI/Primitives",
+    name: "Caught Up",
+    file: "native-ui-caught-up.png",
+    viewport: { width: 390, height: 844 },
+  },
+  {
+    title: "Native UI/Primitives",
+    name: "Offline Library",
+    file: "native-ui-offline-library.png",
+    viewport: { width: 390, height: 844 },
+  },
+  {
+    title: "Shared UI/Button",
+    name: "Full-screen · action states",
+    file: "shared-ui-action-states.png",
+    viewport: { width: 1440, height: 1000 },
+  },
+  {
+    title: "Shared UI/Empty State",
+    name: "Full-screen · empty and recovery states",
+    file: "shared-ui-empty-recovery.png",
+    viewport: { width: 1440, height: 1000 },
+  },
+  {
+    title: "Shared UI/Status Badge",
+    name: "Full-screen · synchronization status",
+    file: "shared-ui-sync-status.png",
+    viewport: { width: 1440, height: 1000 },
+  },
+  {
+    title: "Shared UI/Dialog",
+    name: "Full-screen · delete confirmation",
+    file: "shared-ui-delete-confirmation.png",
+    viewport: { width: 1440, height: 1000 },
+  },
+  {
+    title: "Shared UI/Dialog",
+    name: "Full-screen · recoverable error",
+    file: "shared-ui-recoverable-error.png",
+    viewport: { width: 1440, height: 1000 },
+  },
+  {
+    title: "Shared UI/Dialog",
+    name: "Full-screen · pending deletion",
+    file: "shared-ui-pending-deletion.png",
+    viewport: { width: 1440, height: 1000 },
+  },
+  {
+    title: "Screens/AI Tutor",
+    name: "Tutor · restored session evidence",
+    file: "tutor-restored-session-evidence.png",
+    viewport: { width: 1440, height: 1000 },
+  },
+  {
+    title: "Screens/AI Tutor",
+    name: "Tutor · accumulated quiz evidence",
+    file: "tutor-accumulated-quiz-evidence.png",
+    viewport: { width: 1440, height: 1000 },
+  },
+  {
+    title: "Screens/Recall Dashboard",
+    name: "Insights · daily and weekly practice",
+    file: "insights-daily-weekly-practice.png",
+    viewport: { width: 1440, height: 1000 },
+  },
+  {
+    title: "Knowledge/Review settings",
+    name: "Default Retention",
+    file: "review-settings-default-retention.png",
+    viewport: { width: 1440, height: 1000 },
+  },
+  {
+    title: "Knowledge/Review settings",
+    name: "High Retention",
+    file: "review-settings-high-retention.png",
+    viewport: { width: 1440, height: 1000 },
+  },
+  {
+    title: "Knowledge/Review settings",
+    name: "Fractional Retention",
+    file: "review-settings-fractional-retention.png",
+    viewport: { width: 1440, height: 1000 },
+  },
+  {
+    title: "Screens/Recall Dashboard",
+    name: "Study · Cloze question",
+    file: "study-cloze-question.png",
+    viewport: { width: 1440, height: 1000 },
+  },
+  {
+    title: "Screens/Recall Dashboard",
+    name: "Study · Cloze answer",
+    file: "study-cloze-answer.png",
+    viewport: { width: 1440, height: 1000 },
+  },
+  {
+    title: "Screens/Recall Dashboard",
+    name: "Library · edit Cloze card",
+    file: "card-edit-cloze.png",
+    viewport: { width: 1440, height: 1000 },
+  },
+  {
+    title: "Screens/Recall Dashboard",
+    name: "Library · edit card objectives and tags",
+    file: "card-edit-objectives-tags.png",
+    viewport: { width: 1440, height: 1000 },
+  },
+
+  {
+    title: "Screens/Recall Dashboard",
+    name: "Library · changed card preserves draft",
+    file: "card-edit-stale-draft.png",
+    viewport: { width: 1440, height: 1000 },
+  },
+  {
+    title: "Screens/AI Tutor",
+    name: "Tutor · weak quiz result with card action",
+    file: "tutor-weak-quiz-card-action.png",
+    viewport: { width: 1440, height: 1000 },
+  },
+  {
+    title: "Screens/Native AI Tutor",
+    name: "Tutor · weak quiz result with card action (native)",
+    file: "native-tutor-weak-quiz-card-action.png",
+    viewport: { width: 390, height: 844 },
+  },
+  {
+    title: "Screens/Card Library",
+    name: "Library · due and scheduled cards",
+    file: "card-library-all-cards.png",
+    viewport: { width: 1440, height: 1000 },
+  },
+  {
+    title: "Knowledge/Area settings",
+    name: "Complete",
+    file: "area-settings-objectives-ai.png",
+    viewport: { width: 1440, height: 1000 },
+  },
+  {
+    title: "Screens/Knowledge Area Sharing",
+    name: "Share · compare upstream update",
+    file: "share-compare-upstream-update.png",
+    viewport: { width: 1440, height: 1000 },
+  },
+  {
+    title: "Screens/Mobile Client",
+    name: "Study · saving review (native)",
+    file: "native-study-saving-review.png",
+    viewport: { width: 390, height: 844 },
+  },
   {
     title: "Screens/Mobile Client",
     name: "Today · offline study (native)",
     file: "mobile-today-offline.png",
+    viewport: { width: 390, height: 844 },
+  },
+  {
+    title: "Screens/Native AI Tutor",
+    name: "Tutor · proposal approval (native)",
+    file: "native-tutor-proposal-approval.png",
+    viewport: { width: 390, height: 844 },
+  },
+  {
+    title: "Screens/Native Publishing",
+    name: "Publishing · share and receive (native)",
+    file: "native-publishing-share-receive.png",
+    viewport: { width: 390, height: 844 },
+  },
+  {
+    title: "Screens/Native Publishing",
+    name: "Publishing · compare upstream update (native)",
+    file: "native-publishing-compare-upstream.png",
+    viewport: { width: 390, height: 844 },
+  },
+  {
+    title: "Screens/Native Account",
+    name: "Account · workspace owner mismatch (native)",
+    file: "native-account-owner-mismatch.png",
+    viewport: { width: 390, height: 844 },
+  },
+  {
+    title: "Screens/Native Account",
+    name: "Account · legacy owner confirmation (native)",
+    file: "native-account-owner-confirmation.png",
+    viewport: { width: 390, height: 844 },
+  },
+  {
+    title: "Screens/Native Account",
+    name: "Account · deletion confirmation (native)",
+    file: "native-account-delete-confirmation.png",
     viewport: { width: 390, height: 844 },
   },
   {
@@ -136,6 +959,18 @@ const requested = [
     viewport: { width: 1440, height: 1000 },
   },
   {
+    title: "Design System/Review Card",
+    name: "Multiline answer",
+    file: "study-card-multiline-answer.png",
+    viewport: { width: 1440, height: 1000 },
+  },
+  {
+    title: "Screens/Knowledge Area Sharing",
+    name: "Share · atomic copy save recovery",
+    file: "share-copy-save-recovery.png",
+    viewport: { width: 1440, height: 1000 },
+  },
+  {
     title: "Screens/AI Tutor",
     name: "Tutor · answer feedback",
     file: "tutor-answer-feedback.png",
@@ -151,6 +986,12 @@ const requested = [
     title: "Screens/AI Tutor",
     name: "Tutor · objective gaps",
     file: "tutor-objective-gaps.png",
+    viewport: { width: 1440, height: 1000 },
+  },
+  {
+    title: "Screens/AI Tutor",
+    name: "Tutor · imported objective gaps",
+    file: "tutor-imported-objective-gaps.png",
     viewport: { width: 1440, height: 1000 },
   },
   {
@@ -183,6 +1024,42 @@ const requested = [
     file: "share-review-attribution-license.png",
     viewport: { width: 1440, height: 1000 },
   },
+  {
+    title: "Screens/Knowledge Area Sharing",
+    name: "Share · review media attachment",
+    file: "share-review-media-attachment.png",
+    viewport: { width: 1440, height: 1000 },
+  },
+  {
+    title: "Screens/Knowledge Area Sharing",
+    name: "Share · active unlisted link",
+    file: "share-active-unlisted-link.png",
+    viewport: { width: 1440, height: 1000 },
+  },
+  {
+    title: "Screens/Knowledge Area Sharing",
+    name: "Share · revoked unlisted link",
+    file: "share-revoked-unlisted-link.png",
+    viewport: { width: 1440, height: 1000 },
+  },
+  {
+    title: "Screens/Anki Import",
+    name: "Anki · choose package",
+    file: "anki-import-choose-package.png",
+    viewport: { width: 1440, height: 1000 },
+  },
+  {
+    title: "Screens/Anki Import",
+    name: "Anki · review imported cards",
+    file: "anki-import-review-cards.png",
+    viewport: { width: 1440, height: 1000 },
+  },
+  {
+    title: "Screens/Anki Import",
+    name: "Anki · unsupported package",
+    file: "anki-import-unsupported-package.png",
+    viewport: { width: 1440, height: 1000 },
+  },
 ];
 
 let server;
@@ -191,17 +1068,21 @@ let browser;
 async function waitForStorybook() {
   const deadline = Date.now() + 90_000;
   while (Date.now() < deadline) {
-    if (server.exitCode !== null) throw new Error(`Storybook exited with code ${server.exitCode}`);
+    if (server.exitCode !== null) {
+      return { ok: false, message: `Storybook exited with code ${server.exitCode}` };
+    }
     try {
       const response = await fetch(`${baseUrl}/index.json`);
-      if (response.ok) return response.json();
+      if (response.ok) return { ok: true, index: await response.json() };
     } catch {
       // Keep waiting while the local Storybook server starts.
     }
     await new Promise((resolve) => setTimeout(resolve, 500));
   }
-  throw new Error(`Storybook did not become ready at ${baseUrl}`);
+  return { ok: false, message: `Storybook did not become ready at ${baseUrl}` };
 }
+
+let runError;
 
 try {
   await mkdir(outputDir, { recursive: true });
@@ -221,56 +1102,81 @@ try {
     },
   );
 
-  const index = await waitForStorybook();
-  const entries = Object.values(index.entries ?? {});
-  browser = await chromium.launch({ headless: true });
+  const startup = await waitForStorybook();
+  if (!startup.ok) {
+    runError = startup.message;
+  } else {
+    const entries = Object.values(startup.index?.entries ?? {});
+    browser = await chromium.launch({ headless: true });
 
-  for (const shot of requested) {
-    const story = entries.find(
-      (entry) => entry.type === "story" && entry.title === shot.title && entry.name === shot.name,
-    );
-    if (!story) throw new Error(`Story not found: ${shot.name}`);
+    for (const shot of requested) {
+      const story = entries.find(
+        (entry) => entry.type === "story" && entry.title === shot.title && entry.name === shot.name,
+      );
+      if (!story) {
+        runError = `Story not found: ${shot.name}`;
+        break;
+      }
 
-    const page = await browser.newPage({
-      viewport: shot.viewport,
-      deviceScaleFactor: 1,
-      reducedMotion: "reduce",
-      colorScheme: "light",
-    });
-    await page.goto(`${baseUrl}/iframe.html?id=${story.id}&viewMode=story`, {
-      waitUntil: "networkidle",
-    });
-    const screenSelector =
-      shot.title === "Screens/Recall Dashboard"
-        ? ".app-shell"
-        : shot.title === "Screens/Mobile Client"
-          ? '[data-testid="mobile-screen"]'
-          : shot.title === "Screens/Knowledge Area Sharing"
-            ? ".publication-panel"
-            : ".component-catalog";
-    await page.locator(screenSelector).waitFor({ state: "visible", timeout: 20_000 });
-    if (shot.title === "Screens/Recall Dashboard" && shot.viewport.width < 720) {
-      await page.addStyleTag({
-        content: ".mobile-footer { position: static !important; inset: auto !important; }",
+      const page = await browser.newPage({
+        viewport: shot.viewport,
+        deviceScaleFactor: 1,
+        reducedMotion: "reduce",
+        colorScheme: "light",
       });
+      await page.goto(`${baseUrl}/iframe.html?id=${story.id}&viewMode=story`, {
+        waitUntil: "networkidle",
+      });
+      const screenSelector =
+        shot.title === "Screens/Recall Dashboard"
+          ? ".app-shell"
+          : shot.title === "Screens/Native AI Tutor"
+            ? '[data-testid="native-tutor-panel"]'
+            : shot.title === "Screens/Native Publishing"
+              ? '[data-testid="native-publishing-panel"]'
+              : shot.title === "Screens/Native Account"
+                ? '[data-testid="native-account-panel"]'
+                : shot.title === "Screens/Mobile Client"
+                  ? '[data-testid="mobile-screen"]'
+                  : shot.title === "Screens/Knowledge Area Sharing"
+                    ? ".publication-panel"
+                    : shot.title === "Screens/Anki Import"
+                      ? ".anki-import-dialog"
+                      : ".component-catalog";
+      await page.locator(screenSelector).waitFor({ state: "visible", timeout: 20_000 });
+      if (shot.title === "Screens/Native AI Tutor") {
+        await page.getByText("Proposed card · approval required").waitFor({
+          state: "visible",
+          timeout: 20_000,
+        });
+      }
+      if (shot.title === "Screens/Recall Dashboard" && shot.viewport.width < 720) {
+        await page.addStyleTag({
+          content: ".mobile-footer { position: static !important; inset: auto !important; }",
+        });
+      }
+      await page.waitForTimeout(250);
+      await page.screenshot({
+        path: path.join(outputDir, shot.file),
+        fullPage: true,
+        animations: "disabled",
+      });
+      await page.close();
+      console.log(
+        `Saved ${path.relative(path.resolve(appRoot, "../.."), path.join(outputDir, shot.file))}`,
+      );
     }
-    await page.waitForTimeout(250);
-    await page.screenshot({
-      path: path.join(outputDir, shot.file),
-      fullPage: true,
-      animations: "disabled",
-    });
-    await page.close();
-    console.log(
-      `Saved ${path.relative(path.resolve(appRoot, "../.."), path.join(outputDir, shot.file))}`,
-    );
-  }
 
-  const screenshotList = requested.map((shot) => `- [${shot.name}](./${shot.file})`).join("\n");
-  await writeFile(
-    path.join(outputDir, "README.md"),
-    `# Storybook screenshots\n\nGenerated from full-screen Storybook stories with deterministic mock data. Rebuild them with \`pnpm screenshots\` from the repository root.\n\n${screenshotList}\n`,
-  );
+    if (!runError) {
+      const screenshotList = requested.map((shot) => `- [${shot.name}](./${shot.file})`).join("\n");
+      await writeFile(
+        path.join(outputDir, "README.md"),
+        `# Storybook screenshots\n\nGenerated from full-screen Storybook stories with deterministic mock data. Rebuild them with \`pnpm screenshots\` from the repository root.\n\n${screenshotList}\n`,
+      );
+    }
+  }
+} catch (error) {
+  runError = error instanceof Error ? error.message : "Storybook screenshot capture failed";
 } finally {
   await browser?.close();
   if (server && server.exitCode === null && server.signalCode === null) {
@@ -286,4 +1192,9 @@ try {
       });
     });
   }
+}
+
+if (runError) {
+  process.stderr.write(`${runError}\n`);
+  process.exitCode = 1;
 }

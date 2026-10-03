@@ -1,0 +1,26 @@
+{
+  "name": "@recall/ui-native",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit --project tsconfig.json"
+  },
+  "peerDependencies": {
+    "react": "^19.2.3",
+    "react-native": "0.86.3"
+  },
+  "devDependencies": {
+    "@types/react": "~19.2.0",
+    "react": "19.2.3",
+    "react-native": "0.86.3",
+    "typescript": "5.9.3",
+    "@storybook/react": "10.6.1"
+  },
+  "dependencies": {
+    "@recall/design-tokens": "workspace:*"
+  }
+}

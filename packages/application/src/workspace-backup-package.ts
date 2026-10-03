@@ -1,5 +1,5 @@
 import { sha256 } from "@noble/hashes/sha2.js";
-import { unzipSync, zipSync } from "fflate";
+import { unzipSync, zipSync, type UnzipFileInfo } from "fflate";
 import { Effect, Either, Schema } from "effect";
 import {
   MediaReferenceSchema,
@@ -9,6 +9,7 @@ import {
 } from "@recall/domain";
 import type { MediaStore, StoredMediaAsset } from "@recall/local-store";
 import { isSupportedMediaContent } from "./knowledge-area-package";
+import { hasSafeZipExpansion } from "./zip-safety";
 
 const maxArchiveBytes = 100_000_000;
 const maxExpandedBytes = 100_000_000;
@@ -61,7 +62,7 @@ function safePath(path: string): boolean {
 
 function referencesIn(workspace: Workspace): readonly MediaReference[] {
   const references = new Map<string, MediaReference>();
-  for (const area of workspace.areas) {
+  for (const area of [...workspace.areas, ...(workspace.retainedReviewAreas ?? [])]) {
     for (const card of area.cards) {
       for (const reference of card.media ?? []) references.set(reference.id, reference);
     }
@@ -148,9 +149,25 @@ export function importWorkspaceBackupPackage(
   return Effect.gen(function* () {
     if (!(input instanceof Uint8Array) || input.byteLength > maxArchiveBytes)
       return yield* Effect.fail(failure("limits-exceeded"));
+    const zipEntries = yield* Effect.try({
+      try: () => {
+        const entries: UnzipFileInfo[] = [];
+        unzipSync(input, {
+          filter: (entry) => {
+            if (entries.length <= maxFiles) entries.push(entry);
+            return false;
+          },
+        });
+        return entries;
+      },
+      catch: () => failure("invalid-backup"),
+    });
+    if (!hasSafeZipExpansion(zipEntries, { maxFiles, maxExpandedBytes }))
+      return yield* Effect.fail(failure("limits-exceeded"));
     let fileCount = 0;
     let expandedBytes = 0;
-    let rejected = false;
+    const archiveState = { rejected: false };
+    const seenPaths = new Set<string>();
     const files = yield* Effect.try({
       try: () =>
         unzipSync(input, {
@@ -158,19 +175,31 @@ export function importWorkspaceBackupPackage(
             fileCount += 1;
             expandedBytes += file.originalSize;
             const path = file.name;
+            const duplicatePath = seenPaths.has(path);
+            seenPaths.add(path);
             const allowed =
               safePath(path) &&
               (StaticFiles.has(path) ||
                 /^media\/[a-f0-9]{64}\.(jpg|png|gif|webp|mp3|ogg|wav)$/.test(path));
-            if (!allowed || fileCount > maxFiles || expandedBytes > maxExpandedBytes)
-              rejected = true;
-            return allowed && fileCount <= maxFiles && expandedBytes <= maxExpandedBytes;
+            if (
+              duplicatePath ||
+              !allowed ||
+              fileCount > maxFiles ||
+              expandedBytes > maxExpandedBytes
+            )
+              archiveState.rejected = true;
+            return (
+              !duplicatePath &&
+              allowed &&
+              fileCount <= maxFiles &&
+              expandedBytes <= maxExpandedBytes
+            );
           },
         }),
       catch: () => failure("invalid-backup"),
     });
     const names = Object.keys(files);
-    if (rejected || names.length !== fileCount || new Set(names).size !== names.length)
+    if (archiveState.rejected || names.length !== fileCount || new Set(names).size !== names.length)
       return yield* Effect.fail(
         fileCount > maxFiles || expandedBytes > maxExpandedBytes
           ? failure("limits-exceeded")

@@ -9,9 +9,13 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint"
+    "lint": "eslint --max-warnings=0",
+    "release:check": "node scripts/eas-release.mjs check preview all",
+    "release:preview": "node scripts/eas-release.mjs build preview all",
+    "release:production": "node scripts/eas-release.mjs build production all"
   },
   "dependencies": {
+    "@recall/ai-core": "workspace:*",
     "@recall/application": "workspace:*",
     "@recall/contracts": "workspace:*",
     "@recall/design-tokens": "workspace:*",
@@ -33,13 +37,21 @@
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "react-native": "0.86.3",
-    "react-native-web": "^0.21.3"
+    "react-native-web": "^0.21.3",
+    "@recall/ui-native": "workspace:*",
+    "nativewind": "4.2.7",
+    "react-native-css-interop": "0.2.7",
+    "react-native-reanimated": "4.5.1",
+    "react-native-worklets": "0.10.1",
+    "react-native-safe-area-context": "5.7.0"
   },
   "devDependencies": {
     "@types/react": "~19.2.0",
     "eslint": "^9",
     "eslint-config-next": "16.3.8",
     "eslint-config-prettier": "^10.1.8",
-    "typescript": "^5.0.0"
+    "typescript": "^5.0.0",
+    "tailwindcss": "3.4.17",
+    "babel-preset-expo": "57.0.13"
   }
 }

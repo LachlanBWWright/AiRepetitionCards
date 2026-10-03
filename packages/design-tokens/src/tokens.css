@@ -1,8 +1,9 @@
+/* Generated from tokens.json with pnpm tokens:write. */
 :root {
   --recall-paper: #faf9f6;
   --recall-surface: #ffffff;
   --recall-ink: #252820;
-  --recall-muted: #85877f;
+  --recall-muted: #62665c;
   --recall-line: #eae9e3;
   --recall-green: #c4ed68;
   --recall-dark-green: #35512d;
@@ -10,4 +11,12 @@
   --recall-violet: #c4b5fd;
   --recall-amber: #f7cb70;
   --recall-danger: #a74132;
+  --recall-radius-card: 28px;
+  --recall-radius-control: 16px;
+  --recall-radius-pill: 999px;
+  --recall-spacing-xs: 8px;
+  --recall-spacing-sm: 12px;
+  --recall-spacing-md: 18px;
+  --recall-spacing-lg: 24px;
+  --recall-spacing-xl: 32px;
 }

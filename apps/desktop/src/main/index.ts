@@ -2,12 +2,28 @@ import { mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { DatabaseSync } from "node:sqlite";
-import { app, BrowserWindow, ipcMain, session, type IpcMainInvokeEvent } from "electron";
+import {
+  app,
+  BrowserWindow,
+  dialog,
+  ipcMain,
+  session,
+  shell,
+  type IpcMainInvokeEvent,
+  type WebContents,
+} from "electron";
 import { Effect, Either, Schema } from "effect";
 import { parseWorkspaceJson } from "@recall/domain";
 import type { Workspace } from "@recall/domain";
 import { registerDesktopServices } from "./desktop-services";
 import { registerDesktopMediaIpc } from "./desktop-media-ipc";
+import { registerDesktopAnkiIpc } from "./anki-ipc";
+import { registerBackupIpc } from "./backup-ipc";
+import { registerChatGptLocal } from "./chatgpt-local";
+
+// One process owns rotating credentials and SQLite for this user-data directory.
+const ownsInstanceLock = app.requestSingleInstanceLock();
+if (!ownsInstanceLock) app.quit();
 
 const WorkspaceWriteLimit = 5_000_000;
 const rendererUrl = process.env.ELECTRON_RENDERER_URL;
@@ -36,6 +52,51 @@ function configureContentSecurityPolicy(): void {
       responseHeaders: { ...headers, "Content-Security-Policy": [policy] },
     });
   });
+}
+
+function trustedClipboardFrame(
+  contents: WebContents | null,
+  requestingUrl: string | undefined,
+  isMainFrame: boolean,
+  requestingOrigin?: string,
+): boolean {
+  const expectedUrl = rendererUrl ?? pathToFileURL(join(rendererDirectory, "index.html")).href;
+  if (
+    !mainWindow ||
+    !contents ||
+    contents !== mainWindow.webContents ||
+    !isMainFrame ||
+    requestingUrl !== expectedUrl ||
+    contents.mainFrame.url !== expectedUrl
+  )
+    return false;
+  const parsed = Effect.runSync(
+    Effect.either(
+      Effect.try({
+        try: () => new URL(expectedUrl),
+        catch: () => ({ _tag: "InvalidRendererOrigin" }) as const,
+      }),
+    ),
+  );
+  if (Either.isLeft(parsed)) return false;
+  if (requestingOrigin === undefined) return true;
+  return parsed.right.protocol === "file:"
+    ? requestingOrigin === "file://" || requestingOrigin === "null"
+    : requestingOrigin === parsed.right.origin;
+}
+
+function configureSessionPermissions(): void {
+  session.defaultSession.setPermissionRequestHandler((contents, permission, callback, details) => {
+    callback(
+      permission === "clipboard-sanitized-write" &&
+        trustedClipboardFrame(contents, details.requestingUrl, details.isMainFrame),
+    );
+  });
+  session.defaultSession.setPermissionCheckHandler(
+    (contents, permission, origin, details) =>
+      permission === "clipboard-sanitized-write" &&
+      trustedClipboardFrame(contents, details.requestingUrl, details.isMainFrame, origin),
+  );
 }
 
 type DesktopReply<T> =
@@ -158,6 +219,78 @@ function registerWorkspaceIpc(database: DatabaseSync): void {
   });
 }
 
+const SharedLinkSchema = Schema.Struct({
+  versionId: Schema.String.pipe(
+    Schema.pattern(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i),
+  ),
+  token: Schema.optional(Schema.String.pipe(Schema.pattern(/^[A-Za-z0-9_-]{43}$/))),
+});
+
+/** Only explicit shared-page links at the configured application origin may leave the renderer. */
+function validatedSharedLink(value: unknown): string | null {
+  if (typeof value !== "string" || value.length > 2048 || !process.env.RECALL_API_URL) return null;
+  const parsed = Effect.runSync(
+    Effect.either(
+      Effect.try({
+        try: () => ({ base: new URL(process.env.RECALL_API_URL ?? ""), target: new URL(value) }),
+        catch: () => ({ _tag: "InvalidSharedLink" }) as const,
+      }),
+    ),
+  );
+  if (Either.isLeft(parsed)) return null;
+  const { base, target } = parsed.right;
+  const loopback = ["localhost", "127.0.0.1", "[::1]"].includes(base.hostname);
+  if (
+    (base.protocol !== "https:" && !(base.protocol === "http:" && loopback)) ||
+    base.username ||
+    base.password ||
+    base.search ||
+    base.hash ||
+    target.origin !== base.origin ||
+    target.username ||
+    target.password ||
+    target.hash
+  )
+    return null;
+  const match = /^\/shared\/([^/]+)$/.exec(target.pathname);
+  const tokens = target.searchParams.getAll("token");
+  if (!match || tokens.length > 1 || [...target.searchParams.keys()].some((key) => key !== "token"))
+    return null;
+  const validated = Schema.decodeUnknownEither(SharedLinkSchema)({
+    versionId: match[1],
+    ...(tokens[0] === undefined ? {} : { token: tokens[0] }),
+  });
+  return Either.isRight(validated) ? target.href : null;
+}
+
+function openSharedLink(value: unknown): void {
+  const url = validatedSharedLink(value);
+  if (url === null) return;
+  void Effect.runPromise(
+    Effect.tryPromise({
+      try: () => shell.openExternal(url),
+      catch: () => ({ _tag: "SharedLinkOpenFailed" }) as const,
+    }).pipe(
+      Effect.catchAll(() =>
+        Effect.tryPromise({
+          try: () => {
+            const options = {
+              type: "error" as const,
+              title: "Share link could not be opened",
+              message: "Copy the share link and open it in your browser.",
+            };
+            return mainWindow
+              ? dialog.showMessageBox(mainWindow, options)
+              : dialog.showMessageBox(options);
+          },
+          catch: () => ({ _tag: "SharedLinkNoticeFailed" }) as const,
+        }).pipe(Effect.ignore),
+      ),
+      Effect.asVoid,
+    ),
+  );
+}
+
 function createWindow(): BrowserWindow {
   const window = new BrowserWindow({
     width: 1440,
@@ -171,10 +304,18 @@ function createWindow(): BrowserWindow {
       sandbox: true,
     },
   });
-  window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+  window.webContents.setWindowOpenHandler(({ url }) => {
+    openSharedLink(url);
+    return { action: "deny" };
+  });
   window.webContents.on("will-navigate", (event, url) => {
-    if (rendererUrl && url !== rendererUrl) event.preventDefault();
-    if (!rendererUrl && url !== window.webContents.getURL()) event.preventDefault();
+    if (
+      (rendererUrl && url !== rendererUrl) ||
+      (!rendererUrl && url !== window.webContents.getURL())
+    ) {
+      event.preventDefault();
+      openSharedLink(url);
+    }
   });
   if (rendererUrl) void window.loadURL(rendererUrl);
   else void window.loadFile(join(mainDirectory, "../renderer/index.html"));
@@ -217,13 +358,17 @@ const ready = Effect.tryPromise({
     onSuccess: (database) =>
       Effect.sync(() => {
         registerWorkspaceIpc(database);
+        registerChatGptLocal(trustedSender);
         registerDesktopMediaIpc(database, trustedSender);
+        registerDesktopAnkiIpc(trustedSender);
+        registerBackupIpc(() => mainWindow, trustedSender);
         authServices = registerDesktopServices(
           database,
           () => mainWindow,
           trustedSender,
           process.env.RECALL_API_URL,
         );
+        configureSessionPermissions();
         configureContentSecurityPolicy();
         mainWindow = createWindow();
         if (pendingAuthUrl) {
@@ -241,4 +386,4 @@ const ready = Effect.tryPromise({
   }),
 );
 
-void Effect.runPromise(ready);
+if (ownsInstanceLock) void Effect.runPromise(ready);

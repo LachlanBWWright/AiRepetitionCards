@@ -1,6 +1,7 @@
 export type DesktopAuthStatus = {
   readonly configured: boolean;
   readonly email: string | null;
+  readonly ownerId: string | null;
   readonly secureStorageAvailable: boolean;
 };
 
@@ -9,9 +10,24 @@ export type DesktopApiResponse = {
   readonly body: string;
 };
 
+const apiRequestTimeoutMs = 60_000;
+
 declare global {
   interface Window {
     readonly recallDesktop?: {
+      readonly chatgpt?: {
+        readonly status: () => Promise<unknown>;
+        readonly signIn: (input: unknown) => Promise<unknown>;
+        readonly select: (clientId: string) => Promise<unknown>;
+        readonly signOut: (clientId: string) => Promise<unknown>;
+        readonly resumePlan: (clientId: string) => Promise<unknown>;
+        readonly models: () => Promise<unknown>;
+        readonly respond: (input: {
+          readonly model: string;
+          readonly input: string;
+          readonly expectedClientId?: string;
+        }) => Promise<unknown>;
+      };
       readonly workspace: {
         readonly read: () => Promise<unknown>;
         readonly write: (serializedWorkspace: string) => Promise<unknown>;
@@ -35,7 +51,22 @@ declare global {
           readonly path: string;
           readonly method: string;
           readonly body: string | null;
+          readonly expectedOwnerId?: string;
         }) => Promise<unknown>;
+        readonly requestMedia: (request: {
+          readonly path: string;
+          readonly method: "GET" | "POST";
+          readonly referenceJson: string | null;
+          readonly bytes: Uint8Array | null;
+          readonly expectedOwnerId?: string;
+        }) => Promise<unknown>;
+      };
+      readonly anki: {
+        readonly readSqlite: (database: Uint8Array) => Promise<unknown>;
+      };
+      readonly backup: {
+        readonly save: (bytes: Uint8Array) => Promise<unknown>;
+        readonly open: () => Promise<unknown>;
       };
     };
   }
@@ -47,11 +78,82 @@ export function isDesktopRuntime(): boolean {
 
 export async function apiFetch(path: string, init?: RequestInit): Promise<Response> {
   const bridge = typeof window === "undefined" ? undefined : window.recallDesktop;
-  if (!bridge) return fetch(path, init);
+  if (!bridge) {
+    const controller = new AbortController();
+    const externalSignal = init?.signal;
+    const abortFromCaller = () => controller.abort();
+    let cleanedUp = false;
+    const clearCallerSignal = () => {
+      externalSignal?.removeEventListener("abort", abortFromCaller);
+    };
+    const timeout = setTimeout(() => {
+      controller.abort();
+      if (!cleanedUp) {
+        cleanedUp = true;
+        clearCallerSignal();
+      }
+    }, apiRequestTimeoutMs);
+    const cleanup = () => {
+      if (cleanedUp) return;
+      cleanedUp = true;
+      clearTimeout(timeout);
+      clearCallerSignal();
+    };
+    if (externalSignal?.aborted) controller.abort();
+    else externalSignal?.addEventListener("abort", abortFromCaller, { once: true });
+    let response: Response;
+    try {
+      response = await fetch(path, { ...init, signal: controller.signal });
+    } catch (error) {
+      cleanup();
+      return Promise.reject(error);
+    }
+    if (!response.body) {
+      cleanup();
+      return response;
+    }
+    const reader = response.body.getReader();
+    const body = new ReadableStream<Uint8Array>({
+      async pull(streamController) {
+        try {
+          const chunk = await reader.read();
+          if (chunk.done) {
+            cleanup();
+            reader.releaseLock();
+            streamController.close();
+          } else {
+            streamController.enqueue(chunk.value);
+          }
+        } catch (error) {
+          cleanup();
+          streamController.error(error);
+        }
+      },
+      async cancel(reason) {
+        cleanup();
+        try {
+          await reader.cancel(reason);
+        } finally {
+          reader.releaseLock();
+        }
+      },
+    });
+    return new Response(body, {
+      headers: response.headers,
+      status: response.status,
+      statusText: response.statusText,
+    });
+  }
 
   const method = init?.method?.toUpperCase() ?? "GET";
   const body = typeof init?.body === "string" ? init.body : null;
-  const raw = await bridge.api.request({ path, method, body });
+  const expectedOwnerId = new Headers(init?.headers).get("x-recall-workspace-owner");
+  const raw = await bridge.api.request({
+    path,
+    method,
+    body,
+    ...(expectedOwnerId === null ? {} : { expectedOwnerId }),
+  });
   if (
     typeof raw !== "object" ||
     raw === null ||

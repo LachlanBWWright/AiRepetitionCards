@@ -1,7 +1,27 @@
+export { deriveEffectiveReviewTime } from "./review-clock";
+export type { ReviewClockFailure, EffectiveReviewTime } from "./review-clock";
 import type { ReviewEvent } from "@recall/domain";
+import { createDeviceId } from "@recall/domain";
+import type { SyncPullResponse } from "@recall/contracts";
 
 export { repairReviewSyncConflicts, prepareWorkspaceForSync } from "./outbox";
 export { stableSyncId } from "./ids";
+
+/** Reject pages whose cursor could skip unapplied changes or replay an older range. */
+export function isValidSyncPullPage(page: SyncPullResponse, previousCursor: string): boolean {
+  if (!/^\d{1,20}$/.test(previousCursor) || !/^\d{1,20}$/.test(page.cursor)) return false;
+  const previousSequence = BigInt(previousCursor);
+  const cursor = BigInt(page.cursor);
+  if (cursor < previousSequence || (page.hasMore && page.changes.length === 0)) return false;
+  if (page.changes.length === 0) return cursor === previousSequence;
+  let lastSequence = previousSequence;
+  for (const change of page.changes) {
+    const sequence = BigInt(change.sequence);
+    if (sequence <= lastSequence) return false;
+    lastSequence = sequence;
+  }
+  return cursor === lastSequence;
+}
 
 export type OrderedReviewEvents = {
   readonly events: readonly ReviewEvent[];
@@ -25,22 +45,27 @@ export function createSyncedReviewEvent(
   );
   return {
     ...event,
-    deviceId: workspace.syncDeviceId,
+    ...(workspace.syncDeviceId ? { deviceId: createDeviceId(workspace.syncDeviceId) } : {}),
     deviceSequence: maxSequence + 1,
     baseReviewEventId:
       [...events].reverse().find((item) => item.cardId === event.cardId)?.id ?? null,
     reviewedAtDevice: event.ratedAt,
     effectiveReviewedAt: event.ratedAt,
-    elapsedMs: null,
-    schedulerParameterSetId: null,
-    previousStateHash: null,
+    elapsedMs: event.elapsedMs ?? null,
+    schedulerParameterSetId: event.schedulerParameterSetId ?? null,
+    previousStateHash: event.previousStateHash ?? null,
   };
 }
 
 function compareEvents(left: ReviewEvent, right: ReviewEvent): number {
-  const time = (left.effectiveReviewedAt ?? left.ratedAt).localeCompare(
-    right.effectiveReviewedAt ?? right.ratedAt,
-  );
+  const leftTime = Date.parse(left.effectiveReviewedAt ?? left.ratedAt);
+  const rightTime = Date.parse(right.effectiveReviewedAt ?? right.ratedAt);
+  const time =
+    Number.isFinite(leftTime) && Number.isFinite(rightTime)
+      ? leftTime - rightTime
+      : (left.effectiveReviewedAt ?? left.ratedAt).localeCompare(
+          right.effectiveReviewedAt ?? right.ratedAt,
+        );
   if (time !== 0) return time;
   const sequence = (left.deviceSequence ?? 0) - (right.deviceSequence ?? 0);
   if (sequence !== 0) return sequence;

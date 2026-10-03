@@ -1,0 +1,120 @@
+@import "@recall/design-tokens/tokens.css";
+@import "./styles.css";
+
+.component-catalog {
+  box-sizing: border-box;
+  min-height: 100vh;
+  padding: 72px max(24px, calc((100vw - 980px) / 2));
+  background: var(--recall-paper);
+  color: var(--recall-ink);
+  font-family: Arial, Helvetica, sans-serif;
+}
+.component-catalog *,
+.component-catalog *::before,
+.component-catalog *::after {
+  box-sizing: border-box;
+}
+.component-catalog button {
+  font-family: inherit;
+  cursor: pointer;
+}
+.component-catalog .eyebrow {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 1.4px;
+}
+.component-catalog h1 {
+  margin: 12px 0 7px;
+  font-size: 36px;
+  font-weight: 500;
+  letter-spacing: -1.3px;
+}
+.component-catalog h1 em {
+  color: #678343;
+  font-family: Georgia, serif;
+  font-weight: 400;
+}
+.component-catalog .subheading {
+  color: var(--recall-muted);
+  font-size: 14px;
+}
+.component-catalog-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 32px;
+}
+.component-catalog-grid section,
+.catalog-area {
+  min-height: 150px;
+  padding: 20px;
+  border: 1px solid var(--recall-line);
+  border-radius: 11px;
+  background: #fffefa;
+}
+.component-catalog-grid h2 {
+  margin: 0;
+  font-size: 13px;
+}
+.component-catalog-grid p {
+  margin: 7px 0 20px;
+  color: var(--recall-muted);
+  font-size: 12px;
+}
+.component-catalog-row,
+.feedback-badges,
+.catalog-dialog-actions,
+.component-catalog .modal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 16px;
+}
+.component-catalog-grid .ui-button + .ui-button {
+  margin-left: 8px;
+}
+.feedback-empty {
+  min-height: 120px;
+  padding: 14px;
+  border: 1px dashed var(--recall-line);
+  border-radius: 9px;
+  background: #fbfaf7;
+}
+.feedback-empty > span {
+  color: #90b257;
+  font-size: 18px;
+}
+.feedback-empty h3 {
+  margin: 5px 0;
+  font-size: 12px;
+}
+.feedback-empty p {
+  margin: 0 0 10px;
+}
+.catalog-dialog,
+.component-catalog .feedback-dialog {
+  width: min(100%, 440px);
+  padding: 28px;
+  border-radius: 14px;
+  background: #fffefa;
+}
+.catalog-dialog h2,
+.component-catalog .feedback-dialog h2 {
+  font-size: 24px;
+  font-weight: 500;
+}
+.catalog-dialog p {
+  font-size: 14px;
+  line-height: 1.5;
+}
+.catalog-area {
+  margin-top: 32px;
+}
+@media (max-width: 640px) {
+  .component-catalog {
+    padding: 32px 20px;
+  }
+  .component-catalog-grid {
+    grid-template-columns: 1fr;
+  }
+}

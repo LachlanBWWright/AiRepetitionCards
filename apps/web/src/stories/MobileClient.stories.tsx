@@ -3,6 +3,11 @@ import { Either, Schema } from "effect";
 import { WorkspaceSchema } from "@recall/domain";
 import { NativeTodayScreen } from "../../../mobile/src/components/NativeTodayScreen";
 import { mockWorkspace } from "../features/workspace/mock-data";
+import {
+  deletedCardPendingWorkspace,
+  deletedAreaPendingWorkspace,
+  legacyMissingReviewContentWorkspace,
+} from "../features/workspace/deleted-review-mock-data";
 
 const meta = {
   title: "Screens/Mobile Client",
@@ -55,6 +60,7 @@ export const OfflineStudy: Story = {
     onShowAnswer: () => undefined,
     onReview: () => undefined,
     onReset: () => undefined,
+    onImportAnki: () => undefined,
   },
   globals: { viewport: { value: "recallMobile", isRotated: false } },
 };
@@ -87,5 +93,34 @@ export const CaughtUp: Story = {
       ...mockWorkspace,
       areas: mockWorkspace.areas.map((area) => ({ ...area, cards: [] })),
     },
+  },
+};
+
+export const ReviewSaving: Story = {
+  ...AnswerRevealed,
+  name: "Study · saving review (native)",
+  args: { ...AnswerRevealed.args, reviewPending: true },
+};
+
+export const DeletedCardWaitingForSync: Story = {
+  ...OfflineStudy,
+  name: "Today · deleted card review waiting for sync (native)",
+  args: { ...OfflineStudy.args, workspace: deletedCardPendingWorkspace },
+};
+
+export const DeletedAreaWaitingForSync: Story = {
+  ...OfflineStudy,
+  name: "Today · deleted area review waiting for sync (native)",
+  args: { ...OfflineStudy.args, workspace: deletedAreaPendingWorkspace },
+};
+
+export const OlderDeletedReviewRecovery: Story = {
+  ...OfflineStudy,
+  name: "Today · missing deleted review content recovery (native)",
+  args: {
+    ...OfflineStudy.args,
+    workspace: legacyMissingReviewContentWorkspace,
+    message:
+      "A pending review refers to deleted content that this older workspace no longer contains. Export this device's current private backup or review snapshot before replacing it with an older backup containing that card. Your reviews remain saved; backups are not automatically merged.",
   },
 };

@@ -1,0 +1,95 @@
+{
+  "$schema": "https://turborepo.dev/schema.json",
+  "globalDependencies": [
+    ".prettierrc.json",
+    "eslint.typed.mjs",
+    "packages/eslint.config.mjs",
+    "packages/tsconfig.json",
+    "scripts/**"
+  ],
+  "globalEnv": ["NODE_ENV"],
+  "tasks": {
+    "transit": {
+      "dependsOn": ["^transit"]
+    },
+    "typecheck": {
+      "dependsOn": ["^typecheck"],
+      "outputs": []
+    },
+    "web#typecheck": {
+      "dependsOn": ["^typecheck", "mobile#transit"],
+      "inputs": ["$TURBO_DEFAULT$", "../mobile/App.tsx", "../mobile/src/**"],
+      "outputs": []
+    },
+    "lint": {
+      "dependsOn": ["^transit"],
+      "outputs": []
+    },
+    "web#lint": {
+      "dependsOn": ["^transit", "mobile#transit"],
+      "inputs": ["$TURBO_DEFAULT$", "../mobile/App.tsx", "../mobile/src/**"],
+      "outputs": []
+    },
+    "desktop#lint": {
+      "dependsOn": ["^transit", "web#transit"],
+      "inputs": ["$TURBO_DEFAULT$", "../web/src/**"],
+      "outputs": []
+    },
+    "//#lint:packages": {
+      "cache": false,
+      "outputs": []
+    },
+    "build": {
+      "dependsOn": ["^transit"],
+      "inputs": ["$TURBO_DEFAULT$", ".env*"],
+      "outputs": ["dist/**", "out/**", ".next/**", "!.next/cache/**", "!.next/dev/**"],
+      "env": [
+        "NEXT_PUBLIC_*",
+        "EXPO_PUBLIC_*",
+        "RECALL_API_URL",
+        "RECALL_CHATGPT_LOCAL_ENABLED",
+        "SUPABASE_*",
+        "OPENAI_*",
+        "SIWC_*",
+        "TUTOR_*",
+        "RECALL_HTTP_LOGGING"
+      ]
+    },
+    "desktop#build": {
+      "dependsOn": ["^transit", "web#transit"],
+      "inputs": ["$TURBO_DEFAULT$", "../web/src/**", "../web/postcss.config.mjs", "../web/.env*"],
+      "outputs": ["out/**"],
+      "env": ["NEXT_PUBLIC_*", "RECALL_API_URL", "RECALL_CHATGPT_LOCAL_ENABLED"]
+    },
+    "web#build": {
+      "dependsOn": ["^transit", "mobile#transit"],
+      "inputs": ["$TURBO_DEFAULT$", ".env*", "../mobile/App.tsx", "../mobile/src/**"],
+      "outputs": [".next/**", "!.next/cache/**", "!.next/dev/**"],
+      "env": [
+        "NEXT_PUBLIC_*",
+        "EXPO_PUBLIC_*",
+        "RECALL_API_URL",
+        "RECALL_CHATGPT_LOCAL_ENABLED",
+        "SUPABASE_*",
+        "OPENAI_*",
+        "SIWC_*",
+        "TUTOR_*",
+        "RECALL_HTTP_LOGGING"
+      ]
+    },
+    "desktop#typecheck": {
+      "dependsOn": ["^typecheck", "web#transit"],
+      "inputs": ["$TURBO_DEFAULT$", "../web/src/**", "../web/tsconfig.json"],
+      "outputs": []
+    },
+    "build-storybook": {
+      "dependsOn": ["^transit", "mobile#transit"],
+      "inputs": ["$TURBO_DEFAULT$", "../mobile/App.tsx", "../mobile/src/**"],
+      "outputs": ["storybook-static/**"]
+    },
+    "dev": {
+      "cache": false,
+      "persistent": true
+    }
+  }
+}

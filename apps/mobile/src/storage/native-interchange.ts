@@ -4,11 +4,13 @@ import { File, Paths } from "expo-file-system";
 import * as Sharing from "expo-sharing";
 import {
   exportKnowledgeAreaPackage,
+  exportDelimitedCards,
+  importDelimitedCards,
   exportWorkspaceBackupPackage,
   fromKnowledgeArea,
   importKnowledgeAreaPackage,
   importWorkspaceBackupPackage,
-  persistMediaAssets,
+  MAX_KNOWLEDGE_AREA_PACKAGE_BYTES,
   toKnowledgeArea,
   type KnowledgeAreaExportError,
   type KnowledgeAreaImportError,
@@ -19,7 +21,7 @@ import {
 import { parseKnowledgeAreaJson, type LearningArea, type Workspace } from "@recall/domain";
 import type { MediaStore } from "@recall/local-store";
 
-const maxImportBytes = 25 * 1024 * 1024;
+const maxImportBytes = MAX_KNOWLEDGE_AREA_PACKAGE_BYTES;
 
 export type NativeInterchangeFailure =
   | KnowledgeAreaExportError
@@ -27,6 +29,10 @@ export type NativeInterchangeFailure =
   | KnowledgeAreaPackageFailure
   | import("@recall/application").WorkspaceBackupFailure
   | MediaPersistenceFailure
+  | {
+      readonly _tag: "NativeDelimitedImportFailure";
+      readonly reason: import("@recall/application").DelimitedImportError;
+    }
   | {
       readonly _tag: "NativeInterchangeFailure";
       readonly reason:
@@ -38,16 +44,23 @@ export type NativeInterchangeFailure =
         | "sharing-unavailable";
     };
 
+export type PickedKnowledgeArea = {
+  readonly area: LearningArea;
+  readonly media: RestoredWorkspaceBackup["media"];
+};
+
 export function pickKnowledgeArea(
   color: string,
   createId: () => string,
-  mediaStore: MediaStore,
-): Effect.Effect<LearningArea | null, NativeInterchangeFailure> {
+  format?: "csv" | "tsv",
+): Effect.Effect<PickedKnowledgeArea | null, NativeInterchangeFailure> {
   return Effect.gen(function* () {
     const selected = yield* Effect.tryPromise({
       try: () =>
         DocumentPicker.getDocumentAsync({
-          type: ["application/zip", "application/json", "text/json", "text/plain"],
+          type: format
+            ? ["text/csv", "text/tab-separated-values", "text/plain", "application/octet-stream"]
+            : ["application/zip", "application/json", "text/json", "text/plain"],
           copyToCacheDirectory: true,
           multiple: false,
         }),
@@ -70,7 +83,7 @@ export function pickKnowledgeArea(
       try: async () => {
         const file = new File(asset.uri);
         if (file.size > maxImportBytes) return null;
-        if (asset.name.toLowerCase().endsWith(".zip")) return file.bytes();
+        if (!format && asset.name.toLowerCase().endsWith(".zip")) return file.bytes();
         return file.text();
       },
       catch: () => ({ _tag: "NativeInterchangeFailure", reason: "file-read-failed" }) as const,
@@ -80,6 +93,27 @@ export function pickKnowledgeArea(
         _tag: "NativeInterchangeFailure",
         reason: "file-too-large",
       } as const);
+    }
+    if (format) {
+      if (typeof text !== "string")
+        return yield* Effect.fail({
+          _tag: "NativeInterchangeFailure",
+          reason: "file-read-failed",
+        } as const);
+      const imported = importDelimitedCards(
+        text,
+        format === "csv" ? "," : "\t",
+        asset.name.replace(/\.(csv|tsv|txt)$/i, "").slice(0, 80),
+        color,
+        new Date(),
+        createId,
+      );
+      if (imported._tag === "Failure")
+        return yield* Effect.fail({
+          _tag: "NativeDelimitedImportFailure",
+          reason: imported.reason,
+        } as const);
+      return { area: imported.area, media: [] };
     }
     if (asset.name.toLowerCase().endsWith(".zip")) {
       if (typeof text === "string")
@@ -93,10 +127,10 @@ export function pickKnowledgeArea(
         color,
         false,
         createId,
+        new Date(),
         true,
       );
-      yield* persistMediaAssets(mediaStore, packageData.media);
-      return area;
+      return { area, media: packageData.media };
     }
     if (typeof text !== "string")
       return yield* Effect.fail({
@@ -104,7 +138,8 @@ export function pickKnowledgeArea(
         reason: "file-read-failed",
       } as const);
     const document = yield* parseKnowledgeAreaJson(text);
-    return yield* fromKnowledgeArea(document, color, false, createId);
+    const area = yield* fromKnowledgeArea(document, color, false, createId, new Date());
+    return { area, media: [] };
   });
 }
 
@@ -188,10 +223,11 @@ export function shareWorkspaceBackup(
 export function shareKnowledgeArea(
   area: LearningArea,
   mediaStore: MediaStore,
+  format?: "csv" | "tsv",
 ): Effect.Effect<void, NativeInterchangeFailure> {
   return Effect.gen(function* () {
-    const hasMedia = area.cards.some((card) => (card.media?.length ?? 0) > 0);
-    const document = yield* toKnowledgeArea(area, false, hasMedia);
+    const hasMedia = !format && area.cards.some((card) => (card.media?.length ?? 0) > 0);
+    const document = yield* toKnowledgeArea(area, false, hasMedia || Boolean(format));
     const available = yield* Effect.tryPromise({
       try: () => Sharing.isAvailableAsync(),
       catch: () => ({ _tag: "NativeInterchangeFailure", reason: "sharing-unavailable" }) as const,
@@ -212,15 +248,17 @@ export function shareKnowledgeArea(
       try: () => {
         const packageFile = new File(
           Paths.cache,
-          `${title}.knowledge-area.${hasMedia ? "zip" : "json"}`,
+          format ? `${title}.${format}` : `${title}.knowledge-area.${hasMedia ? "zip" : "json"}`,
         );
         return packageFile;
       },
       catch: () => ({ _tag: "NativeInterchangeFailure", reason: "export-failed" }) as const,
     });
-    const fileContent = hasMedia
-      ? yield* exportKnowledgeAreaPackage(document, mediaStore)
-      : new TextEncoder().encode(JSON.stringify(document, null, 2));
+    const fileContent = format
+      ? new TextEncoder().encode(exportDelimitedCards(area, format === "csv" ? "," : "\t"))
+      : hasMedia
+        ? yield* exportKnowledgeAreaPackage(document, mediaStore)
+        : new TextEncoder().encode(JSON.stringify(document, null, 2));
     yield* Effect.try({
       try: () => file.write(fileContent),
       catch: () => ({ _tag: "NativeInterchangeFailure", reason: "export-failed" }) as const,
@@ -228,7 +266,14 @@ export function shareKnowledgeArea(
     const shared = yield* Effect.tryPromise({
       try: () =>
         Sharing.shareAsync(file.uri, {
-          mimeType: hasMedia ? "application/zip" : "application/json",
+          mimeType:
+            format === "csv"
+              ? "text/csv"
+              : format === "tsv"
+                ? "text/tab-separated-values"
+                : hasMedia
+                  ? "application/zip"
+                  : "application/json",
           dialogTitle: area.title,
         }),
       catch: () => ({ _tag: "NativeInterchangeFailure", reason: "export-failed" }) as const,

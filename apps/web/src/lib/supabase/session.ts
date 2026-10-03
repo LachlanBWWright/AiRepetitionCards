@@ -3,8 +3,13 @@ import { Effect, Either } from "effect";
 import { NextResponse, type NextRequest } from "next/server";
 import { readSupabaseConfig } from "./config";
 
-export async function refreshSupabaseSession(request: NextRequest): Promise<NextResponse> {
-  let response = NextResponse.next({ request });
+export async function refreshSupabaseSession(
+  request: NextRequest,
+  requestHeaders: Headers,
+): Promise<NextResponse> {
+  const forwardedHeaders = new Headers(requestHeaders);
+  const nextResponse = () => NextResponse.next({ request: { headers: forwardedHeaders } });
+  let response = nextResponse();
   const config = readSupabaseConfig();
   if (Either.isLeft(config)) return response;
 
@@ -17,9 +22,20 @@ export async function refreshSupabaseSession(request: NextRequest): Promise<Next
           },
           setAll(cookiesToSet) {
             for (const { name, value } of cookiesToSet) request.cookies.set(name, value);
-            response = NextResponse.next({ request });
+            // Refresh the cookie override without losing the proxy's nonce/CSP.
+            forwardedHeaders.set("cookie", request.headers.get("cookie") ?? "");
+            const previousCookies = response.cookies.getAll();
+            response = nextResponse();
+            for (const cookie of previousCookies) response.cookies.set(cookie);
             for (const { name, value, options } of cookiesToSet) {
-              response.cookies.set(name, value, options);
+              response.cookies.set(name, value, {
+                ...options,
+                httpOnly: true,
+                secure:
+                  request.nextUrl.protocol === "https:" || process.env.NODE_ENV === "production",
+                sameSite: "lax",
+                path: "/",
+              });
             }
           },
         },

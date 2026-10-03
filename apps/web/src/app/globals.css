@@ -1,5 +1,5 @@
 @import "@recall/design-tokens/tokens.css";
-@import "tailwindcss";
+@import "@recall/ui-web/styles.css";
 
 :root {
   --paper: var(--recall-paper);
@@ -87,7 +87,7 @@ textarea:focus-visible {
   display: flex;
   align-items: center;
   gap: 10px;
-  color: #96978f;
+  color: #62665c;
   font-size: 9px;
   letter-spacing: 1.05px;
   font-weight: 700;
@@ -144,7 +144,7 @@ textarea:focus-visible {
 .area-count {
   margin-left: auto;
   font-size: 10px;
-  color: #92948b;
+  color: #62665c;
 }
 .sidebar-section {
   margin-top: 31px;
@@ -153,7 +153,7 @@ textarea:focus-visible {
   margin: 0 6px 12px;
   display: flex;
   align-items: center;
-  color: #96978f;
+  color: #62665c;
   font-size: 9px;
   letter-spacing: 0.9px;
   font-weight: 700;
@@ -183,7 +183,7 @@ textarea:focus-visible {
 .add-area {
   width: 100%;
   margin-top: 5px;
-  color: #8c8e86;
+  color: #62665c;
   font-size: 11px;
 }
 .sidebar-bottom {
@@ -215,7 +215,7 @@ textarea:focus-visible {
 }
 .streak-card p {
   margin: 5px 0 0;
-  color: #92938b;
+  color: #62665c;
   font-size: 9px;
 }
 .profile {
@@ -243,7 +243,7 @@ textarea:focus-visible {
 .profile small {
   display: block;
   margin-top: 3px;
-  color: #9a9a91;
+  color: #62665c;
   font-size: 9px;
 }
 .profile-more {
@@ -264,7 +264,7 @@ textarea:focus-visible {
   padding: 0 43px;
 }
 .breadcrumb {
-  color: #85877f;
+  color: #62665c;
   font-size: 11px;
 }
 .breadcrumb span {
@@ -284,7 +284,7 @@ textarea:focus-visible {
   display: flex;
   align-items: center;
   gap: 7px;
-  color: #909188;
+  color: #62665c;
   font-size: 10px;
 }
 .saved-state i {
@@ -292,6 +292,35 @@ textarea:focus-visible {
   height: 6px;
   border-radius: 50%;
   background: #8abf51;
+}
+.workspace-sync-action {
+  position: relative;
+}
+.workspace-sync-account-notice {
+  position: absolute;
+  top: calc(100% + 12px);
+  right: 0;
+  z-index: 20;
+  display: grid;
+  gap: 14px;
+  width: min(390px, 85vw);
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--paper);
+  box-shadow: 0 12px 32px #00000014;
+}
+.workspace-sync-account-notice .saved-state {
+  font-size: 13px;
+  line-height: 1.5;
+}
+.workspace-sync-account-notice > div {
+  display: grid;
+  gap: 14px;
+}
+.workspace-sync-account-notice label {
+  font-size: 12px;
+  line-height: 1.5;
 }
 .help-button {
   width: 22px;
@@ -314,7 +343,7 @@ textarea:focus-visible {
 }
 .eyebrow {
   margin: 0;
-  color: #999a90;
+  color: #6b7064;
   font-size: 9px;
   font-weight: 700;
   letter-spacing: 1.05px;
@@ -334,7 +363,7 @@ textarea:focus-visible {
 }
 .subheading {
   margin: 0;
-  color: #888a81;
+  color: #62665c;
   font-size: 12px;
 }
 .daily-mark {
@@ -391,7 +420,7 @@ textarea:focus-visible {
   color: #8d79be;
 }
 .summary-tag {
-  color: #93958c;
+  color: #62665c;
   font-size: 8px;
   font-weight: 700;
   letter-spacing: 0.8px;
@@ -405,13 +434,13 @@ textarea:focus-visible {
 }
 .summary-card > p {
   margin: 2px 0;
-  color: #7f8178;
+  color: #62665c;
   font-size: 10px;
 }
 .summary-foot {
   position: absolute;
   bottom: 14px;
-  color: #a1a198;
+  color: #62665c;
   font-size: 9px;
 }
 .mini-bars {
@@ -520,7 +549,7 @@ textarea:focus-visible {
 .more-dots {
   font-size: 16px;
   line-height: 10px;
-  color: #a0a097;
+  color: #62665c;
   letter-spacing: 1px;
 }
 .learning-card h3 {
@@ -530,7 +559,7 @@ textarea:focus-visible {
 }
 .learning-card > p {
   margin: 0;
-  color: #909188;
+  color: #62665c;
   font-size: 9px;
 }
 .learning-card > p span {
@@ -559,7 +588,7 @@ textarea:focus-visible {
 .due-label {
   min-width: 45px;
   text-align: right;
-  color: #909188;
+  color: #62665c;
   font-size: 8px;
 }
 .new-learning-card {
@@ -570,7 +599,7 @@ textarea:focus-visible {
   gap: 6px;
   border-style: dashed;
   background: transparent;
-  color: #85877d;
+  color: #62665c;
 }
 .new-learning-card > span {
   width: 23px;
@@ -587,7 +616,7 @@ textarea:focus-visible {
 }
 .new-learning-card small {
   font-size: 8px;
-  color: #a0a097;
+  color: #62665c;
 }
 .study-title {
   margin-top: 34px;
@@ -596,7 +625,7 @@ textarea:focus-visible {
   padding: 6px 9px;
   border-radius: 20px;
   background: #f0efe9;
-  color: #6e7068;
+  color: #62665c;
   font-size: 9px;
 }
 .study-layout {
@@ -629,7 +658,7 @@ textarea:focus-visible {
   padding: 4px 7px;
   border-radius: 5px;
   background: #f4f3ee;
-  color: #74766e;
+  color: #62665c;
   font-size: 9px;
 }
 .study-card-actions button:hover {
@@ -649,7 +678,7 @@ textarea:focus-visible {
   border-radius: 50%;
 }
 .card-position {
-  color: #aaa99f;
+  color: #62665c;
   font-size: 8px;
   font-weight: 650;
   letter-spacing: 0.75px;
@@ -664,13 +693,15 @@ textarea:focus-visible {
   padding: 16px 24px;
 }
 .card-hint {
-  color: #a6a69d;
+  color: #62665c;
   font-size: 8px;
   letter-spacing: 1.1px;
   font-weight: 700;
 }
 .flashcard-content p {
   max-width: 435px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
   margin: 13px 0 0;
   font-family: Georgia, serif;
   font-size: 22px;
@@ -700,7 +731,7 @@ textarea:focus-visible {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  color: #a1a198;
+  color: #62665c;
   font-size: 8px;
 }
 .rating-row {
@@ -767,7 +798,7 @@ textarea:focus-visible {
 }
 .aside-note p {
   margin: 0;
-  color: #92938a;
+  color: #62665c;
   font-size: 9px;
   line-height: 1.55;
 }
@@ -787,7 +818,7 @@ textarea:focus-visible {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  color: #95968c;
+  color: #62665c;
   font-size: 8px;
   letter-spacing: 0.6px;
 }
@@ -805,7 +836,7 @@ textarea:focus-visible {
 }
 .progress-note > p {
   margin: 8px 0 0;
-  color: #9a9a91;
+  color: #62665c;
   font-size: 8px;
 }
 .tutor-panel {
@@ -823,7 +854,7 @@ textarea:focus-visible {
 .tutor-panel-heading .eyebrow {
   margin: 0 0 6px;
 }
-.tutor-panel-heading h3 {
+.tutor-panel-heading h2 {
   margin: 0;
   font-size: 15px;
 }
@@ -856,7 +887,7 @@ textarea:focus-visible {
 }
 .tutor-gap p {
   margin: 3px 0 0;
-  color: #898b82;
+  color: #62665c;
   font-size: 9px;
   line-height: 1.4;
 }
@@ -907,7 +938,7 @@ textarea:focus-visible {
 .tutor-message strong {
   display: block;
   margin-bottom: 4px;
-  color: #74776e;
+  color: #62665c;
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.06em;
@@ -997,9 +1028,6 @@ textarea:focus-visible {
   justify-content: center;
   text-align: center;
 }
-.empty-state {
-  text-align: center;
-}
 .empty-study > span {
   font-size: 22px;
   color: #90b257;
@@ -1012,7 +1040,7 @@ textarea:focus-visible {
 }
 .empty-study p {
   margin: 0;
-  color: #898b82;
+  color: #62665c;
   font-size: 10px;
 }
 .empty-study button {
@@ -1023,46 +1051,6 @@ textarea:focus-visible {
   background: #29322b;
   color: white;
   font-size: 9px;
-}
-.status-badge {
-  display: inline-flex;
-  align-items: center;
-  width: fit-content;
-  padding: 3px 7px;
-  border-radius: 999px;
-  font-size: 8px;
-  font-weight: 600;
-  line-height: 1.3;
-}
-.status-neutral {
-  background: #eeede7;
-  color: #66695f;
-}
-.status-success {
-  background: #e7f1ed;
-  color: #477863;
-}
-.status-warning {
-  background: #f6eedc;
-  color: #8a6428;
-}
-.status-danger {
-  background: #fae9e4;
-  color: #a35640;
-}
-.modal-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 5;
-  background: #24261f70;
-  display: grid;
-  place-items: center;
-  padding: 20px;
-}
-.modal-backdrop > [role="dialog"] {
-  max-height: 100%;
-  overflow-y: auto;
-  outline: none;
 }
 .modal {
   width: min(100%, 440px);
@@ -1239,7 +1227,7 @@ textarea:focus-visible {
 }
 .insight-panel span,
 .insight-panel p {
-  color: #82847c;
+  color: #62665c;
   font-size: 11px;
 }
 .review-history {
@@ -1362,12 +1350,12 @@ textarea:focus-visible {
 }
 .alternate-list small {
   margin-left: auto;
-  color: #97988f;
+  color: #62665c;
   font-size: 10px;
 }
 .alternate-list b {
   margin-left: 11px;
-  color: #8a8c83;
+  color: #62665c;
   font-weight: 400;
 }
 @media (max-width: 1050px) {
@@ -1506,7 +1494,7 @@ textarea:focus-visible {
     align-items: center;
     gap: 8px;
     padding: 0 18px;
-    color: #85877f;
+    color: #62665c;
     font-size: 9px;
   }
   .mobile-footer .brand-mark {
@@ -1694,82 +1682,6 @@ textarea:focus-visible {
   border-radius: 7px;
   background: #fff;
 }
-.auth-panel form .ui-button {
-  min-height: 42px;
-  margin-top: 5px;
-}
-.auth-setup-note,
-.auth-message {
-  margin: 16px 0 0;
-}
-.auth-back {
-  display: inline-block;
-  margin-top: 24px;
-  color: #68724f;
-  font-size: 11px;
-  text-decoration: none;
-}
-.auth-back:hover {
-  text-decoration: underline;
-}
-.ui-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  border: 1px solid transparent;
-  border-radius: 7px;
-  font-weight: 600;
-  line-height: 1.1;
-  transition:
-    background-color 120ms ease,
-    border-color 120ms ease;
-}
-.ui-button-small {
-  min-height: 32px;
-  padding: 8px 12px;
-  font-size: 10px;
-}
-.ui-button-medium {
-  min-height: 38px;
-  padding: 10px 15px;
-  font-size: 12px;
-}
-.ui-button-primary {
-  border-color: #29322b;
-  background: #29322b;
-  color: white;
-}
-.ui-button-primary:hover:not(:disabled) {
-  background: #465343;
-}
-.ui-button-secondary {
-  border-color: #e2e1d9;
-  background: #fffefa;
-  color: #62655c;
-}
-.ui-button-secondary:hover:not(:disabled) {
-  background: #f2f1eb;
-}
-.ui-button-quiet {
-  background: transparent;
-  color: #596f3c;
-}
-.ui-button-quiet:hover:not(:disabled) {
-  background: #f1f3e9;
-}
-.ui-button-danger {
-  border-color: #f0d4ce;
-  background: #fff1ef;
-  color: #a55345;
-}
-.ui-button-danger:hover:not(:disabled) {
-  background: #ffe6e1;
-}
-.ui-button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
 .component-catalog {
   min-height: 100vh;
   padding: 72px max(24px, calc((100vw - 980px) / 2));
@@ -1914,7 +1826,7 @@ textarea:focus-visible {
   align-self: flex-start;
 }
 .optional-label {
-  color: #8b8d84;
+  color: #62665c;
   font-weight: 400;
 }
 .publication-version {
@@ -1925,6 +1837,32 @@ textarea:focus-visible {
 }
 .publication-version code {
   color: #373a33;
+}
+.publication-share-token {
+  display: grid;
+  gap: 0.55rem;
+  padding: 1rem;
+  border: 1px solid #dce6c9;
+  border-radius: 14px;
+  background: #f6f8ef;
+}
+.publication-share-token .eyebrow,
+.publication-share-token p {
+  margin: 0;
+}
+.publication-share-token > p:not(.eyebrow) {
+  color: #666a60;
+  font-size: 0.83rem;
+}
+.publication-share-token-value {
+  overflow-wrap: anywhere;
+  color: #30392b;
+  font-size: 0.8rem;
+}
+.publication-token-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.9rem;
 }
 .publication-review {
   margin-top: 0.5rem;
@@ -1990,4 +1928,55 @@ textarea:focus-visible {
   .component-catalog-grid {
     grid-template-columns: 1fr;
   }
+}
+
+.chatgpt-auth-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 44px;
+  margin-top: 22px;
+  padding: 10px 16px;
+  border: 1px solid #000;
+  border-radius: 8px;
+  background: #000;
+  color: #fff;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+}
+.chatgpt-auth-button:hover {
+  background: #242424;
+}
+.chatgpt-auth-button:focus-visible {
+  outline: 3px solid var(--green);
+  outline-offset: 3px;
+}
+.chatgpt-auth-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.auth-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 24px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.auth-divider::before,
+.auth-divider::after {
+  flex: 1;
+  height: 1px;
+  background: var(--line);
+  content: "";
+}
+.chatgpt-account-connection {
+  width: min(100%, 410px);
+}
+.chatgpt-account-connection .chatgpt-auth-button {
+  margin-top: 10px;
 }

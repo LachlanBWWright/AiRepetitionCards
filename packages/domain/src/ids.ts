@@ -34,3 +34,15 @@ export type TutorSessionId = typeof TutorSessionIdSchema.Type;
 export type ProposalId = typeof ProposalIdSchema.Type;
 export type ContentRevisionId = typeof ContentRevisionIdSchema.Type;
 export type MediaId = typeof MediaIdSchema.Type;
+
+/** Validate an ID created locally before introducing its branded domain type. */
+export const createAreaId = (value: string): AreaId =>
+  Schema.decodeUnknownSync(AreaIdSchema)(value);
+export const createObjectiveId = (value: string): ObjectiveId =>
+  Schema.decodeUnknownSync(ObjectiveIdSchema)(value);
+export const createCardId = (value: string): CardId =>
+  Schema.decodeUnknownSync(CardIdSchema)(value);
+export const createReviewEventId = (value: string): ReviewEventId =>
+  Schema.decodeUnknownSync(ReviewEventIdSchema)(value);
+export const createDeviceId = (value: string): DeviceId =>
+  Schema.decodeUnknownSync(DeviceIdSchema)(value);

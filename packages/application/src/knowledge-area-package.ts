@@ -1,17 +1,19 @@
 import { sha256 } from "@noble/hashes/sha2.js";
-import { zipSync, unzipSync } from "fflate";
+import { zipSync, unzipSync, type UnzipFileInfo } from "fflate";
 import { Effect, Either, Schema } from "effect";
 import {
-  KnowledgeAreaSchema,
   MediaReferenceSchema,
+  parseKnowledgeAreaJson,
   type KnowledgeArea,
   type MediaReference,
 } from "@recall/domain";
 import type { MediaStore, StoredMediaAsset } from "@recall/local-store";
+import { hasSafeZipExpansion } from "./zip-safety";
 
-const maxArchiveBytes = 25_000_000;
+export const MAX_KNOWLEDGE_AREA_PACKAGE_BYTES = 25_000_000;
 const maxFiles = 128;
 const maxExpandedBytes = 40_000_000;
+const staticFileCount = 4;
 const PackageManifestSchema = Schema.Struct({
   formatVersion: Schema.Literal(1),
   exporter: Schema.String,
@@ -70,7 +72,7 @@ export function isSupportedMediaContent(
     case "audio/mpeg":
       return (
         ascii(0, 3) === "ID3" ||
-        (bytes.length >= 2 && bytes[0] === 0xff && (bytes[1]! & 0xe0) === 0xe0)
+        (bytes.length >= 2 && bytes[0] === 0xff && ((bytes[1] ?? 0) & 0xe0) === 0xe0)
       );
   }
 }
@@ -138,6 +140,13 @@ export function exportKnowledgeAreaPackage(
     const files: { path: string; sha256: string }[] = Object.entries(content).map(
       ([path, bytes]) => ({ path, sha256: digest(bytes) }),
     );
+    if (references.length + staticFileCount > maxFiles)
+      return yield* Effect.fail(failure("limits-exceeded"));
+    let expandedBytes = Object.values(content).reduce(
+      (total, bytes) => total + bytes.byteLength,
+      0,
+    );
+    if (expandedBytes > maxExpandedBytes) return yield* Effect.fail(failure("limits-exceeded"));
     for (const reference of references) {
       const asset = yield* mediaStore
         .get(reference.id)
@@ -151,6 +160,8 @@ export function exportKnowledgeAreaPackage(
       ) {
         return yield* Effect.fail(failure("media-unavailable"));
       }
+      expandedBytes += asset.bytes.byteLength;
+      if (expandedBytes > maxExpandedBytes) return yield* Effect.fail(failure("limits-exceeded"));
       const path = mediaPath(reference);
       archiveFiles[path] = asset.bytes;
       files.push({ path, sha256: reference.id });
@@ -161,12 +172,16 @@ export function exportKnowledgeAreaPackage(
       files,
       media: references,
     };
-    archiveFiles["manifest.json"] = jsonBytes(manifest);
+    const manifestBytes = jsonBytes(manifest);
+    if (expandedBytes + manifestBytes.byteLength > maxExpandedBytes)
+      return yield* Effect.fail(failure("limits-exceeded"));
+    archiveFiles["manifest.json"] = manifestBytes;
     const zipped = yield* Effect.try({
       try: () => zipSync(archiveFiles, { level: 6 }),
       catch: () => failure("invalid-package"),
     });
-    if (zipped.byteLength > maxArchiveBytes) return yield* Effect.fail(failure("limits-exceeded"));
+    if (zipped.byteLength > MAX_KNOWLEDGE_AREA_PACKAGE_BYTES)
+      return yield* Effect.fail(failure("limits-exceeded"));
     return zipped;
   });
 }
@@ -175,22 +190,43 @@ export function importKnowledgeAreaPackage(
   input: unknown,
 ): Effect.Effect<ImportedKnowledgeAreaPackage, KnowledgeAreaPackageFailure> {
   return Effect.gen(function* () {
-    if (!(input instanceof Uint8Array) || input.byteLength > maxArchiveBytes) {
+    if (!(input instanceof Uint8Array) || input.byteLength > MAX_KNOWLEDGE_AREA_PACKAGE_BYTES) {
       return yield* Effect.fail(failure("limits-exceeded"));
     }
+    const zipEntries = yield* Effect.try({
+      try: () => {
+        const entries: UnzipFileInfo[] = [];
+        unzipSync(input, {
+          filter: (entry) => {
+            if (entries.length <= maxFiles) entries.push(entry);
+            return false;
+          },
+        });
+        return entries;
+      },
+      catch: () => failure("invalid-package"),
+    });
+    if (!hasSafeZipExpansion(zipEntries, { maxFiles, maxExpandedBytes }))
+      return yield* Effect.fail(failure("limits-exceeded"));
     let fileCount = 0;
     let expandedBytes = 0;
+    const archiveState = { duplicatePath: false };
+    const seenPaths = new Set<string>();
     const files = yield* Effect.try({
       try: () =>
         unzipSync(input, {
           filter: (entry) => {
             fileCount += 1;
             expandedBytes += entry.originalSize;
+            const duplicate = seenPaths.has(entry.name);
+            seenPaths.add(entry.name);
+            if (duplicate) archiveState.duplicatePath = true;
             if (fileCount > maxFiles || expandedBytes > maxExpandedBytes) {
               return false;
             }
             const path = entry.name;
             return (
+              !duplicate &&
               validPath(path) &&
               (allowedStaticPaths.has(path) ||
                 /^media\/[a-f0-9]{64}\.(jpg|png|gif|webp|mp3|ogg|wav)$/.test(path))
@@ -202,7 +238,11 @@ export function importKnowledgeAreaPackage(
     const names = Object.keys(files);
     if (fileCount > maxFiles || expandedBytes > maxExpandedBytes)
       return yield* Effect.fail(failure("limits-exceeded"));
-    if (names.length !== fileCount || names.some((name) => !(name in files))) {
+    if (
+      archiveState.duplicatePath ||
+      names.length !== fileCount ||
+      names.some((name) => !(name in files))
+    ) {
       return yield* Effect.fail(failure("invalid-package"));
     }
     const parsed = yield* Effect.try({
@@ -215,21 +255,28 @@ export function importKnowledgeAreaPackage(
       catch: () => failure("invalid-package"),
     });
     const manifestResult = Schema.decodeUnknownEither(PackageManifestSchema)(parsed.manifest);
-    const documentResult = Schema.decodeUnknownEither(KnowledgeAreaSchema)(parsed.document);
+    const documentJson = JSON.stringify(parsed.document);
+    if (typeof documentJson !== "string") return yield* Effect.fail(failure("invalid-package"));
+    const document = yield* parseKnowledgeAreaJson(documentJson).pipe(
+      Effect.mapError(() => failure("invalid-package")),
+    );
     const indexResult = Schema.decodeUnknownEither(MediaIndexSchema)(parsed.index);
-    if (
-      Either.isLeft(manifestResult) ||
-      Either.isLeft(documentResult) ||
-      Either.isLeft(indexResult)
-    )
+    if (Either.isLeft(manifestResult) || Either.isLeft(indexResult))
       return yield* Effect.fail(failure("invalid-package"));
     const manifest = manifestResult.right;
-    const knowledgeArea = documentResult.right;
+    const knowledgeArea = document;
     const references = indexResult.right;
     const cardsResult = Schema.decodeUnknownEither(Schema.Array(Schema.Unknown))(parsed.cards);
     if (
       Either.isLeft(cardsResult) ||
-      JSON.stringify(cardsResult.right) !== JSON.stringify(knowledgeArea.cards)
+      JSON.stringify(cardsResult.right) !==
+        JSON.stringify(
+          typeof parsed.document === "object" &&
+            parsed.document !== null &&
+            "cards" in parsed.document
+            ? parsed.document.cards
+            : undefined,
+        )
     ) {
       return yield* Effect.fail(failure("invalid-package"));
     }

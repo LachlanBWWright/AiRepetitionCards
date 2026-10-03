@@ -1,42 +1,16 @@
-import { createHash, randomBytes, randomUUID } from "node:crypto";
-import { Either, Schema } from "effect";
+import { createHash, randomBytes } from "node:crypto";
+import { Effect, Either, Schema } from "effect";
+import { expandCloze, canonicalPublicationJson, publicationContentHash } from "@recall/application";
+import { PublishedKnowledgeAreaRowSchema } from "@recall/contracts";
 import { KnowledgeAreaSchema } from "@recall/domain";
 
-export const PublishedVersionSchema = Schema.Struct({
-  id: Schema.String,
-  source_area_id: Schema.NullOr(Schema.String),
-  owner_id: Schema.NullOr(Schema.String),
-  version: Schema.Number,
-  content: Schema.Unknown,
-  content_hash: Schema.String,
-  visibility: Schema.Union(
-    Schema.Literal("private"),
-    Schema.Literal("unlisted"),
-    Schema.Literal("public"),
-  ),
-  attribution: Schema.NullOr(Schema.String),
-  license: Schema.NullOr(Schema.String),
-  forked_from_version_id: Schema.NullOr(Schema.String),
-  created_at: Schema.String,
-});
+export const PublishedVersionSchema = PublishedKnowledgeAreaRowSchema;
 
 export type PublishedVersion = typeof PublishedVersionSchema.Type;
 export type PortableArea = typeof KnowledgeAreaSchema.Type;
 
-export function canonicalJson(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
-  if (typeof value === "object" && value !== null) {
-    return `{${Object.entries(value)
-      .sort(([left], [right]) => left.localeCompare(right))
-      .map(([key, entry]) => `${JSON.stringify(key)}:${canonicalJson(entry)}`)
-      .join(",")}}`;
-  }
-  return JSON.stringify(value) ?? "null";
-}
-
-export function contentHash(content: PortableArea): string {
-  return createHash("sha256").update(canonicalJson(content)).digest("hex");
-}
+export const canonicalJson = canonicalPublicationJson;
+export const contentHash = publicationContentHash;
 
 export function parsePortableArea(value: unknown): PortableArea | null {
   const decoded = Schema.decodeUnknownEither(KnowledgeAreaSchema)(value);
@@ -51,12 +25,20 @@ export function parsePortableArea(value: unknown): PortableArea | null {
     ) ||
     area.cards.some(
       (card) =>
-        !uuid.test(card.id) || card.objectiveIds.some((objectiveId) => !ids.has(objectiveId)),
+        !uuid.test(card.id) ||
+        card.objectiveIds.some((objectiveId) => !ids.has(objectiveId)) ||
+        (card.kind === "cloze" &&
+          Either.isLeft(Effect.runSync(Effect.either(expandCloze(card.text, card.deletionIndex))))),
     )
   ) {
     return null;
   }
   return area;
+}
+
+export function parsePublishedVersionRow(value: unknown): PublishedVersion | null {
+  const decoded = Schema.decodeUnknownEither(PublishedVersionSchema)(value);
+  return Either.isLeft(decoded) ? null : decoded.right;
 }
 
 export function newShareToken(): string {
@@ -65,22 +47,4 @@ export function newShareToken(): string {
 
 export function hashShareToken(token: string): string {
   return createHash("sha256").update(token).digest("hex");
-}
-
-export function forkPortableArea(area: PortableArea): PortableArea | null {
-  const objectiveIds = new Map(area.objectives.map(({ id }) => [id, randomUUID()]));
-  return parsePortableArea({
-    ...area,
-    id: randomUUID(),
-    objectives: area.objectives.map((objective) => ({
-      ...objective,
-      id: objectiveIds.get(objective.id) ?? randomUUID(),
-      prerequisiteIds: objective.prerequisiteIds.map((id) => objectiveIds.get(id) ?? id),
-    })),
-    cards: area.cards.map((card) => ({
-      ...card,
-      id: randomUUID(),
-      objectiveIds: card.objectiveIds.map((id) => objectiveIds.get(id) ?? id),
-    })),
-  });
 }

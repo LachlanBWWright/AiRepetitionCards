@@ -1,6 +1,7 @@
 import { DatabaseSync } from "node:sqlite";
 import { ipcMain, type IpcMainInvokeEvent } from "electron";
 import { Effect, Either, Schema } from "effect";
+import { verifyMediaAsset } from "@recall/application";
 import { MediaIdSchema, MediaReferenceSchema } from "@recall/domain";
 import type { MediaReference } from "@recall/domain";
 import type { MediaStoreFailure, StoredMediaAsset } from "@recall/local-store";
@@ -21,9 +22,8 @@ function failure<T>(): DesktopReply<T> {
 function validAsset(input: unknown): StoredMediaAsset | null {
   const decoded = Schema.decodeUnknownEither(AssetSchema)(input);
   if (Either.isLeft(decoded)) return null;
-  return decoded.right.bytes.byteLength === decoded.right.reference.byteLength
-    ? decoded.right
-    : null;
+  if (decoded.right.bytes.byteLength > MaxAssetBytes) return null;
+  return verifyMediaAsset(decoded.right) ? decoded.right : null;
 }
 
 function decodeRow(input: unknown): StoredMediaAsset | null {
@@ -48,7 +48,13 @@ function decodeRow(input: unknown): StoredMediaAsset | null {
   );
   if (Either.isLeft(parsed)) return null;
   const reference = Schema.decodeUnknownEither(MediaReferenceSchema)(parsed.right);
-  if (Either.isLeft(reference) || bytes.byteLength !== reference.right.byteLength) return null;
+  if (
+    Either.isLeft(reference) ||
+    bytes.byteLength !== reference.right.byteLength ||
+    !verifyMediaAsset({ reference: reference.right, bytes })
+  ) {
+    return null;
+  }
   return { reference: reference.right, bytes: new Uint8Array(bytes) };
 }
 

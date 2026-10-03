@@ -1,0 +1,212 @@
+name: Desktop packages (signed release candidates)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-signed-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  package:
+    name: Signed ${{ matrix.name }}
+    environment: desktop-release
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macos-x64
+            runner: macos-14
+            script: dist:mac:signed
+          - name: macos-arm64
+            runner: macos-14
+            script: dist:mac:arm64:signed
+          - name: windows-x64
+            runner: windows-2022
+            script: dist:windows:signed
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.26.2
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Require signing credentials
+        shell: bash
+        env:
+          SIGNING_PLATFORM: ${{ runner.os }}
+          CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+        run: |
+          node --input-type=module <<'JS'
+          const required = process.env.SIGNING_PLATFORM === "macOS"
+            ? ["CSC_LINK", "CSC_KEY_PASSWORD", "APPLE_ID", "APPLE_APP_SPECIFIC_PASSWORD", "APPLE_TEAM_ID"]
+            : ["WIN_CSC_LINK", "WIN_CSC_KEY_PASSWORD"];
+          const missing = required.filter((name) => !process.env[name]?.trim());
+          if (missing.length > 0) {
+            console.error(`Missing protected-environment signing credentials: ${missing.join(", ")}`);
+            process.exit(1);
+          }
+          JS
+      - run: pnpm install --frozen-lockfile
+      - name: Build, sign and notarize macOS
+        if: runner.os == 'macOS'
+        env:
+          CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          NEXT_PUBLIC_SUPABASE_URL: ${{ vars.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ vars.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
+          RECALL_API_URL: ${{ vars.RECALL_API_URL }}
+        run: pnpm --filter desktop ${{ matrix.script }}
+      - name: Build and sign Windows
+        if: runner.os == 'Windows'
+        env:
+          WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+          NEXT_PUBLIC_SUPABASE_URL: ${{ vars.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ vars.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
+          RECALL_API_URL: ${{ vars.RECALL_API_URL }}
+        run: pnpm --filter desktop ${{ matrix.script }}
+      - name: Verify macOS signature, trust and stapled notarization
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          apps=(apps/desktop/release/mac*/Recall.app)
+          if [ "${#apps[@]}" -ne 1 ]; then
+            echo "Expected exactly one signed application bundle" >&2
+            exit 1
+          fi
+          codesign --verify --deep --strict --verbose=2 "${apps[0]}"
+          spctl --assess --verbose --type exec "${apps[0]}"
+          xcrun stapler validate "${apps[0]}"
+      - name: Verify Windows application and installer signatures and timestamps
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $installers = @(Get-ChildItem apps/desktop/release/*.exe)
+          $application = "apps/desktop/release/win-unpacked/Recall.exe"
+          if ($installers.Count -lt 1 -or !(Test-Path $application)) {
+            Write-Error "Expected signed application and installer artifacts"
+            exit 1
+          }
+          $files = @($application) + @($installers.FullName)
+          foreach ($file in $files) {
+            $signature = Get-AuthenticodeSignature -FilePath $file
+            if ($signature.Status -ne "Valid" -or $null -eq $signature.TimeStamperCertificate) {
+              Write-Error "Invalid or untimestamped Authenticode signature: $file"
+              exit 1
+            }
+          }
+      - name: Write installer SHA-256 manifest
+        run: node scripts/write-desktop-checksums.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: recall-signed-${{ matrix.name }}
+          path: |
+            apps/desktop/release/*.dmg
+            apps/desktop/release/*.zip
+            apps/desktop/release/*.exe
+            apps/desktop/release/checksums.json
+          if-no-files-found: error
+          retention-days: 14
+
+  linux:
+    name: Linux x64 signed checksum manifest
+    environment: desktop-release
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.26.2
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Require publisher signing credentials
+        env:
+          RELEASE_GPG_PRIVATE_KEY: ${{ secrets.RELEASE_GPG_PRIVATE_KEY }}
+          RELEASE_GPG_PASSPHRASE: ${{ secrets.RELEASE_GPG_PASSPHRASE }}
+          RELEASE_GPG_FINGERPRINT: ${{ secrets.RELEASE_GPG_FINGERPRINT }}
+        run: |
+          node --input-type=module <<'JS'
+          const names = ["RELEASE_GPG_PRIVATE_KEY", "RELEASE_GPG_PASSPHRASE", "RELEASE_GPG_FINGERPRINT"];
+          const missing = names.filter((name) => !process.env[name]?.trim());
+          if (missing.length > 0) {
+            console.error(`Missing protected-environment publisher credentials: ${missing.join(", ")}`);
+            process.exit(1);
+          }
+          if (!/^(?:[A-Fa-f0-9]{40}|[A-Fa-f0-9]{64})$/.test(process.env.RELEASE_GPG_FINGERPRINT)) {
+            console.error("Expected complete hexadecimal publisher key fingerprint");
+            process.exit(1);
+          }
+          JS
+      - run: pnpm install --frozen-lockfile
+      - name: Build Linux AppImage
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ vars.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ vars.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
+          RECALL_API_URL: ${{ vars.RECALL_API_URL }}
+        run: pnpm --filter desktop dist:linux
+      - run: node scripts/write-desktop-checksums.mjs
+      - name: Sign and verify checksum manifest
+        shell: bash
+        env:
+          RELEASE_GPG_PRIVATE_KEY: ${{ secrets.RELEASE_GPG_PRIVATE_KEY }}
+          RELEASE_GPG_PASSPHRASE: ${{ secrets.RELEASE_GPG_PASSPHRASE }}
+          RELEASE_GPG_FINGERPRINT: ${{ secrets.RELEASE_GPG_FINGERPRINT }}
+        run: |
+          set -euo pipefail
+          umask 077
+          signing_home="$RUNNER_TEMP/recall-release-gpg"
+          verification_home="$RUNNER_TEMP/recall-release-gpg-verify"
+          mkdir -p "$signing_home" "$verification_home"
+          cleanup() {
+            gpgconf --homedir "$signing_home" --kill all || true
+            gpgconf --homedir "$verification_home" --kill all || true
+            rm -rf "$signing_home" "$verification_home"
+          }
+          trap cleanup EXIT
+          fingerprint="${RELEASE_GPG_FINGERPRINT^^}"
+          printf '%s' "$RELEASE_GPG_PRIVATE_KEY" | gpg --homedir "$signing_home" --batch --import
+          imported_fingerprint="$(gpg --homedir "$signing_home" --batch --with-colons --list-secret-keys "$fingerprint" | awk -F: '$1 == "fpr" { print $10; exit }')"
+          if [ "$imported_fingerprint" != "$fingerprint" ]; then
+            echo "Imported private key does not match configured publisher fingerprint" >&2
+            exit 1
+          fi
+          printf '%s\n' "$RELEASE_GPG_PASSPHRASE" | gpg --homedir "$signing_home" --batch --yes --pinentry-mode loopback --passphrase-fd 0 --local-user "$fingerprint" --armor --detach-sign --output apps/desktop/release/checksums.json.asc apps/desktop/release/checksums.json
+          gpg --homedir "$signing_home" --batch --armor --export "$fingerprint" > apps/desktop/release/publisher-key.asc
+          gpg --homedir "$verification_home" --batch --import apps/desktop/release/publisher-key.asc
+          gpg --homedir "$verification_home" --batch --verify apps/desktop/release/checksums.json.asc apps/desktop/release/checksums.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: recall-publisher-signed-linux-x64
+          path: |
+            apps/desktop/release/*.AppImage
+            apps/desktop/release/checksums.json
+            apps/desktop/release/checksums.json.asc
+            apps/desktop/release/publisher-key.asc
+          if-no-files-found: error
+          retention-days: 14

@@ -7,12 +7,14 @@
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.recall.study"
     },
     "android": {
       "adaptiveIcon": {
         "backgroundColor": "#c4ed68"
-      }
+      },
+      "package": "com.recall.study"
     },
     "plugins": [
       "expo-sqlite",
@@ -23,6 +25,9 @@
         }
       ],
       "expo-sharing"
-    ]
+    ],
+    "web": {
+      "bundler": "metro"
+    }
   }
 }

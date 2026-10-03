@@ -9,6 +9,10 @@
   "dependencies": {
     "@recall/domain": "workspace:*",
     "@recall/sync-core": "workspace:*",
-    "ts-fsrs": "^5.4.2"
+    "effect": "^3.19.0",
+    "ts-fsrs": "5.4.2"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit --project tsconfig.json"
   }
 }

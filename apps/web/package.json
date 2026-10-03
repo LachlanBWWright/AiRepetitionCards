@@ -6,12 +6,13 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint",
+    "lint": "eslint --max-warnings=0",
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build",
     "screenshots": "node scripts/capture-storybook.mjs",
-    "format:check": "prettier --check 'src/**/*.{ts,tsx,css}' '.storybook/**/*.{ts,tsx}' 'scripts/**/*.mjs' 'eslint.config.mjs' 'next.config.ts' 'tsconfig.json' 'package.json' '../mobile/App.tsx' '../mobile/index.js' '../mobile/app.json' '../mobile/package.json' '../mobile/tsconfig.json' '../mobile/eslint.config.mjs' '../mobile/src/**/*.{ts,tsx}' '../desktop/src/**/*.{ts,tsx,json,html,mjs}' '../desktop/*.{ts,mjs,json}' '../../packages/**/*.{ts,css,json}' '../../scripts/**/*.mjs' '../../.github/workflows/**/*.yml' '../../docs/**/*.md' '../../README.md' '../../AGENTS.md' '../../IMPLEMENTATION_PLAN.md' '../../package.json' '../../pnpm-workspace.yaml' '../../.prettierrc.json'",
-    "format:write": "prettier --write 'src/**/*.{ts,tsx,css}' '.storybook/**/*.{ts,tsx}' 'scripts/**/*.mjs' 'eslint.config.mjs' 'next.config.ts' 'tsconfig.json' 'package.json' '../mobile/App.tsx' '../mobile/index.js' '../mobile/app.json' '../mobile/package.json' '../mobile/tsconfig.json' '../mobile/eslint.config.mjs' '../mobile/src/**/*.{ts,tsx}' '../desktop/src/**/*.{ts,tsx,json,html,mjs}' '../desktop/*.{ts,mjs,json}' '../../packages/**/*.{ts,css,json}' '../../scripts/**/*.mjs' '../../.github/workflows/**/*.yml' '../../docs/**/*.md' '../../README.md' '../../AGENTS.md' '../../IMPLEMENTATION_PLAN.md' '../../package.json' '../../pnpm-workspace.yaml' '../../.prettierrc.json'"
+    "format:check": "prettier --check 'src/**/*.{ts,tsx,css}' '.storybook/**/*.{ts,tsx}' 'scripts/**/*.mjs' 'eslint.config.mjs' 'next.config.ts' 'vercel.json' 'tsconfig.json' 'package.json' '../mobile/App.tsx' '../mobile/index.js' '../mobile/app.json' '../mobile/eas.json' '../mobile/*.{ts,cjs,css}' '../mobile/scripts/**/*.mjs' '../mobile/nativewind-env.d.ts' '../mobile/package.json' '../mobile/tsconfig.json' '../mobile/eslint.config.mjs' '../mobile/src/**/*.{ts,tsx}' '../desktop/src/**/*.{ts,tsx,json,html,mjs}' '../desktop/*.{ts,mjs,json}' '../../packages/**/*.{ts,tsx,css,json,mjs}' '../../packages/eslint.config.mjs' '../../eslint.typed.mjs' '../../scripts/**/*.mjs' '../../.github/workflows/**/*.yml' '../../docs/**/*.md' '../../README.md' '../../AGENTS.md' '../../IMPLEMENTATION_PLAN.md' '../../package.json' '../../turbo.json' '../../pnpm-workspace.yaml' '../../.prettierrc.json'",
+    "format:write": "prettier --write 'src/**/*.{ts,tsx,css}' '.storybook/**/*.{ts,tsx}' 'scripts/**/*.mjs' 'eslint.config.mjs' 'next.config.ts' 'vercel.json' 'tsconfig.json' 'package.json' '../mobile/App.tsx' '../mobile/index.js' '../mobile/app.json' '../mobile/eas.json' '../mobile/*.{ts,cjs,css}' '../mobile/scripts/**/*.mjs' '../mobile/nativewind-env.d.ts' '../mobile/package.json' '../mobile/tsconfig.json' '../mobile/eslint.config.mjs' '../mobile/src/**/*.{ts,tsx}' '../desktop/src/**/*.{ts,tsx,json,html,mjs}' '../desktop/*.{ts,mjs,json}' '../../packages/**/*.{ts,tsx,css,json,mjs}' '../../packages/eslint.config.mjs' '../../eslint.typed.mjs' '../../scripts/**/*.mjs' '../../.github/workflows/**/*.yml' '../../docs/**/*.md' '../../README.md' '../../AGENTS.md' '../../IMPLEMENTATION_PLAN.md' '../../package.json' '../../turbo.json' '../../pnpm-workspace.yaml' '../../.prettierrc.json'",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@noble/hashes": "^2.4.0",
@@ -20,16 +21,20 @@
     "@recall/contracts": "workspace:*",
     "@recall/design-tokens": "workspace:*",
     "@recall/domain": "workspace:*",
+    "@recall/infra-openai": "workspace:*",
+    "@recall/infra-supabase": "workspace:*",
     "@recall/local-store": "workspace:*",
     "@recall/scheduler": "workspace:*",
     "@recall/sync-core": "workspace:*",
+    "@recall/ui-web": "workspace:*",
     "@supabase/ssr": "0.12.7",
     "@supabase/supabase-js": "2.117.2",
     "effect": "^3.22.2",
     "next": "16.3.8",
     "react": "19.2.8",
     "react-dom": "19.2.8",
-    "server-only": "^0.0.1"
+    "server-only": "^0.0.1",
+    "sql.js": "^1.14.2"
   },
   "devDependencies": {
     "@storybook/addon-a11y": "^10.6.1",
@@ -39,6 +44,7 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@types/sql.js": "^1.4.11",
     "eslint": "^9",
     "eslint-config-next": "16.3.8",
     "eslint-config-prettier": "^10.1.8",
@@ -50,7 +56,8 @@
     "storybook": "^10.6.1",
     "tailwindcss": "^4",
     "typescript": "^5",
-    "vite": "latest"
+    "vite": "latest",
+    "@recall/ui-native": "workspace:*"
   },
   "packageManager": "pnpm@10.26.2"
 }

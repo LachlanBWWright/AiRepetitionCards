@@ -1,0 +1,34 @@
+{
+  "name": "@recall/infra-supabase",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./json": "./src/json.ts",
+    "./review-sync": "./src/review-sync.ts",
+    "./tutor-repository": "./src/tutor-repository.ts",
+    "./tutor-writes": "./src/tutor-writes.ts",
+    "./account-export": "./src/account-export.ts",
+    "./account-deletion": "./src/account-deletion.ts",
+    "./published-media": "./src/published-media.ts",
+    "./workspace-write": "./src/workspace-write.ts",
+    "./workspace-review-identities": "./src/workspace-review-identities.ts",
+    "./knowledge-area-publication": "./src/knowledge-area-publication.ts",
+    "./publication-token": "./src/publication-token.ts",
+    "./workspace-media": "./src/workspace-media.ts",
+    "./area-tombstones": "./src/area-tombstones.ts",
+    "./published-fork": "./src/published-fork.ts",
+    "./published-updates": "./src/published-updates.ts",
+    "./database.types": "./src/database.types.ts",
+    "./tutor-privacy": "./src/tutor-privacy.ts"
+  },
+  "dependencies": {
+    "@recall/ai-core": "workspace:*",
+    "@supabase/supabase-js": "2.117.2",
+    "effect": "^3.19.0"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit --project tsconfig.json"
+  }
+}

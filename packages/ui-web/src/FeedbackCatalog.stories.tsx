@@ -1,4 +1,5 @@
-import type { Meta, StoryObj } from "@storybook/nextjs-vite";
+import "./catalog.css";
+import type { Meta, StoryObj } from "@storybook/react";
 import { Button } from "./Button";
 import { Dialog } from "./Dialog";
 import { EmptyState } from "./EmptyState";

@@ -8,6 +8,10 @@
   },
   "dependencies": {
     "@recall/contracts": "workspace:*",
-    "@recall/domain": "workspace:*"
+    "@recall/domain": "workspace:*",
+    "effect": "^3.19.0"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit --project tsconfig.json"
   }
 }

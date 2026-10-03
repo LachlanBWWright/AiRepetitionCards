@@ -1,24 +1,18 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Effect, Either, Fiber, Schema } from "effect";
+import { useEffect, useState, useSyncExternalStore } from "react";
+import { Effect, Fiber, Either, Schema } from "effect";
 import type { Workspace } from "@/features/workspace/types";
 import { Dialog } from "@/components/ui/Dialog";
-import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { readBrowserSession } from "@/lib/auth/browser-session";
 import { readSupabaseConfig } from "@/lib/supabase/config";
 import { DesktopAccountAction } from "@/components/auth/DesktopAccountAction";
 import { isDesktopRuntime } from "@/lib/desktop-api";
-import { apiFetch } from "@/lib/desktop-api";
-import { clearWorkspace } from "@recall/application";
-import { browserWorkspaceStore } from "@/features/workspace/browser-workspace-store";
-
-const AccountExportSchema = Schema.Struct({
-  format: Schema.Literal("recall-account-export"),
-  version: Schema.Literal(1),
-  exportedAt: Schema.String,
-  account: Schema.Unknown,
-  data: Schema.Unknown,
-});
+import { browserAccountApi } from "@/lib/account-api";
+import { exportAccountData, deleteAccountData } from "@recall/application";
+import { eraseLocalData } from "@/features/workspace/erase-local-data";
+import { sharedPublicationReturnPath } from "@/lib/auth/return-path";
+import { ChatGPTAccountConnection } from "./ChatGPTAccountConnection";
 
 export function AccountAction({
   demo = false,
@@ -32,41 +26,73 @@ export function AccountAction({
   workspace?: Workspace;
 }) {
   const [email, setEmail] = useState<string | null | undefined>(undefined);
+  const signInHref = useSyncExternalStore(
+    () => () => undefined,
+    () => {
+      const returnPath = sharedPublicationReturnPath(
+        `${window.location.pathname}${window.location.search}`,
+      );
+      return returnPath === "/" ? "/sign-in" : `/sign-in?next=${encodeURIComponent(returnPath)}`;
+    },
+    () => "/sign-in",
+  );
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(demoDeleteConfirm);
   const [confirmation, setConfirmation] = useState("");
   const [deleting, setDeleting] = useState(false);
+  const [accountDeleted, setAccountDeleted] = useState(false);
   const isConfigured = readSupabaseConfig()._tag === "Right";
 
   useEffect(() => {
-    if (demo || isDesktopRuntime()) return;
-    const client = createSupabaseBrowserClient();
-    if (!client) return;
-
+    if (demo) return;
+    const desktop = window.recallDesktop;
+    if (desktop) {
+      let active = true;
+      const publishEmail = (input: unknown) => {
+        const decoded = Schema.decodeUnknownEither(
+          Schema.Struct({ email: Schema.NullOr(Schema.String) }),
+        )(input);
+        if (active && Either.isRight(decoded)) setEmail(decoded.right.email);
+      };
+      const unsubscribe = desktop.auth.onStateChanged(publishEmail);
+      void Effect.runPromise(
+        Effect.either(
+          Effect.tryPromise({
+            try: () => desktop.auth.getStatus(),
+            catch: () => ({ _tag: "DesktopAccountLookupFailure" }) as const,
+          }),
+        ),
+      ).then((result) => {
+        if (
+          Either.isRight(result) &&
+          typeof result.right === "object" &&
+          result.right !== null &&
+          "value" in result.right
+        )
+          publishEmail(result.right.value);
+      });
+      return () => {
+        active = false;
+        unsubscribe();
+      };
+    }
     let mounted = true;
-    const lookup = Effect.tryPromise({
-      try: () => client.auth.getUser(),
-      catch: () => ({ _tag: "AccountLookupError" }) as const,
-    }).pipe(
+    const lookup = readBrowserSession().pipe(
       Effect.match({
         onFailure: () => null,
-        onSuccess: ({ data }) => data.user?.email ?? null,
+        onSuccess: (session) =>
+          session.authenticated ? (session.displayLabel ?? "Recall account") : null,
       }),
-      Effect.tap((accountEmail) =>
+      Effect.tap((accountLabel) =>
         Effect.sync(() => {
-          if (mounted) setEmail(accountEmail);
+          if (mounted) setEmail(accountLabel);
         }),
       ),
     );
     const fiber = Effect.runFork(lookup);
-    const { data } = client.auth.onAuthStateChange((_event, session) => {
-      setEmail(session?.user.email ?? null);
-    });
-
     return () => {
       mounted = false;
-      data.subscription.unsubscribe();
       Effect.runFork(Fiber.interrupt(fiber));
     };
   }, [demo]);
@@ -78,37 +104,30 @@ export function AccountAction({
     }
     setBusy(true);
     setMessage(null);
-    const exportProgram = Effect.tryPromise({
-      try: async () => {
-        const response = await apiFetch("/api/v1/account/export");
-        if (!response.ok) return { _tag: "ExportFailure" } as const;
-        const cloudData = Schema.decodeUnknownEither(AccountExportSchema)(await response.json());
-        if (Either.isLeft(cloudData)) return { _tag: "ExportFailure" } as const;
-        const exportData = {
-          ...cloudData.right,
-          browserWorkspace: workspace ?? null,
-        };
-        const blob = new Blob([JSON.stringify(exportData, null, 2)], {
-          type: "application/json",
-        });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement("a");
-        link.href = url;
-        link.download = `recall-account-export-${new Date().toISOString().slice(0, 10)}.json`;
-        link.click();
-        URL.revokeObjectURL(url);
-        return { _tag: "Exported" } as const;
-      },
-      catch: () => ({ _tag: "ExportFailure" }) as const,
-    }).pipe(
+    const exportProgram = exportAccountData(browserAccountApi).pipe(
+      Effect.flatMap((cloudData) =>
+        Effect.try({
+          try: () => {
+            const exportData = { ...cloudData, browserWorkspace: workspace ?? null };
+            const blob = new Blob([JSON.stringify(exportData, null, 2)], {
+              type: "application/json",
+            });
+            const url = URL.createObjectURL(blob);
+            try {
+              const link = document.createElement("a");
+              link.href = url;
+              link.download = `recall-account-export-${cloudData.exportedAt.slice(0, 10)}.json`;
+              link.click();
+            } finally {
+              URL.revokeObjectURL(url);
+            }
+          },
+          catch: () => ({ _tag: "AccountDownloadFailure" }) as const,
+        }),
+      ),
       Effect.match({
         onFailure: () => setMessage("Your account export could not be downloaded. Try again."),
-        onSuccess: (result) =>
-          setMessage(
-            result._tag === "Exported"
-              ? "Your account data has been downloaded."
-              : "Your account export could not be downloaded. Try again.",
-          ),
+        onSuccess: () => setMessage("Your account data has been downloaded."),
       }),
       Effect.ensuring(Effect.sync(() => setBusy(false))),
     );
@@ -121,37 +140,41 @@ export function AccountAction({
       setShowDeleteConfirm(false);
       return;
     }
-    if (confirmation !== "DELETE") return;
+    if (!accountDeleted && confirmation !== "DELETE") return;
     setDeleting(true);
     setMessage(null);
-    const deletionProgram = Effect.tryPromise({
-      try: async () => {
-        const response = await apiFetch("/api/v1/account/delete", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ confirmation }),
-        });
-        if (!response.ok) return { _tag: "DeleteFailure" } as const;
-        const cleared = await Effect.runPromise(
-          Effect.either(clearWorkspace(browserWorkspaceStore)),
-        );
-        for (const key of Object.keys(window.localStorage)) {
-          if (key.startsWith("recall-tutor-session:")) window.localStorage.removeItem(key);
-        }
-        return { _tag: "Deleted", workspaceCleared: Either.isRight(cleared) } as const;
-      },
-      catch: () => ({ _tag: "DeleteFailure" }) as const,
-    }).pipe(
+    const deletionProgram = (
+      accountDeleted ? Effect.void : deleteAccountData(browserAccountApi, confirmation)
+    ).pipe(
+      Effect.tap(() => Effect.sync(() => setAccountDeleted(true))),
+      Effect.flatMap(() =>
+        Effect.gen(function* () {
+          const cleared = yield* eraseLocalData();
+          const desktopAuth = window.recallDesktop?.auth;
+          if (!desktopAuth) return cleared;
+          const session = yield* Effect.either(
+            Effect.tryPromise({
+              try: () => desktopAuth.signOut(),
+              catch: () => ({ _tag: "DesktopSessionCleanupFailure" }) as const,
+            }),
+          );
+          if (Either.isLeft(session)) return false;
+          const decoded = Schema.decodeUnknownEither(
+            Schema.Struct({ _tag: Schema.Literal("Success"), value: Schema.Boolean }),
+          )(session.right);
+          return cleared && Either.isRight(decoded) && decoded.right.value;
+        }),
+      ),
       Effect.match({
         onFailure: () => setMessage("Account deletion failed. Try again or contact support."),
-        onSuccess: (result) => {
-          if (result._tag === "Deleted" && result.workspaceCleared) {
+        onSuccess: (localDataCleared) => {
+          if (localDataCleared) {
             if (isDesktopRuntime()) window.location.reload();
             else window.location.replace("/sign-in?account=deleted");
-          } else if (result._tag === "Deleted") {
-            setMessage("Account deleted, but this device could not clear its local workspace.");
           } else {
-            setMessage("Account deletion failed. Try again or contact support.");
+            setMessage(
+              "Account deleted. This device is read-only until local data is cleared. Retry clearing this device.",
+            );
           }
         },
       }),
@@ -213,9 +236,13 @@ export function AccountAction({
             <button
               type="submit"
               className="danger-button"
-              disabled={deleting || confirmation !== "DELETE"}
+              disabled={deleting || (!accountDeleted && confirmation !== "DELETE")}
             >
-              {deleting ? "Deleting…" : "Delete account and data"}
+              {deleting
+                ? "Deleting…"
+                : accountDeleted
+                  ? "Retry clearing this device"
+                  : "Delete account and data"}
             </button>
           </div>
         </form>
@@ -243,21 +270,24 @@ export function AccountAction({
       </>
     );
   }
-  if (!demo && typeof window !== "undefined" && window.recallDesktop)
-    return <DesktopAccountAction />;
-  if (demo || !isConfigured) {
+  const desktop = !demo && isDesktopRuntime();
+  if (desktop && !email && !accountDeleted) return <DesktopAccountAction />;
+  if (demo || (!isConfigured && !desktop)) {
     return (
-      <a className="text-button" href="/sign-in">
-        Sign in
-      </a>
+      <div className="account-action">
+        {!demo && <span className="saved-state">Learning on this device</span>}
+        <a className="text-button" href={signInHref}>
+          {demo ? "Sign in" : "Optional cloud sign-in"}
+        </a>
+      </div>
     );
   }
   if (email === undefined) {
     return <span className="saved-state">Checking account…</span>;
   }
-  if (!email) {
+  if (!email && !accountDeleted) {
     return (
-      <a className="text-button" href="/sign-in">
+      <a className="text-button" href={signInHref}>
         Sign in
       </a>
     );
@@ -266,7 +296,12 @@ export function AccountAction({
   return (
     <>
       <form action="/auth/sign-out" method="post" className="account-action">
-        <span className="account-email">{email}</span>
+        <span className="account-email">
+          {email && /^chatgpt\+[a-f0-9]{48}@identity\.recall\.invalid$/.test(email)
+            ? "ChatGPT account"
+            : email}
+        </span>
+        {desktop ? <DesktopAccountAction /> : <ChatGPTAccountConnection compact />}
         <button
           className="text-button"
           type="button"
@@ -278,9 +313,11 @@ export function AccountAction({
         <button className="text-button" type="button" onClick={() => setShowDeleteConfirm(true)}>
           Delete account
         </button>
-        <button className="text-button" type="submit">
-          Sign out
-        </button>
+        {!desktop && (
+          <button className="text-button" type="submit">
+            Sign out
+          </button>
+        )}
         {message && <span className="saved-state">{message}</span>}
       </form>
       {deleteConfirmationDialog()}

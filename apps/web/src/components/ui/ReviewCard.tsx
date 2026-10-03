@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import type { LearningArea, StudyCard } from "@recall/domain";
 import { Button } from "./Button";
 import { EmptyState } from "./EmptyState";
@@ -15,6 +16,9 @@ type ReviewCardProps = {
   onDelete?: (card: StudyCard) => void;
   onAddCard: () => void;
   mediaPreviews?: readonly { readonly mimeType: string; readonly url: string }[];
+  keyboardActive?: boolean;
+  disabled?: boolean;
+  saving?: boolean;
 };
 
 const ratings: ReadonlyArray<{ rating: ReviewRating; label: string }> = [
@@ -34,7 +38,45 @@ export function ReviewCard({
   onDelete,
   onAddCard,
   mediaPreviews = [],
+  keyboardActive = false,
+  disabled = false,
+  saving = false,
 }: ReviewCardProps) {
+  useEffect(() => {
+    if (!keyboardActive || !card || disabled || saving) return;
+    const handleKey = (event: KeyboardEvent) => {
+      if (
+        event.defaultPrevented ||
+        event.isComposing ||
+        event.repeat ||
+        event.altKey ||
+        event.ctrlKey ||
+        event.metaKey ||
+        event.shiftKey
+      )
+        return;
+      if (document.querySelector('[role="dialog"]')) return;
+      if (
+        event.target instanceof Element &&
+        event.target.closest(
+          "input, textarea, select, button, a, audio, video, summary, [contenteditable], [role=dialog], [role=button], [role=slider], [role=spinbutton], [role=combobox], [role=textbox]",
+        )
+      )
+        return;
+      if (!showAnswer && (event.key === " " || event.key === "Enter")) {
+        event.preventDefault();
+        onReveal();
+      } else if (showAnswer) {
+        const rating = ratings[Number(event.key) - 1];
+        if (/^[1-4]$/.test(event.key) && rating) {
+          event.preventDefault();
+          onRate(rating.rating);
+        }
+      }
+    };
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [keyboardActive, card, showAnswer, onReveal, onRate, disabled, saving]);
   return (
     <article className="study-card">
       <div className="study-card-head">
@@ -47,12 +89,12 @@ export function ReviewCard({
       {card && (onEdit || onDelete) && (
         <div className="study-card-actions">
           {onEdit && (
-            <button type="button" onClick={() => onEdit(card)}>
+            <button type="button" disabled={disabled || saving} onClick={() => onEdit(card)}>
               Edit card
             </button>
           )}
           {onDelete && (
-            <button type="button" onClick={() => onDelete(card)}>
+            <button type="button" disabled={disabled || saving} onClick={() => onDelete(card)}>
               Delete
             </button>
           )}
@@ -89,22 +131,33 @@ export function ReviewCard({
           )}
           {showAnswer ? (
             <div className="rating-row">
-              <span>How well did you recall it?</span>
+              <span role={saving ? "status" : undefined}>
+                {saving ? "Saving review…" : "How well did you recall it?"}
+              </span>
               <div className="rating-buttons">
-                {ratings.map(({ rating, label }) => (
+                {ratings.map(({ rating, label }, index) => (
                   <button
                     className={`rating-${rating}`}
                     key={rating}
+                    disabled={disabled || saving}
                     onClick={() => onRate(rating)}
+                    aria-keyshortcuts={keyboardActive ? String(index + 1) : undefined}
                   >
                     {label}
+                    {keyboardActive ? ` · ${String(index + 1)}` : ""}
                   </button>
                 ))}
               </div>
             </div>
           ) : (
-            <Button size="small" className="reveal-button" onClick={onReveal}>
-              Show answer <span>↵</span>
+            <Button
+              size="small"
+              className="reveal-button"
+              onClick={onReveal}
+              disabled={disabled || saving}
+              aria-keyshortcuts={keyboardActive ? "Enter Space" : undefined}
+            >
+              Show answer <span>{keyboardActive ? "Space / ↵" : "↵"}</span>
             </Button>
           )}
         </>
