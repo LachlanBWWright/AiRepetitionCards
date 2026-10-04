@@ -3,6 +3,15 @@ node_modules/
 out/
 build/
 dist/
+apps/mobile/android/
+apps/mobile/ios/
+apps/mobile/recall-ios-simulator-*.tar.gz
+apps/web/recall-next-server.tar.gz
+apps/web/public/app-shell/
+apps/web/public/index.html
+apps/web/public/service-worker.js
+apps/web/public/manifest.webmanifest
+apps/web/public/recall-icon-*.png
 .turbo/
 .vercel/
 supabase/.temp/
@@ -14,3 +23,6 @@ apps/desktop/release/
 coverage/
 *.tsbuildinfo
 next-env.d.ts
+
+apps/web/public/vendor/ocr/
+apps/desktop/public/vendor/ocr/

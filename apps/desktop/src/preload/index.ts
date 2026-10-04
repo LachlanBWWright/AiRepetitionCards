@@ -9,6 +9,14 @@ type DesktopMediaReply =
     }
   | { readonly _tag: "Failure" };
 
+// Keep a click received during renderer startup until the review hook subscribes.
+let pendingReminderOpen = false;
+const reminderOpenListeners = new Set<() => void>();
+ipcRenderer.on("reminders:open", () => {
+  if (reminderOpenListeners.size === 0) pendingReminderOpen = true;
+  else for (const callback of reminderOpenListeners) callback();
+});
+
 contextBridge.exposeInMainWorld("recallDesktop", {
   chatgpt: {
     status: (): Promise<unknown> => ipcRenderer.invoke("chatgpt:status"),
@@ -19,11 +27,37 @@ contextBridge.exposeInMainWorld("recallDesktop", {
     resumePlan: (clientId: string): Promise<unknown> =>
       ipcRenderer.invoke("chatgpt:resume-plan", clientId),
     models: (): Promise<unknown> => ipcRenderer.invoke("chatgpt:models"),
+    usage: (clientId: string): Promise<unknown> => ipcRenderer.invoke("chatgpt:usage", clientId),
+    setBudget: (input: unknown): Promise<unknown> =>
+      ipcRenderer.invoke("chatgpt:set-budget", input),
     respond: (input: {
       readonly model: string;
       readonly input: string;
-      readonly expectedClientId?: string;
+      readonly expectedClientId: string;
     }): Promise<unknown> => ipcRenderer.invoke("chatgpt:respond", input),
+    research: (input: {
+      readonly model: string;
+      readonly query: string;
+      readonly expectedClientId: string;
+    }): Promise<unknown> => ipcRenderer.invoke("chatgpt:research", input),
+    openResearchSource: (input: {
+      readonly url: string;
+      readonly expectedClientId: string;
+    }): Promise<unknown> => ipcRenderer.invoke("chatgpt:open-research-source", input),
+  },
+  reminders: {
+    read: (): Promise<unknown> => ipcRenderer.invoke("reminders:read"),
+    set: (input: unknown): Promise<unknown> => ipcRenderer.invoke("reminders:set", input),
+    onOpen: (callback: () => void): (() => void) => {
+      reminderOpenListeners.add(callback);
+      if (pendingReminderOpen) {
+        pendingReminderOpen = false;
+        callback();
+      }
+      return () => {
+        reminderOpenListeners.delete(callback);
+      };
+    },
   },
   workspace: {
     read: (): Promise<DesktopReply<string | null>> => ipcRenderer.invoke("workspace:read"),

@@ -370,3 +370,45 @@ export type {
 
 export { formatTagInput, parseTagInput } from "./tag-input";
 export type { TagInputFailure } from "./tag-input";
+
+export {
+  LocalAiUsageStateSchema,
+  LocalAiUsagePolicySchema,
+  LocalAiUsageEntrySchema,
+  LocalAiUsageSummarySchema,
+  LocalAiUsageSnapshotSchema,
+  LocalAiUsageReservationSchema,
+  LocalAiUsageSettlementSchema,
+  emptyLocalAiUsageState,
+  defaultLocalAiUsagePolicy,
+  reserveLocalAiUsage,
+  settleLocalAiUsage,
+  updateLocalAiUsagePolicy,
+  summarizeLocalAiUsage,
+} from "./local-ai-usage";
+export type {
+  LocalAiUsageState,
+  LocalAiUsagePolicy,
+  LocalAiUsageEntry,
+  LocalAiUsageSummary,
+  LocalAiUsageSnapshot,
+  LocalAiUsageReservation,
+  LocalAiUsageSettlement,
+  LocalAiUsageInvalid,
+  LocalAiBudgetExceeded,
+} from "./local-ai-usage";
+
+export * from "./knowledge-notebook";
+export { createKnowledgeNotebookTutor } from "./knowledge-notebook-tutor";
+export type { NotebookTutorFailure } from "./knowledge-notebook-tutor";
+export * from "./study-materials";
+
+export { createStudyMaterialsTutor } from "./study-materials-tutor";
+export * from "./local-ai-budget-service";
+
+export {
+  DailyReminderSettingsSchema,
+  defaultDailyReminderSettings,
+  validateDailyReminderSettings,
+  type DailyReminderSettings,
+} from "./daily-reminders";

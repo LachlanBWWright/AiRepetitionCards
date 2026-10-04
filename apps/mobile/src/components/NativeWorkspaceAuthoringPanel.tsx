@@ -402,6 +402,11 @@ export function NativeWorkspaceAuthoringPanel({
     <View style={styles.panel} testID="native-workspace-authoring">
       <Text style={styles.eyebrow}>OFFLINE LIBRARY</Text>
       <Text style={styles.title}>Manage your learning</Text>
+      {message && (
+        <Text accessibilityRole="alert" style={styles.hint}>
+          {message}
+        </Text>
+      )}
       {disabledReason && (
         <Text accessibilityLiveRegion="polite" style={styles.hint}>
           {disabledReason}
@@ -1051,11 +1056,6 @@ export function NativeWorkspaceAuthoringPanel({
             </Text>
           )}
         </>
-      )}
-      {message && (
-        <Text accessibilityRole="alert" style={styles.hint}>
-          {message}
-        </Text>
       )}
     </View>
   );

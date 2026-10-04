@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { connection } from "next/server";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
@@ -15,8 +15,12 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "Recall — remember what matters",
+  manifest: "/manifest.webmanifest",
+  icons: { icon: "/recall-icon-192.png", apple: "/recall-icon-192.png" },
   description: "A calm, thoughtful space for spaced repetition and active learning.",
 };
+
+export const viewport: Viewport = { themeColor: "#29322b" };
 
 export default async function RootLayout({ children }: LayoutProps<"/">) {
   // Next applies the proxy nonce while rendering each incoming request.

@@ -3,15 +3,15 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
+    "dev": "node scripts/prepare-ocr-assets.mjs && next dev",
+    "build": "node pwa/build.mjs && next build",
     "start": "next start",
     "lint": "eslint --max-warnings=0",
-    "storybook": "storybook dev -p 6006",
-    "build-storybook": "storybook build",
+    "storybook": "node scripts/prepare-ocr-assets.mjs && storybook dev -p 6006",
+    "build-storybook": "node scripts/prepare-ocr-assets.mjs && storybook build",
     "screenshots": "node scripts/capture-storybook.mjs",
-    "format:check": "prettier --check 'src/**/*.{ts,tsx,css}' '.storybook/**/*.{ts,tsx}' 'scripts/**/*.mjs' 'eslint.config.mjs' 'next.config.ts' 'vercel.json' 'tsconfig.json' 'package.json' '../mobile/App.tsx' '../mobile/index.js' '../mobile/app.json' '../mobile/eas.json' '../mobile/*.{ts,cjs,css}' '../mobile/scripts/**/*.mjs' '../mobile/nativewind-env.d.ts' '../mobile/package.json' '../mobile/tsconfig.json' '../mobile/eslint.config.mjs' '../mobile/src/**/*.{ts,tsx}' '../desktop/src/**/*.{ts,tsx,json,html,mjs}' '../desktop/*.{ts,mjs,json}' '../../packages/**/*.{ts,tsx,css,json,mjs}' '../../packages/eslint.config.mjs' '../../eslint.typed.mjs' '../../scripts/**/*.mjs' '../../.github/workflows/**/*.yml' '../../docs/**/*.md' '../../README.md' '../../AGENTS.md' '../../IMPLEMENTATION_PLAN.md' '../../package.json' '../../turbo.json' '../../pnpm-workspace.yaml' '../../.prettierrc.json'",
-    "format:write": "prettier --write 'src/**/*.{ts,tsx,css}' '.storybook/**/*.{ts,tsx}' 'scripts/**/*.mjs' 'eslint.config.mjs' 'next.config.ts' 'vercel.json' 'tsconfig.json' 'package.json' '../mobile/App.tsx' '../mobile/index.js' '../mobile/app.json' '../mobile/eas.json' '../mobile/*.{ts,cjs,css}' '../mobile/scripts/**/*.mjs' '../mobile/nativewind-env.d.ts' '../mobile/package.json' '../mobile/tsconfig.json' '../mobile/eslint.config.mjs' '../mobile/src/**/*.{ts,tsx}' '../desktop/src/**/*.{ts,tsx,json,html,mjs}' '../desktop/*.{ts,mjs,json}' '../../packages/**/*.{ts,tsx,css,json,mjs}' '../../packages/eslint.config.mjs' '../../eslint.typed.mjs' '../../scripts/**/*.mjs' '../../.github/workflows/**/*.yml' '../../docs/**/*.md' '../../README.md' '../../AGENTS.md' '../../IMPLEMENTATION_PLAN.md' '../../package.json' '../../turbo.json' '../../pnpm-workspace.yaml' '../../.prettierrc.json'",
+    "format:check": "prettier --check 'src/**/*.{ts,tsx,css}' 'pwa/**/*.{ts,tsx,mjs,html}' '.storybook/**/*.{ts,tsx}' 'scripts/**/*.mjs' 'eslint.config.mjs' 'next.config.ts' 'vercel.json' 'tsconfig.json' 'package.json' '../mobile/App.tsx' '../mobile/index.js' '../mobile/app.json' '../mobile/eas.json' '../mobile/*.{ts,cjs,css}' '../mobile/scripts/**/*.mjs' '../mobile/nativewind-env.d.ts' '../mobile/package.json' '../mobile/tsconfig.json' '../mobile/eslint.config.mjs' '../mobile/src/**/*.{ts,tsx}' '../desktop/src/**/*.{ts,tsx,json,html,mjs}' '../desktop/*.{ts,mjs,json}' '../../packages/**/*.{ts,tsx,css,json,mjs}' '../../packages/eslint.config.mjs' '../../eslint.typed.mjs' '../../scripts/**/*.mjs' '../../.github/workflows/**/*.yml' '../../docs/**/*.md' '../../README.md' '../../AGENTS.md' '../../IMPLEMENTATION_PLAN.md' '../../package.json' '../../turbo.json' '../../pnpm-workspace.yaml' '../../.prettierrc.json'",
+    "format:write": "prettier --write 'src/**/*.{ts,tsx,css}' 'pwa/**/*.{ts,tsx,mjs,html}' '.storybook/**/*.{ts,tsx}' 'scripts/**/*.mjs' 'eslint.config.mjs' 'next.config.ts' 'vercel.json' 'tsconfig.json' 'package.json' '../mobile/App.tsx' '../mobile/index.js' '../mobile/app.json' '../mobile/eas.json' '../mobile/*.{ts,cjs,css}' '../mobile/scripts/**/*.mjs' '../mobile/nativewind-env.d.ts' '../mobile/package.json' '../mobile/tsconfig.json' '../mobile/eslint.config.mjs' '../mobile/src/**/*.{ts,tsx}' '../desktop/src/**/*.{ts,tsx,json,html,mjs}' '../desktop/*.{ts,mjs,json}' '../../packages/**/*.{ts,tsx,css,json,mjs}' '../../packages/eslint.config.mjs' '../../eslint.typed.mjs' '../../scripts/**/*.mjs' '../../.github/workflows/**/*.yml' '../../docs/**/*.md' '../../README.md' '../../AGENTS.md' '../../IMPLEMENTATION_PLAN.md' '../../package.json' '../../turbo.json' '../../pnpm-workspace.yaml' '../../.prettierrc.json'",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -34,7 +34,10 @@
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "server-only": "^0.0.1",
-    "sql.js": "^1.14.2"
+    "sql.js": "^1.14.2",
+    "@recall/infra-study-materials": "workspace:*",
+    "tesseract.js": "7.0.0",
+    "unpdf": "1.8.1"
   },
   "devDependencies": {
     "@storybook/addon-a11y": "^10.6.1",
@@ -57,7 +60,9 @@
     "tailwindcss": "^4",
     "typescript": "^5",
     "vite": "latest",
-    "@recall/ui-native": "workspace:*"
+    "@recall/ui-native": "workspace:*",
+    "tesseract.js-core": "7.0.0",
+    "@tesseract.js-data/eng": "1.0.0"
   },
   "packageManager": "pnpm@10.26.2"
 }

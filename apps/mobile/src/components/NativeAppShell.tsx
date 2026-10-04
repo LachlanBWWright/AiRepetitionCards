@@ -20,6 +20,8 @@ export type NativeAppShellProps = {
   readonly sharing: ReactNode;
   readonly account: ReactNode;
   readonly initialTab?: NativeAppTab;
+  readonly activeTab?: NativeAppTab;
+  readonly onTabChange?: (tab: NativeAppTab) => void;
   readonly areas?: readonly {
     readonly id: string;
     readonly title: string;
@@ -45,12 +47,19 @@ export function NativeAppShell({
   sharing,
   account,
   initialTab = "Today",
+  activeTab,
+  onTabChange,
   areas = [],
   activeAreaId = null,
   onSelectArea,
   selectionDisabled = false,
 }: NativeAppShellProps) {
-  const [selectedTab, setSelectedTab] = useState<NativeAppTab>(initialTab);
+  const [localTab, setLocalTab] = useState<NativeAppTab>(initialTab);
+  const selectedTab = activeTab ?? localTab;
+  const setSelectedTab = (tab: NativeAppTab) => {
+    setLocalTab(tab);
+    onTabChange?.(tab);
+  };
   const panels: Readonly<Record<NativeAppTab, ReactNode>> = {
     Today: today,
     Library: library,

@@ -82,7 +82,10 @@ function values(
 let sqlitePromise: Promise<SqlJsStatic> | undefined;
 function loadSqlite(): Promise<SqlJsStatic> {
   sqlitePromise ??= initSqlJs({
-    locateFile: (file) => (file.endsWith(".wasm") ? "/vendor/sql-wasm.wasm" : file),
+    locateFile: (file) =>
+      file.endsWith(".wasm")
+        ? `${process.env.NEXT_PUBLIC_RECALL_ASSET_BASE ?? "/"}vendor/sql-wasm.wasm`
+        : file,
   });
   return sqlitePromise;
 }

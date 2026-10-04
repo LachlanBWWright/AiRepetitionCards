@@ -21,12 +21,16 @@ export const eraseLocalData = () =>
                 "recall-chatgpt-tutor:",
                 "recall-chatgpt-proposal-session:",
                 "recall-chatgpt-welcome:",
+                "recall-knowledge-notebook:",
+                "recall-local-ai-usage",
+                "recall-daily-reminders",
                 "recall-pending-publication:",
                 "recall-pending-fork:",
               ].some((prefix) => key.startsWith(prefix))
             )
               window.localStorage.removeItem(key);
           }
+          window.dispatchEvent(new Event("recall-reminder-settings"));
           return true;
         },
         catch: () => ({ _tag: "LocalSessionCleanupFailure" }) as const,

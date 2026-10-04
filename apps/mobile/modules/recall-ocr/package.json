@@ -1,0 +1,9 @@
+{
+  "name": "recall-ocr",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local study material text recognition",
+  "license": "MIT",
+  "author": "Recall",
+  "homepage": "https://docs.expo.dev/modules/"
+}

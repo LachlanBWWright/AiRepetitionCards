@@ -61,6 +61,8 @@ import { ReviewCard } from "@/components/ui/ReviewCard";
 import { Dialog } from "@/components/ui/Dialog";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { StatusBadge } from "@/components/ui/StatusBadge";
+import { DailyReminderSettingsPanel } from "@/components/auth/DailyReminderSettingsPanel";
+import { startDailyReminderRuntime } from "@/lib/daily-reminder-api";
 import { AccountAction } from "@/components/auth/AccountAction";
 import { WorkspaceSyncAction } from "@/components/auth/WorkspaceSyncAction";
 import { prepareWorkspaceForSync } from "@/features/workspace/sync-outbox";
@@ -572,7 +574,12 @@ export default function Home({
     setImportNotice(request.message);
     return true;
   }
+  const [deviceSettings, setDeviceSettings] = useState(false);
   const [activeView, setActiveView] = useState(demo?.view ?? (sharedRequest ? "Explore" : "Today"));
+  useEffect(() => {
+    if (demo) return;
+    return startDailyReminderRuntime(() => setActiveView("Today"));
+  }, [demo]);
   const [now, setNow] = useState(() => new Date(demo ? "2026-10-03T09:00:00.000Z" : Date.now()));
 
   useEffect(() => {
@@ -1930,6 +1937,9 @@ Its review history will remain.`)
             My learning <span>/</span> <strong>{activeView}</strong>
           </div>
           <div className="top-actions">
+            <Button variant="secondary" onClick={() => setDeviceSettings(true)}>
+              Device settings
+            </Button>
             <AccountAction demo={Boolean(demo)} workspace={workspace} />
             <WorkspaceSyncAction
               demo={Boolean(demo)}
@@ -2401,6 +2411,8 @@ Its review history will remain.`)
                     <TutorPanel
                       key={area.id}
                       knowledgeArea={tutorAreaDocument.right}
+                      reviewEvents={workspace.reviewEvents ?? []}
+                      onStartReview={() => setActiveView("Today")}
                       objectiveGaps={objectiveGaps}
                       onApprove={async (
                         proposal: CardProposal,
@@ -2891,6 +2903,15 @@ Its review history will remain.`)
         )}
       </section>
 
+      {deviceSettings && (
+        <Dialog labelledBy="device-settings-title" onClose={() => setDeviceSettings(false)}>
+          <h1 id="device-settings-title">Device settings</h1>
+          <DailyReminderSettingsPanel desktop={isDesktopRuntime()} />
+          <Button variant="secondary" onClick={() => setDeviceSettings(false)}>
+            Close
+          </Button>
+        </Dialog>
+      )}
       {addingArea && (
         <Dialog labelledBy="area-dialog-title" onClose={closeAreaEditor}>
           <form className="modal" aria-busy={libraryMutation === "area-save"} onSubmit={createArea}>

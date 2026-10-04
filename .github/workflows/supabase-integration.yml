@@ -1,0 +1,32 @@
+name: Optional local Supabase integration
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  integration:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.26.2
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Start disposable local Supabase
+        run: pnpm exec supabase start > "$RUNNER_TEMP/recall-supabase-start.log" 2>&1
+      - name: Configure isolated integration credentials
+        run: node scripts/configure-integration-ci.mjs
+      - run: pnpm test:integration
+      - name: Stop disposable services
+        if: always()
+        run: pnpm exec supabase stop --no-backup

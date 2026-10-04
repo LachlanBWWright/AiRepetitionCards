@@ -24,4 +24,10 @@ export default tseslint.config(
     // Supabase CLI emits helper generics with `never` unions for schemas without enums/composites.
     rules: { "@typescript-eslint/no-redundant-type-constituents": "off" },
   },
+  {
+    files: ["packages/infra-study-materials/src/index.ts"],
+    // fast-xml-parser's validator works in browsers/Hermes. Its recommended replacement
+    // fast-xml-validator@1.4.2 loads a Node Buffer dependency before validation runs.
+    rules: { "@typescript-eslint/no-deprecated": "off" },
+  },
 );

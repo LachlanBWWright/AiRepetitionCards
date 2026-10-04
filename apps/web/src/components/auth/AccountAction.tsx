@@ -12,6 +12,8 @@ import { browserAccountApi } from "@/lib/account-api";
 import { exportAccountData, deleteAccountData } from "@recall/application";
 import { eraseLocalData } from "@/features/workspace/erase-local-data";
 import { sharedPublicationReturnPath } from "@/lib/auth/return-path";
+import { BudgetSettingsPanel } from "./BudgetSettingsPanel";
+import { browserLocalBudget } from "@/lib/local-ai-budget";
 import { ChatGPTAccountConnection } from "./ChatGPTAccountConnection";
 
 export function AccountAction({
@@ -25,6 +27,8 @@ export function AccountAction({
   demoDeleteConfirm?: boolean;
   workspace?: Workspace;
 }) {
+  const [ownerId, setOwnerId] = useState<string | null>(null);
+  const [showBudget, setShowBudget] = useState(false);
   const [email, setEmail] = useState<string | null | undefined>(undefined);
   const signInHref = useSyncExternalStore(
     () => () => undefined,
@@ -46,6 +50,9 @@ export function AccountAction({
 
   useEffect(() => {
     if (demo) return;
+    void Effect.runPromise(Effect.either(readBrowserSession())).then((result) => {
+      if (Either.isRight(result)) setOwnerId(result.right.ownerId);
+    });
     const desktop = window.recallDesktop;
     if (desktop) {
       let active = true;
@@ -276,9 +283,11 @@ export function AccountAction({
     return (
       <div className="account-action">
         {!demo && <span className="saved-state">Learning on this device</span>}
-        <a className="text-button" href={signInHref}>
-          {demo ? "Sign in" : "Optional cloud sign-in"}
-        </a>
+        {demo && (
+          <a className="text-button" href={signInHref}>
+            Sign in
+          </a>
+        )}
       </div>
     );
   }
@@ -320,6 +329,18 @@ export function AccountAction({
         )}
         {message && <span className="saved-state">{message}</span>}
       </form>
+      {ownerId && (
+        <button type="button" className="text-button" onClick={() => setShowBudget(!showBudget)}>
+          AI budget settings
+        </button>
+      )}
+      {ownerId && showBudget && (
+        <BudgetSettingsPanel
+          key={ownerId}
+          api={browserLocalBudget}
+          accountId={`hosted:${ownerId}`}
+        />
+      )}
       {deleteConfirmationDialog()}
     </>
   );

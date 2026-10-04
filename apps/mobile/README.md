@@ -49,4 +49,31 @@ After configuration changes, restart Metro with `pnpm --filter mobile start --cl
 
 ## Native release artifacts
 
-The bundle identifier and Android package are `com.recall.study`. EAS configuration provides internal preview builds and production store artifacts, with a manual GitHub build workflow and fail-closed credential preflight. Supply your actual Expo account owner, project UUID, access token and remote signing credentials before requesting a build. See [native release setup](../../docs/mobile-release.md) for commands, environment configuration and external release requirements. `pnpm build:mobile` continues to export JavaScript/assets; signed native builds use the explicit release scripts.
+Pull requests and pushes to `main` also build an Android APK and an Apple Silicon iOS simulator app through `mobile-local-packages.yml`. These builds require no Expo account or Recall server and embed their JavaScript/assets so they start without Metro. Optional public cloud settings come from repository variables; leaving them unset disables those services. The same app keeps local study available when cloud settings are configured and the network is unavailable. Download the workflow artifacts: install the Android APK on a compatible device, or extract the iOS archive and install `Recall.app` in an iOS simulator. Android uses a development signing key; the simulator archive cannot be installed on a physical iPhone. CI verifies that the APK includes its JavaScript bundle and both arm64/x86_64 native libraries, and that the simulator app includes its bundle and arm64 executable before uploading. The jobs use Node 22.13 or newer within Node 22, Java 17 for Android, and Xcode 26.6 on macOS 26 for iOS. Generated `android/` and `ios/` projects are disposable build output and are not committed.
+
+The bundle identifier and Android package are `com.recall.study`. EAS configuration provides internal preview builds and production store artifacts, with a manual GitHub build workflow and fail-closed credential preflight. Supply your actual Expo account owner, project UUID, access token and remote signing credentials before requesting a build. Local-only signed builds can leave all three cloud client variables blank; enabling cloud features requires the complete API/Supabase configuration. See [native release setup](../../docs/mobile-release.md) for commands, environment configuration and external release requirements. `pnpm build:mobile` continues to export JavaScript/assets; signed native builds use the explicit release scripts.
+
+### Private knowledge notebooks
+
+The Tutor screen includes a local knowledge notebook for each learning area: concept coverage, evidence from answers and reviews, confidence, possible misconceptions, and editable card proposals. Start or resume investigations with question, AI request and time budgets; add concepts manually or approve suggested concepts. Notebook data and explicit answer drafts are saved on this device. Adaptive questions and evaluation require the optional configured tutor service; existing notebooks remain readable offline. Approved cards are saved locally before provider acknowledgement, which can be retried separately. Failed AI attempts retain their request charge.
+
+Notebooks are separate from workspace ZIP backups and cloud sync. Use **Export notebook JSON** to share a private copy containing learning history. Clearing one notebook preserves cards and reviews. Device reset or account data deletion removes every notebook, including records belonging to deleted areas.
+
+## Study materials
+
+The Tutor notebook supports pasted text and local TXT, Markdown, DOCX and text-based
+PDF files up to 16 MiB. Review/correct extraction and select passages before generation.
+Extracted text is stored on the device and included in notebook JSON exports; original
+files are not retained. **Choose scanned PDF or image (OCR)** recognizes PNG/JPEG notes
+and scanned PDFs locally, with a user-selected range of up to 20 PDF pages per import.
+The iOS implementation uses Apple Vision/PDFKit; Android bundles the ML Kit Latin text
+model and uses PdfRenderer, so recognition needs no server or model download. OCR targets
+English and Latin script. Review spelling, reading order, code and formulas; edit saved
+passages before generating cards. Temporary file copies are deleted after extraction.
+OCR requires a rebuilt native application and is unavailable in Expo Go. Physical-device
+OCR/PDF execution still needs runtime validation.
+
+Choose a study goal, depth and card count. Each proposed card consumes one admitted AI
+request; pause stops the batch after the current request. AI requires an eligible
+configured provider and network access. Approve cards explicitly after reviewing their
+source quotes and page references, then study them offline with spaced repetition.

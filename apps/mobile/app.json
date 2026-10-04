@@ -24,7 +24,8 @@
           "configureAndroidBackup": true
         }
       ],
-      "expo-sharing"
+      "expo-sharing",
+      "expo-notifications"
     ],
     "web": {
       "bundler": "metro"

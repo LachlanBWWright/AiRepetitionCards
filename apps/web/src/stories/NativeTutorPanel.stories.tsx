@@ -159,6 +159,19 @@ const weakQuizSession: TutorSessionState = {
               suggestedAction: "propose-card",
             },
           },
+          {
+            prompt: "How do cells use ATP?",
+            expectedAnswer: "ATP transfers energy to processes such as transport and movement.",
+            learnerAnswer: "It stores genetic instructions.",
+            evaluation: {
+              result: "incorrect",
+              confidence: 0.88,
+              feedback: "ATP supplies usable energy; DNA stores genetic instructions.",
+              misconception: "Confuses ATP's energy role with DNA's information role.",
+              objectiveId,
+              suggestedAction: "propose-card",
+            },
+          },
         ],
       }
     : null,

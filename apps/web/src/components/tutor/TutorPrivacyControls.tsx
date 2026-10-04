@@ -40,7 +40,9 @@ export function TutorPrivacyView({
         Tutoring sends the selected learning area, your answers and relevant conversation to OpenAI.
         {local
           ? " Conversation history is saved on this device for this ChatGPT account."
-          : " Conversation history is saved to your Recall account."}
+          : " Conversation history is saved to your Recall account."}{" "}
+        The knowledge notebook is a separate private record on this device. Export or clear it using
+        the notebook controls.
       </p>
       {state.policy && (
         <p>

@@ -57,14 +57,42 @@
     },
     "desktop#build": {
       "dependsOn": ["^transit", "web#transit"],
-      "inputs": ["$TURBO_DEFAULT$", "../web/src/**", "../web/postcss.config.mjs", "../web/.env*"],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "../web/src/**",
+        "../web/postcss.config.mjs",
+        "../web/.env*",
+        "../web/scripts/prepare-ocr-assets.mjs",
+        "../web/package.json"
+      ],
       "outputs": ["out/**"],
       "env": ["NEXT_PUBLIC_*", "RECALL_API_URL", "RECALL_CHATGPT_LOCAL_ENABLED"]
     },
     "web#build": {
       "dependsOn": ["^transit", "mobile#transit"],
-      "inputs": ["$TURBO_DEFAULT$", ".env*", "../mobile/App.tsx", "../mobile/src/**"],
-      "outputs": [".next/**", "!.next/cache/**", "!.next/dev/**"],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        ".env*",
+        "../mobile/App.tsx",
+        "../mobile/src/**",
+        "!public/app-shell/**",
+        "!public/service-worker.js",
+        "!public/manifest.webmanifest",
+        "!public/recall-icon-*.png",
+        "!public/index.html",
+        "!public/vendor/ocr/**"
+      ],
+      "outputs": [
+        ".next/**",
+        "!.next/cache/**",
+        "!.next/dev/**",
+        "public/app-shell/**",
+        "public/service-worker.js",
+        "public/manifest.webmanifest",
+        "public/recall-icon-*.png",
+        "public/index.html",
+        "public/vendor/ocr/**"
+      ],
       "env": [
         "NEXT_PUBLIC_*",
         "EXPO_PUBLIC_*",

@@ -1,4 +1,4 @@
-name: Mobile builds
+name: Optional mobile EAS releases
 
 on:
   workflow_dispatch:

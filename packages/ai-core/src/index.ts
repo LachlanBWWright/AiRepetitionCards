@@ -47,11 +47,22 @@ export function selectTutorContextHistory(
   return recent.slice(start);
 }
 
+export const TutorInvestigationSchema = Schema.Struct({
+  goal: Schema.String.pipe(Schema.minLength(1), Schema.maxLength(2000)),
+  conceptTitle: Schema.String.pipe(Schema.minLength(1), Schema.maxLength(500)),
+  conceptDescription: Schema.optional(Schema.NullOr(Schema.String.pipe(Schema.maxLength(2000)))),
+  investigationKind: Schema.String.pipe(Schema.minLength(1), Schema.maxLength(100)),
+  uncertainty: Schema.Number.pipe(Schema.finite(), Schema.between(0, 1)),
+  uncertaintyBasis: Schema.optional(Schema.String.pipe(Schema.maxLength(500))),
+  reason: Schema.String.pipe(Schema.minLength(1), Schema.maxLength(1000)),
+  objectiveId: Schema.NullOr(Schema.String.pipe(Schema.minLength(1), Schema.maxLength(200))),
+});
 export const TutorContextSchema = Schema.Struct({
   knowledgeArea: KnowledgeAreaSchema,
   history: Schema.Array(TutorHistoryMessageSchema).pipe(
     Schema.maxItems(MAX_TUTOR_CONTEXT_MESSAGES),
   ),
+  investigation: Schema.optional(TutorInvestigationSchema),
 });
 
 export const MAX_TUTOR_INFERENCE_BYTES = 80_000;
@@ -139,6 +150,17 @@ export const TutorQuestionSchema = Schema.Struct({
   question: Schema.String.pipe(Schema.minLength(1), Schema.maxLength(2000)),
   objectiveId: ObjectiveIdSchema,
   teachingIntent: Schema.String.pipe(Schema.minLength(1), Schema.maxLength(500)),
+  explanation: Schema.optional(
+    Schema.NullOr(Schema.String.pipe(Schema.minLength(1), Schema.maxLength(3000))),
+  ),
+  conceptSuggestions: Schema.optional(
+    Schema.Array(
+      Schema.Struct({
+        title: Schema.String.pipe(Schema.minLength(1), Schema.maxLength(200)),
+        description: Schema.String.pipe(Schema.minLength(1), Schema.maxLength(1000)),
+      }),
+    ).pipe(Schema.maxItems(8)),
+  ),
 });
 
 export const AnswerEvaluationSchema = Schema.Struct({
@@ -167,6 +189,42 @@ export const CardProposalSchema = Schema.Struct({
   objectiveId: ObjectiveIdSchema,
   rationale: Schema.String.pipe(Schema.minLength(1), Schema.maxLength(1000)),
 });
+
+export const StudyCardInputSchema = Schema.Struct({
+  goal: Schema.String.pipe(Schema.minLength(1), Schema.maxLength(2000)),
+  depth: Schema.Literal("overview", "standard", "detailed"),
+  objectiveId: ObjectiveIdSchema,
+  sources: Schema.Array(
+    Schema.Struct({
+      materialId: UuidSchema,
+      sectionId: UuidSchema,
+      text: Schema.String.pipe(Schema.minLength(1), Schema.maxLength(12000)),
+      pageNumber: Schema.NullOr(Schema.Number.pipe(Schema.int(), Schema.positive())),
+    }),
+  ).pipe(Schema.minItems(1), Schema.maxItems(1)),
+  previousFronts: Schema.Array(Schema.String.pipe(Schema.maxLength(1000))).pipe(
+    Schema.maxItems(30),
+  ),
+});
+export const StudyCardResultSchema = Schema.Struct({
+  proposal: CardProposalSchema,
+  sourceReferences: Schema.Array(
+    Schema.Struct({
+      materialId: UuidSchema,
+      sectionId: UuidSchema,
+      quote: Schema.String.pipe(Schema.minLength(1), Schema.maxLength(2000)),
+      pageNumber: Schema.NullOr(Schema.Number.pipe(Schema.int(), Schema.positive())),
+    }),
+  ).pipe(Schema.minItems(1), Schema.maxItems(4)),
+  conceptSuggestions: Schema.Array(
+    Schema.Struct({
+      title: Schema.String.pipe(Schema.minLength(1), Schema.maxLength(200)),
+      description: Schema.String.pipe(Schema.minLength(1), Schema.maxLength(1000)),
+    }),
+  ).pipe(Schema.maxItems(8)),
+});
+export type StudyCardInput = typeof StudyCardInputSchema.Type;
+export type StudyCardResult = typeof StudyCardResultSchema.Type;
 
 export const KnowledgeGapSchema = Schema.Struct({
   objectiveId: Schema.String.pipe(Schema.minLength(1)),
@@ -210,6 +268,13 @@ export const TargetedQuizSessionSchema = Schema.Struct({
 
 export const TutorActionRequestSchema = Schema.Union(
   Schema.Struct({
+    action: Schema.Literal("study-card"),
+    context: TutorContextSchema,
+    material: StudyCardInputSchema,
+    canonicalAreaFingerprint: Schema.optional(Schema.String.pipe(Schema.pattern(/^[a-f0-9]{64}$/))),
+    sessionId: Schema.optional(UuidSchema),
+  }),
+  Schema.Struct({
     action: Schema.Literal("question"),
     context: TutorContextSchema,
     canonicalAreaFingerprint: Schema.optional(Schema.String.pipe(Schema.pattern(/^[a-f0-9]{64}$/))),
@@ -240,6 +305,13 @@ export const TutorActionRequestSchema = Schema.Union(
 );
 
 export const TutorActionResponseSchema = Schema.Union(
+  Schema.Struct({
+    action: Schema.Literal("study-card"),
+    sessionId: UuidSchema,
+    proposalId: UuidSchema,
+    result: StudyCardResultSchema,
+    providerResolutionRequired: Schema.optional(Schema.Boolean),
+  }),
   Schema.Struct({
     action: Schema.Literal("question"),
     sessionId: UuidSchema,
@@ -355,12 +427,13 @@ export const AiOperationSchema = Schema.Literal(
   "evaluate",
   "propose-card",
   "targeted-quiz",
+  "study-card",
 );
 export type AiOperation = typeof AiOperationSchema.Type;
 
 /** Runtime adapter guarantees; these are separate from model identity and funding. */
 export const AiProviderCapabilitiesSchema = Schema.Struct({
-  supportedOperations: Schema.Array(AiOperationSchema).pipe(Schema.minItems(1), Schema.maxItems(4)),
+  supportedOperations: Schema.Array(AiOperationSchema).pipe(Schema.minItems(1), Schema.maxItems(5)),
   structuredOutputs: Schema.Boolean,
   streaming: Schema.Boolean,
   maxInputBytes: Schema.Number.pipe(Schema.int(), Schema.positive()),
@@ -370,6 +443,9 @@ export const AiProviderCapabilitiesSchema = Schema.Struct({
 export type AiProviderCapabilities = typeof AiProviderCapabilitiesSchema.Type;
 
 export interface AiProviderService {
+  readonly generateStudyCard?: (
+    context: TutorContext & { readonly material: StudyCardInput },
+  ) => Effect.Effect<AiProviderResult<StudyCardResult>, AiProviderError>;
   readonly capabilities: AiProviderCapabilities;
   readonly generateQuestion: (
     context: TutorContext,
@@ -520,7 +596,8 @@ export function decodeTutorActionRequest(
       return Effect.succeed({ ...operation, context: result.right });
     });
   }
-  if (decoded.right.action !== "question") return Effect.succeed(decoded.right);
+  if (decoded.right.action !== "question" && decoded.right.action !== "study-card")
+    return Effect.succeed(decoded.right);
   const context = Effect.either(decodeTutorContext(decoded.right.context));
   return Effect.flatMap(context, (result) => {
     if (Either.isLeft(result)) return Effect.fail(result.left);

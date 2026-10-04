@@ -7,6 +7,10 @@ export type ChatGptPlanFailure = {
 /** Provider diagnostics remain at the boundary; UI receives actionable recovery text. */
 export function chatGptPlanFailureMessage(failure: ChatGptPlanFailure): string {
   const { code, recovery, status } = failure;
+  if (code === "local-ai-budget-exceeded")
+    return "Your local AI request budget was reached. Review your local budget or wait for the next UTC budget period. ChatGPT's own limits are managed separately.";
+  if (code === "local-ai-usage-unavailable")
+    return "Local AI usage could not be saved or read. Requests are paused to preserve your budget; check local storage before retrying.";
   if (code === "invalid_client")
     return "OpenAI rejected this saved client registration. Check distribution eligibility and registration configuration; repeated sign-in will not repair client configuration.";
   if (

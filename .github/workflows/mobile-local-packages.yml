@@ -1,0 +1,124 @@
+name: Mobile packages (development signing)
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mobile-local-${{ github.event_name == 'push' && github.sha || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  CI: "1"
+  EXPO_NO_TELEMETRY: "1"
+  EXPO_PUBLIC_RECALL_API_URL: ${{ vars.EXPO_PUBLIC_RECALL_API_URL }}
+  EXPO_PUBLIC_SUPABASE_URL: ${{ vars.EXPO_PUBLIC_SUPABASE_URL }}
+  EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ vars.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
+
+jobs:
+  android:
+    name: Android debug-key standalone APK
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.26.2
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22 # Latest Node 22 satisfies Expo 57 / React Native 0.86 (minimum 22.13).
+          cache: pnpm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v4
+      - run: pnpm install --frozen-lockfile
+      - name: Generate Android project without Expo accounts
+        working-directory: apps/mobile
+        run: pnpm exec expo prebuild --platform android --clean --no-install
+      - name: Embed JS and use offline startup with debug signing
+        run: node apps/mobile/scripts/prepare-local-android.mjs
+      - name: Build installable APK
+        working-directory: apps/mobile/android
+        run: ./gradlew :app:assembleDebug --no-daemon -PreactNativeArchitectures=arm64-v8a,x86_64
+      - name: Verify standalone APK contents
+        shell: bash
+        run: |
+          apk=apps/mobile/android/app/build/outputs/apk/debug/app-debug.apk
+          test -s "$apk"
+          unzip -Z1 "$apk" > "$RUNNER_TEMP/recall-apk-contents.txt"
+          grep -Eq '^assets/index\.android\.bundle$' "$RUNNER_TEMP/recall-apk-contents.txt"
+          grep -Eq '^lib/arm64-v8a/.+\.so$' "$RUNNER_TEMP/recall-apk-contents.txt"
+          grep -Eq '^lib/x86_64/.+\.so$' "$RUNNER_TEMP/recall-apk-contents.txt"
+          printf '### Android artifact\n\nStandalone APK includes its JS bundle and arm64/x86_64 native libraries. Signed with a development key.\n' >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: recall-android-debug-apk
+          path: apps/mobile/android/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+          retention-days: 14
+  ios:
+    name: iOS simulator standalone app
+    runs-on: macos-26
+    timeout-minutes: 90
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.26.2
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22 # Latest Node 22 satisfies Expo 57 / React Native 0.86 (minimum 22.13).
+          cache: pnpm
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.3"
+      - run: gem install cocoapods -v 1.16.2 --no-document
+      - run: pnpm install --frozen-lockfile
+      - name: Generate iOS project without Expo accounts
+        working-directory: apps/mobile
+        run: pnpm exec expo prebuild --platform ios --clean --no-install
+      - name: Install native dependencies
+        working-directory: apps/mobile/ios
+        run: pod install
+      - name: Build unsigned app with embedded JS for Apple Silicon simulator
+        working-directory: apps/mobile
+        run: >-
+          xcodebuild -workspace ios/Recall.xcworkspace -scheme Recall
+          -configuration Release -sdk iphonesimulator
+          -destination 'generic/platform=iOS Simulator'
+          -derivedDataPath build/ios-simulator
+          ARCHS=arm64 ONLY_ACTIVE_ARCH=NO CODE_SIGNING_ALLOWED=NO build
+      - name: Verify standalone simulator app contents
+        working-directory: apps/mobile
+        shell: bash
+        run: |
+          app=build/ios-simulator/Build/Products/Release-iphonesimulator/Recall.app
+          test -s "$app/main.jsbundle"
+          test -x "$app/Recall"
+          lipo -verify_arch arm64 "$app/Recall"
+          /usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Info.plist" | grep -Eq '^com\.recall\.study$'
+          printf '### iOS artifact\n\nStandalone Apple Silicon simulator app includes its JS bundle. Simulator only; physical iPhone distribution requires signing credentials.\n' >> "$GITHUB_STEP_SUMMARY"
+      - name: Archive simulator app preserving executable permissions
+        working-directory: apps/mobile
+        run: tar -czf recall-ios-simulator-arm64.tar.gz -C build/ios-simulator/Build/Products/Release-iphonesimulator Recall.app
+      - uses: actions/upload-artifact@v4
+        with:
+          name: recall-ios-simulator-arm64
+          path: apps/mobile/recall-ios-simulator-arm64.tar.gz
+          if-no-files-found: error
+          retention-days: 14

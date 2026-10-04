@@ -9,7 +9,7 @@ const Configuration = Schema.Struct({
   token: Schema.String.pipe(Schema.minLength(10)),
   apiUrl: Schema.String,
   supabaseUrl: Schema.String,
-  publishableKey: Schema.String.pipe(Schema.minLength(20)),
+  publishableKey: Schema.String,
 });
 const Arguments = Schema.Tuple(
   Schema.Literal("check", "build"),
@@ -21,9 +21,9 @@ const configuration = Schema.decodeUnknownEither(Configuration)({
   projectId: process.env.EAS_PROJECT_ID,
   owner: process.env.EXPO_ACCOUNT_OWNER,
   token: process.env.EXPO_TOKEN,
-  apiUrl: process.env.EXPO_PUBLIC_RECALL_API_URL,
-  supabaseUrl: process.env.EXPO_PUBLIC_SUPABASE_URL,
-  publishableKey: process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
+  apiUrl: process.env.EXPO_PUBLIC_RECALL_API_URL?.trim() ?? "",
+  supabaseUrl: process.env.EXPO_PUBLIC_SUPABASE_URL?.trim() ?? "",
+  publishableKey: process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY?.trim() ?? "",
 });
 const endpoint = (value) => Effect.runSync(Effect.either(Effect.try(() => new URL(value))));
 function configuredEndpoint(value) {
@@ -56,20 +56,23 @@ function publicSupabaseKey(value) {
     )
   );
 }
+function validCloudConfiguration(value) {
+  if (!value.apiUrl && !value.supabaseUrl && !value.publishableKey) return true;
+  return (
+    configuredEndpoint(value.apiUrl) &&
+    configuredEndpoint(value.supabaseUrl) &&
+    publicSupabaseKey(value.publishableKey) &&
+    !/replace|placeholder|example/i.test(value.publishableKey)
+  );
+}
 if (Either.isLeft(parameters)) {
   process.stderr.write(
     "Usage: node scripts/eas-release.mjs <check|build> <preview|production> <android|ios|all>\n",
   );
   process.exitCode = 1;
-} else if (
-  Either.isLeft(configuration) ||
-  !configuredEndpoint(configuration.right.apiUrl) ||
-  !configuredEndpoint(configuration.right.supabaseUrl) ||
-  !publicSupabaseKey(configuration.right.publishableKey) ||
-  /replace|placeholder|example/i.test(configuration.right.publishableKey)
-) {
+} else if (Either.isLeft(configuration) || !validCloudConfiguration(configuration.right)) {
   process.stderr.write(
-    "Mobile release is not configured. Provide real EAS_PROJECT_ID, EXPO_ACCOUNT_OWNER, EXPO_TOKEN, HTTPS EXPO_PUBLIC_RECALL_API_URL and EXPO_PUBLIC_SUPABASE_URL, and EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY. See docs/mobile-release.md. Values are not logged.\n",
+    "Mobile release is not configured. Provide real EAS_PROJECT_ID, EXPO_ACCOUNT_OWNER and EXPO_TOKEN. For optional cloud features, provide all three: HTTPS EXPO_PUBLIC_RECALL_API_URL and EXPO_PUBLIC_SUPABASE_URL, and a public EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY; otherwise leave all three blank. See docs/mobile-release.md. Values are not logged.\n",
   );
   process.exitCode = 1;
 } else if (parameters.right[0] === "check") {

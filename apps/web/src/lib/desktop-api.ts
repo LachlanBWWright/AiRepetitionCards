@@ -22,11 +22,27 @@ declare global {
         readonly signOut: (clientId: string) => Promise<unknown>;
         readonly resumePlan: (clientId: string) => Promise<unknown>;
         readonly models: () => Promise<unknown>;
+        readonly usage: (clientId: string) => Promise<unknown>;
+        readonly setBudget: (input: unknown) => Promise<unknown>;
+        readonly research: (input: {
+          readonly model: string;
+          readonly query: string;
+          readonly expectedClientId: string;
+        }) => Promise<unknown>;
+        readonly openResearchSource: (input: {
+          readonly url: string;
+          readonly expectedClientId: string;
+        }) => Promise<unknown>;
         readonly respond: (input: {
           readonly model: string;
           readonly input: string;
           readonly expectedClientId?: string;
         }) => Promise<unknown>;
+      };
+      readonly reminders?: {
+        readonly read: () => Promise<unknown>;
+        readonly set: (input: unknown) => Promise<unknown>;
+        readonly onOpen: (callback: () => void) => () => void;
       };
       readonly workspace: {
         readonly read: () => Promise<unknown>;

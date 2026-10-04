@@ -20,6 +20,7 @@ import { registerDesktopMediaIpc } from "./desktop-media-ipc";
 import { registerDesktopAnkiIpc } from "./anki-ipc";
 import { registerBackupIpc } from "./backup-ipc";
 import { registerChatGptLocal } from "./chatgpt-local";
+import { registerDailyReminders } from "./daily-reminders";
 
 // One process owns rotating credentials and SQLite for this user-data directory.
 const ownsInstanceLock = app.requestSingleInstanceLock();
@@ -35,8 +36,8 @@ let pendingAuthUrl: string | null = null;
 
 function configureContentSecurityPolicy(): void {
   const policy = rendererUrl
-    ? "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' http://localhost:5173; style-src 'self' 'unsafe-inline'; connect-src 'self' http://localhost:5173 ws://localhost:5173 https://*.supabase.co; img-src 'self' data: blob:; media-src 'self' data: blob:; object-src 'none'; base-uri 'none'"
-    : "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' https://*.supabase.co; img-src 'self' data: blob:; media-src 'self' data: blob:; object-src 'none'; base-uri 'none'";
+    ? "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' http://localhost:5173; style-src 'self' 'unsafe-inline'; connect-src 'self' http://localhost:5173 ws://localhost:5173 https://*.supabase.co; img-src 'self' data: blob:; media-src 'self' data: blob:; worker-src 'self' blob:; object-src 'none'; base-uri 'none'"
+    : "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; connect-src 'self' https://*.supabase.co; img-src 'self' data: blob:; media-src 'self' data: blob:; worker-src 'self' blob:; object-src 'none'; base-uri 'none'";
   const localAssetPrefix = rendererUrl ?? pathToFileURL(rendererDirectory).href;
   session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
     if (!details.url.startsWith(localAssetPrefix)) {
@@ -146,7 +147,10 @@ function openDatabase(): Effect.Effect<DatabaseSync, { readonly _tag: "DatabaseO
   });
 }
 
-function registerWorkspaceIpc(database: DatabaseSync): void {
+function registerWorkspaceIpc(
+  database: DatabaseSync,
+  clearReminders: () => Promise<boolean>,
+): void {
   ipcMain.handle("workspace:read", (event): DesktopReply<string | null> => {
     if (!trustedSender(event)) return failure();
     const result = Effect.runSync(
@@ -203,8 +207,9 @@ function registerWorkspaceIpc(database: DatabaseSync): void {
       : failure();
   });
 
-  ipcMain.handle("workspace:clear", (event): DesktopReply<void> => {
+  ipcMain.handle("workspace:clear", async (event): Promise<DesktopReply<void>> => {
     if (!trustedSender(event)) return failure();
+    if (!(await clearReminders())) return failure();
     const result = Effect.runSync(
       Effect.either(
         Effect.try({
@@ -263,8 +268,17 @@ function validatedSharedLink(value: unknown): string | null {
   return Either.isRight(validated) ? target.href : null;
 }
 
-function openSharedLink(value: unknown): void {
-  const url = validatedSharedLink(value);
+const chatGptSettingsLinks = new Set([
+  "https://chatgpt.com/settings/usage",
+  "https://help.openai.com/",
+]);
+
+/** Only validated share links and these fixed ChatGPT support destinations leave the renderer. */
+function openApprovedExternalLink(value: unknown): void {
+  const url =
+    typeof value === "string" && chatGptSettingsLinks.has(value)
+      ? value
+      : validatedSharedLink(value);
   if (url === null) return;
   void Effect.runPromise(
     Effect.tryPromise({
@@ -276,8 +290,8 @@ function openSharedLink(value: unknown): void {
           try: () => {
             const options = {
               type: "error" as const,
-              title: "Share link could not be opened",
-              message: "Copy the share link and open it in your browser.",
+              title: "Link could not be opened",
+              message: "Copy the link and open it in your browser.",
             };
             return mainWindow
               ? dialog.showMessageBox(mainWindow, options)
@@ -305,7 +319,7 @@ function createWindow(): BrowserWindow {
     },
   });
   window.webContents.setWindowOpenHandler(({ url }) => {
-    openSharedLink(url);
+    openApprovedExternalLink(url);
     return { action: "deny" };
   });
   window.webContents.on("will-navigate", (event, url) => {
@@ -314,7 +328,7 @@ function createWindow(): BrowserWindow {
       (!rendererUrl && url !== window.webContents.getURL())
     ) {
       event.preventDefault();
-      openSharedLink(url);
+      openApprovedExternalLink(url);
     }
   });
   if (rendererUrl) void window.loadURL(rendererUrl);
@@ -333,6 +347,7 @@ function receiveAuthUrl(value: string): void {
   });
 }
 
+app.setAppUserModelId("com.recall.study");
 app.setAsDefaultProtocolClient("recall");
 app.on("open-url", (event, value) => {
   event.preventDefault();
@@ -357,7 +372,6 @@ const ready = Effect.tryPromise({
     onFailure: () => Effect.sync(() => app.quit()),
     onSuccess: (database) =>
       Effect.sync(() => {
-        registerWorkspaceIpc(database);
         registerChatGptLocal(trustedSender);
         registerDesktopMediaIpc(database, trustedSender);
         registerDesktopAnkiIpc(trustedSender);
@@ -371,6 +385,17 @@ const ready = Effect.tryPromise({
         configureSessionPermissions();
         configureContentSecurityPolicy();
         mainWindow = createWindow();
+        const reminders = registerDailyReminders(trustedSender, () => {
+          if (!mainWindow || mainWindow.isDestroyed()) mainWindow = createWindow();
+          if (mainWindow.isMinimized()) mainWindow.restore();
+          mainWindow.show();
+          mainWindow.focus();
+          const contents = mainWindow.webContents;
+          const notify = () => contents.send("reminders:open");
+          if (contents.isLoadingMainFrame()) contents.once("did-finish-load", notify);
+          else notify();
+        });
+        registerWorkspaceIpc(database, reminders.clear);
         if (pendingAuthUrl) {
           const authUrl = pendingAuthUrl;
           pendingAuthUrl = null;

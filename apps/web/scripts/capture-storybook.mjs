@@ -10,6 +10,67 @@ const port = Number(process.env.STORYBOOK_PORT ?? 6006);
 const baseUrl = `http://127.0.0.1:${port}`;
 const requested = [
   ...[
+    ["Usage", "ai-budget-usage.png"],
+    ["Unlimited", "ai-budget-unlimited.png"],
+    ["Blocked", "ai-budget-blocked.png"],
+    ["Save Unavailable", "ai-budget-save-unavailable.png"],
+  ].map(([name, file]) => ({
+    title: "Screens/AI Budget Settings",
+    name,
+    file,
+    viewport: { width: 1440, height: 1000 },
+  })),
+  ...[
+    ["Browser Enabled", "daily-reminder-browser.png"],
+    ["Desktop Enabled", "daily-reminder-desktop.png"],
+    ["Disabled", "daily-reminder-disabled.png"],
+    ["Blocked", "daily-reminder-blocked.png"],
+  ].map(([name, file]) => ({
+    title: "Screens/Daily Study Reminders",
+    name,
+    file,
+    viewport: { width: 1440, height: 1000 },
+  })),
+  ...[
+    ["Materials · paste or import", "study-materials-ready.png"],
+    ["Materials · extracted PDF preview", "study-materials-preview.png"],
+    ["Materials · source-backed proposals", "study-materials-proposals.png"],
+    ["Materials · interrupted batch retained", "study-materials-resume.png"],
+    ["Materials · budget exhausted", "study-materials-budget.png"],
+    ["Materials · local OCR correction", "study-materials-ocr.png"],
+  ].map(([name, file]) => ({
+    title: "Screens/Study Materials",
+    name,
+    file,
+    viewport: { width: 1440, height: 1200 },
+  })),
+  ...[
+    ["Notebook · ready to investigate", "knowledge-notebook-ready.png"],
+    ["Notebook · code question and confidence", "knowledge-notebook-question.png"],
+    ["Notebook · misconceptions and evidence", "knowledge-notebook-gaps.png"],
+    ["Notebook · editable card proposals", "knowledge-notebook-proposals.png"],
+    ["Notebook · finished and ready to review", "knowledge-notebook-finished.png"],
+  ].map(([name, file]) => ({
+    title: "Screens/Knowledge Notebook",
+    name,
+    file,
+    viewport: { width: 1440, height: 1200 },
+  })),
+  ...[
+    ["Research · ready to search", "desktop-chatgpt-research-ready.png"],
+    ["Research · source citations", "desktop-chatgpt-research-citations.png"],
+    [
+      "Research · search unavailable for selected model",
+      "desktop-chatgpt-research-unavailable.png",
+    ],
+    ["Research · failed search preserves results", "desktop-chatgpt-research-retry.png"],
+  ].map(([name, file]) => ({
+    title: "Screens/Desktop ChatGPT Research",
+    name,
+    file,
+    viewport: { width: 1440, height: 1100 },
+  })),
+  ...[
     ["Navigation · Local account (native)", "native-local-account.png"],
     ["Navigation · Local tutor unavailable (native)", "native-local-tutor.png"],
     ["Navigation · Local sharing (native)", "native-local-sharing.png"],
@@ -1062,6 +1123,90 @@ const requested = [
   },
 ];
 
+const screenRoots = {
+  "Screens/Recall Dashboard": ".app-shell",
+  "Screens/Sign In": ".auth-page .auth-panel",
+  "Screens/ChatGPT Account Connection": ".auth-page .auth-panel",
+  "Screens/Native App Shell": '[aria-label="Main navigation"]',
+  "Screens/Native AI Tutor": '[data-testid="native-tutor-panel"]',
+  "Screens/Native Publishing": '[data-testid="native-publishing-panel"]',
+  "Screens/Native Account": '[data-testid="native-account-panel"]',
+  "Screens/Native Workspace Authoring": '[data-testid="native-workspace-authoring"]',
+  "Screens/Native Practice Insights": 'main:has-text("Your practice")',
+  "Screens/Mobile Client": '[data-testid="mobile-screen"]',
+  "Screens/Knowledge Area Sharing": ".publication-panel",
+  "Screens/Anki Import": ".anki-import-dialog",
+  "Screens/AI Tutor": ".component-catalog .tutor-panel",
+  "Screens/Tutor Privacy": ".component-catalog .tutor-panel",
+  "Screens/Desktop ChatGPT Plan": ".component-catalog",
+  "Screens/Desktop ChatGPT Research": ".component-catalog .tutor-panel",
+  "Screens/Knowledge Notebook": ".component-catalog .tutor-panel",
+  "Screens/AI Budget Settings": ".component-catalog .tutor-panel",
+  "Screens/Daily Study Reminders": ".component-catalog .tutor-panel",
+  "Screens/Study Materials": ".component-catalog .tutor-panel",
+  "Screens/Account": ".component-catalog .account-action",
+  "Screens/Card Library": '.component-catalog section:has-text("Your cards")',
+  "Knowledge/Area settings": 'main:has-text("Knowledge area settings")',
+  "Knowledge/Review settings": 'main:has-text("Review settings")',
+  "Native UI/Primitives": '#storybook-root > div:has-text("Your study space")',
+  "Design System/Button": ".component-catalog",
+  "Design System/Feedback": ".component-catalog",
+  "Design System/Review Card": ".component-catalog",
+  "Shared UI/Button": ".component-catalog",
+  "Shared UI/Dialog": ".component-catalog",
+  "Shared UI/Empty State": ".component-catalog",
+  "Shared UI/Status Badge": ".component-catalog",
+};
+
+function screenRoot(shot) {
+  if (shot.title === "Design System/Review Card" && shot.name === "Multiline answer")
+    return ".study-card";
+  return screenRoots[shot.title];
+}
+
+async function waitForScreenState(page, shot) {
+  if (shot.title === "Screens/Native App Shell") {
+    const tab =
+      shot.name.includes("account") || shot.name.includes("Account")
+        ? "account"
+        : shot.name.includes("tutor") || shot.name.includes("Tutor")
+          ? "tutor"
+          : shot.name.includes("sharing") || shot.name.includes("Sharing")
+            ? "publishing"
+            : shot.name.includes("Library") || shot.name.includes("attachments")
+              ? "workspace-authoring"
+              : null;
+    const content = tab ? `[data-testid="native-${tab}-panel"]` : '[data-testid="mobile-screen"]';
+    await page
+      .locator(
+        tab === "workspace-authoring" ? '[data-testid="native-workspace-authoring"]' : content,
+      )
+      .waitFor({ state: "visible", timeout: 20_000 });
+  }
+  if (shot.title !== "Screens/Native AI Tutor") return;
+  const root = page.locator('[data-testid="native-tutor-panel"]');
+  if (/proposal|throttled|limiter/.test(shot.name)) {
+    await root
+      .getByText("Proposed card · approval required", { exact: true })
+      .waitFor({ state: "visible", timeout: 20_000 });
+  } else if (shot.name.includes("tentative")) {
+    await root
+      .getByText("This assessment is tentative. Ask for clarification or try another answer.", {
+        exact: true,
+      })
+      .first()
+      .waitFor({ state: "visible", timeout: 20_000 });
+  } else if (shot.name.includes("weak quiz")) {
+    await root
+      .getByText("Your answer: DNA", { exact: true })
+      .waitFor({ state: "visible", timeout: 20_000 });
+  } else if (shot.name.includes("weak second objective")) {
+    await root
+      .getByText("Practice target: Gene expression", { exact: true })
+      .waitFor({ state: "visible", timeout: 20_000 });
+  }
+}
+
 let server;
 let browser;
 
@@ -1127,29 +1272,14 @@ try {
       await page.goto(`${baseUrl}/iframe.html?id=${story.id}&viewMode=story`, {
         waitUntil: "networkidle",
       });
-      const screenSelector =
-        shot.title === "Screens/Recall Dashboard"
-          ? ".app-shell"
-          : shot.title === "Screens/Native AI Tutor"
-            ? '[data-testid="native-tutor-panel"]'
-            : shot.title === "Screens/Native Publishing"
-              ? '[data-testid="native-publishing-panel"]'
-              : shot.title === "Screens/Native Account"
-                ? '[data-testid="native-account-panel"]'
-                : shot.title === "Screens/Mobile Client"
-                  ? '[data-testid="mobile-screen"]'
-                  : shot.title === "Screens/Knowledge Area Sharing"
-                    ? ".publication-panel"
-                    : shot.title === "Screens/Anki Import"
-                      ? ".anki-import-dialog"
-                      : ".component-catalog";
-      await page.locator(screenSelector).waitFor({ state: "visible", timeout: 20_000 });
-      if (shot.title === "Screens/Native AI Tutor") {
-        await page.getByText("Proposed card · approval required").waitFor({
-          state: "visible",
-          timeout: 20_000,
-        });
+      const screenSelector = screenRoot(shot);
+      if (!screenSelector) {
+        runError = `No screen readiness mapping for ${shot.title}`;
+        await page.close();
+        break;
       }
+      await page.locator(screenSelector).waitFor({ state: "visible", timeout: 20_000 });
+      await waitForScreenState(page, shot);
       if (shot.title === "Screens/Recall Dashboard" && shot.viewport.width < 720) {
         await page.addStyleTag({
           content: ".mobile-footer { position: static !important; inset: auto !important; }",

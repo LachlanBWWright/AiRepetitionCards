@@ -38,6 +38,32 @@ await test("release preflight validates configuration without invoking a cloud b
     /Account access, project ownership and signing credentials still require Expo verification/,
   );
 });
+const cloudKeys = [
+  "EXPO_PUBLIC_RECALL_API_URL",
+  "EXPO_PUBLIC_SUPABASE_URL",
+  "EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY",
+] as const;
+const localOnly = Object.fromEntries(
+  Object.entries(configured).filter(([name]) => !cloudKeys.some((key) => key === name)),
+);
+await test("local-only releases need Expo credentials without cloud configuration", () => {
+  assert.equal(preflight(localOnly).status, 0);
+  assert.equal(
+    preflight({ ...localOnly, ...Object.fromEntries(cloudKeys.map((key) => [key, "  "])) }).status,
+    0,
+  );
+  for (const key of ["EAS_PROJECT_ID", "EXPO_ACCOUNT_OWNER", "EXPO_TOKEN"])
+    assert.equal(
+      preflight(Object.fromEntries(Object.entries(localOnly).filter(([name]) => name !== key)))
+        .status,
+      1,
+      key,
+    );
+});
+await test("partial optional cloud configuration fails closed", () => {
+  for (const key of cloudKeys)
+    assert.equal(preflight({ ...localOnly, [key]: configured[key] ?? "" }).status, 1, key);
+});
 await test("missing release credentials fail closed without disclosing values", () => {
   for (const key of Object.keys(configured)) {
     const environment = Object.fromEntries(

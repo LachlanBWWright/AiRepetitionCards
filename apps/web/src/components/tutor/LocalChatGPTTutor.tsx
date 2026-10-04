@@ -2,12 +2,27 @@
 import { useEffect, useMemo, useState, type ComponentProps } from "react";
 import { Effect, Either, Schema } from "effect";
 import { Dialog } from "@recall/ui-web";
+import { BudgetSettingsPanel } from "../auth/BudgetSettingsPanel";
+import { localChatGPTUsageApi } from "@/lib/chatgpt-local-usage";
+import { localBudgetFailure } from "@recall/application";
 import { TutorPanel } from "./TutorPanel";
+import { ChatGPTResearchPanel } from "./ChatGPTResearchPanel";
 import { createLocalChatGptTutor } from "@/lib/chatgpt-local-tutor";
 import { createLocalTutorPrivacyApi } from "@/lib/chatgpt-local-privacy";
 import { chatGptPlanFailureMessage } from "@/lib/chatgpt-plan-errors";
 import "@/lib/desktop-api";
 import { localWritesBlocked } from "@/features/workspace/local-write-coordinator";
+
+const desktopBudgetApi = {
+  read: (accountId: string) =>
+    localChatGPTUsageApi
+      .read(accountId)
+      .pipe(Effect.mapError((error) => localBudgetFailure(error.message))),
+  setBudget: (input: unknown) =>
+    localChatGPTUsageApi
+      .setBudget(input)
+      .pipe(Effect.mapError((error) => localBudgetFailure(error.message))),
+};
 
 const Status = Schema.Struct({
   enabled: Schema.Boolean,
@@ -358,6 +373,7 @@ export function LocalChatGPTTutor(props: ComponentProps<typeof TutorPanel>) {
           onResumePlan={(id) => operate(() => bridge.resumePlan(id))}
         />
       )}
+      {profile && <BudgetSettingsPanel key={profile} api={desktopBudgetApi} accountId={profile} />}
       {welcome && (
         <ChatGPTPlanWelcome
           onDismiss={() => {
@@ -372,6 +388,25 @@ export function LocalChatGPTTutor(props: ComponentProps<typeof TutorPanel>) {
           }}
         />
       )}
+      {usePlan &&
+        state &&
+        bridge &&
+        profile &&
+        model &&
+        state.accounts.some(
+          (account) => account.clientId === profile && account.signedIn && account.planEnabled,
+        ) && (
+          <ChatGPTResearchPanel
+            key={`research:${profile}:${model}:${props.knowledgeArea.id}`}
+            expectedClientId={profile}
+            model={model}
+            areaId={props.knowledgeArea.id}
+            disabled={
+              busy ||
+              Boolean(state.accounts.find((account) => account.clientId === profile)?.usagePaused)
+            }
+          />
+        )}
       <TutorPanel
         key={usePlan ? `chatgpt:${profile}:${model}` : "hosted"}
         {...props}

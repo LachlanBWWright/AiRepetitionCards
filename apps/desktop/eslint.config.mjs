@@ -7,7 +7,7 @@ import nextTs from "eslint-config-next/typescript";
 export default defineConfig([
   ...nextVitals,
   ...nextTs,
-  globalIgnores(["out/**", "dist/**", "build/**"]),
+  globalIgnores(["out/**", "dist/**", "build/**", "public/vendor/ocr/**"]),
   { rules: { "@next/next/no-html-link-for-pages": "off" } },
   ...typedStrict,
   prettier,

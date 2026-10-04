@@ -4,16 +4,40 @@ on:
   pull_request:
   push:
     branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  integration:
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
+  workflow-checks:
+    name: Validate GitHub Actions workflows
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: docker://rhysd/actionlint:1.7.12
+        with:
+          args: -color -shellcheck= -pyflakes=
+  checks-and-web:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      NEXT_TELEMETRY_DISABLED: "1"
+      EXPO_NO_TELEMETRY: "1"
+      NEXT_PUBLIC_SUPABASE_URL: ${{ vars.NEXT_PUBLIC_SUPABASE_URL }}
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ vars.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
+      NEXT_PUBLIC_RECALL_API_URL: ${{ vars.NEXT_PUBLIC_RECALL_API_URL }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
       - uses: pnpm/action-setup@v4
         with:
           version: 10.26.2
@@ -22,35 +46,40 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - name: Start disposable local Supabase
-        run: pnpm exec supabase start > "$RUNNER_TEMP/recall-supabase-start.log" 2>&1
-      - name: Configure local integration credentials
-        run: node scripts/configure-integration-ci.mjs
-      - run: pnpm test:integration
-      - name: Stop disposable services
-        if: always()
-        run: pnpm exec supabase stop --no-backup
-  checks:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10.26.2
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 22
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
+      - name: Run local regression checks without services
+        run: pnpm test
       - run: pnpm policy:static
-      - run: node scripts/check-migrations.mjs
       - run: pnpm typecheck
-      - run: pnpm test
       - run: pnpm lint
       - run: pnpm format:check
-      - run: pnpm build
-      - run: pnpm build:mobile
-      - run: pnpm package:desktop
-      - run: pnpm build-storybook
-      - run: pnpm --filter web exec playwright install --with-deps chromium
-      - run: pnpm screenshots
+      - name: Build deterministic screen catalog
+        run: pnpm build-storybook
+      - uses: actions/upload-artifact@v4
+        with:
+          name: recall-storybook
+          path: apps/web/storybook-static
+          if-no-files-found: error
+          retention-days: 14
+      - name: Build web application with offline support
+        run: pnpm build
+      - name: Package web application with browser assets
+        working-directory: apps/web
+        run: |
+          if [ -f .next/standalone/apps/web/server.js ]; then
+            server_directory=.next/standalone/apps/web
+          elif [ -f .next/standalone/server.js ]; then
+            server_directory=.next/standalone
+          else
+            echo "Standalone Next.js server entrypoint is missing" >&2
+            exit 1
+          fi
+          mkdir -p "$server_directory/.next"
+          cp -R .next/static "$server_directory/.next/static"
+          if [ -d public ]; then cp -R public "$server_directory/public"; fi
+          tar -czf recall-next-server.tar.gz -C .next/standalone .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: recall-web
+          path: apps/web/recall-next-server.tar.gz
+          if-no-files-found: error
+          retention-days: 14

@@ -51,6 +51,11 @@ import {
 import { NativeWorkspaceAuthoringPanel } from "./src/components/NativeWorkspaceAuthoringPanel";
 import { NativeTodayScreen } from "./src/components/NativeTodayScreen";
 import { NativeAppShell } from "./src/components/NativeAppShell";
+import {
+  NativeDailyReminderSettingsPanel,
+  useNativeDailyReminders,
+} from "./src/components/NativeDailyReminderSettingsPanel";
+import { NativeBudgetSettingsPanel } from "./src/components/NativeBudgetSettingsPanel";
 import { NativeAccountPanel } from "./src/components/NativeAccountPanel";
 import { pickAnkiImport } from "./src/storage/native-anki-import";
 import { pickNativeMedia } from "./src/storage/native-media-picker";
@@ -61,6 +66,9 @@ import { clearNativePendingOperations } from "./src/storage/native-operation-sto
 import { createNativeWorkspaceLifetime } from "./src/storage/native-workspace-lifetime";
 import { encodePublicationShareToken } from "@recall/application";
 import { identifyObjectiveGaps } from "@recall/ai-core";
+import { clearNativeKnowledgeNotebooks } from "./src/storage/native-knowledge-notebook-store";
+import { clearNativeDailyReminders } from "./src/storage/native-daily-reminders";
+import { clearNativeLocalBudget } from "./src/storage/native-local-ai-budget";
 import { NativeTutorPanel } from "./src/components/NativeTutorPanel";
 import { type CardProposal } from "@recall/ai-core";
 import { makeNativeTutorApi } from "./src/storage/native-tutor-api";
@@ -288,6 +296,11 @@ export default function App() {
   const [now, setNow] = useState(() => Date.now());
   const reviewInProgress = useRef(false);
   const [reviewPending, setReviewPending] = useState(false);
+  const [activeTab, setActiveTab] = useState<"Today" | "Library" | "Tutor" | "Sharing" | "Account">(
+    "Today",
+  );
+  const openReminderToday = useCallback(() => setActiveTab("Today"), [setActiveTab]);
+  const dailyReminders = useNativeDailyReminders(openReminderToday);
   const [activeAreaId, setActiveAreaId] = useState<string | null>(null);
   const [syncConflictWorkspace, setSyncConflictWorkspace] = useState<Workspace | null>(null);
   const [nativeTutorSessionIds, setNativeTutorSessionIds] = useState<
@@ -322,7 +335,15 @@ export default function App() {
       );
       const tutorSessions = yield* Effect.either(clearNativeTutorSessionIds(targets.areaIds));
       const pendingOperationsCleared = Either.isRight(pendingOperations);
-      const tutorSessionsCleared = Either.isRight(tutorSessions);
+      const notebooks = yield* Effect.either(clearNativeKnowledgeNotebooks(null));
+      const reminders = yield* Effect.either(clearNativeDailyReminders);
+      if (Either.isRight(reminders)) dailyReminders.markCleared();
+      const budgets = yield* Effect.either(clearNativeLocalBudget);
+      const tutorSessionsCleared =
+        Either.isRight(tutorSessions) &&
+        Either.isRight(notebooks) &&
+        Either.isRight(reminders) &&
+        Either.isRight(budgets);
       if (pendingOperationsCleared && tutorSessionsCleared) {
         pendingCleanupTargets.current = { areaIds: [], forkVersionIds: [] };
         setNativeTutorSessionIds({});
@@ -333,20 +354,29 @@ export default function App() {
   const tutorApi = useMemo(() => {
     const apiUrl = process.env.EXPO_PUBLIC_RECALL_API_URL ?? "";
     if (!apiUrl.trim() || !supabaseAuthClient) return null;
-    return makeNativeTutorApi(apiUrl, async () => {
-      const client = supabaseAuthClient;
-      if (!client) return null;
-      const result = await Effect.runPromise(
-        Effect.either(
-          Effect.tryPromise({
-            try: () => client.auth.getSession(),
-            catch: () => ({ _tag: "TutorSessionReadError" }) as const,
-          }),
-        ),
-      );
-      return Either.isRight(result) ? (result.right.data.session?.access_token ?? null) : null;
-    });
-  }, []);
+    return makeNativeTutorApi(
+      apiUrl,
+      async () => {
+        const client = supabaseAuthClient;
+        if (!client) return null;
+        const result = await Effect.runPromise(
+          Effect.either(
+            Effect.tryPromise({
+              try: () => client.auth.getSession(),
+              catch: () => ({ _tag: "TutorSessionReadError" }) as const,
+            }),
+          ),
+        );
+        if (Either.isLeft(result)) return null;
+        const session = result.right.data.session;
+        const owner = Schema.decodeUnknownEither(Schema.UUID)(session?.user.id);
+        return Either.isRight(owner) && owner.right === accountUserId
+          ? (session?.access_token ?? null)
+          : null;
+      },
+      () => accountUserId,
+    );
+  }, [accountUserId]);
 
   useEffect(() => {
     const client = supabaseAuthClient;
@@ -1392,8 +1422,14 @@ export default function App() {
   const tutorPanel =
     activePublishingArea && Either.isRight(activePublishingArea) ? (
       <NativeTutorPanel
-        key={`${activeArea?.id ?? "no-area"}:${nativeTutorSessionId ?? "new"}`}
+        key={activeArea?.id ?? "no-area"}
         area={activePublishingArea.right}
+        reviewEvents={workspace?.reviewEvents ?? []}
+        mayWrite={() =>
+          !workspaceLifetime.isBlocked() &&
+          workspaceLifetime.generation() === operationGeneration &&
+          cacheWritable
+        }
         objectiveGaps={
           activeArea
             ? identifyObjectiveGaps(activeArea, workspace?.reviewEvents ?? [], new Date(now))
@@ -1423,10 +1459,17 @@ export default function App() {
           );
         }}
         onApproveProposal={approveTutorProposal}
+        onStartReview={() => {
+          setNow(Date.now());
+          setShowAnswer(false);
+          setActiveTab("Today");
+        }}
       />
     ) : null;
   return (
     <NativeAppShell
+      activeTab={activeTab}
+      onTabChange={setActiveTab}
       areas={workspace?.areas ?? []}
       activeAreaId={activeAreaId}
       selectionDisabled={reviewPending}
@@ -1481,62 +1524,68 @@ export default function App() {
         />
       }
       account={
-        <NativeAccountPanel
-          cloudAvailable={supabaseAuthClient !== null}
-          account={accountEmail}
-          onRequestSignIn={async (email) => {
-            const result = await Effect.runPromise(Effect.either(sendNativeMagicLink(email)));
-            return Either.isRight(result) && result.right
-              ? "Check your email for a sign-in link."
-              : "Could not send a sign-in link. Check your email and connection.";
-          }}
-          onSignOut={async () => {
-            const client = supabaseAuthClient;
-            if (!client) return "Cloud sign-out is unavailable on this device.";
-            const result = await Effect.runPromise(
-              Effect.either(
-                Effect.tryPromise({
-                  try: () => client.auth.signOut(),
-                  catch: () => ({ _tag: "SignOutRequestError" }) as const,
-                }),
-              ),
-            );
-            return Either.isRight(result) && !result.right.error
-              ? "Signed out. This device’s local study data remains available."
-              : "Could not sign out. Your current account session is unchanged.";
-          }}
-          onSync={() => syncCloudWorkspace()}
-          ownershipIssue={
-            workspace?.syncOwnerId && accountUserId && workspace.syncOwnerId !== accountUserId
-              ? "account-mismatch"
-              : syncOwnershipIssue
-          }
-          onAdoptLegacyOwner={() => syncCloudWorkspace(true)}
-          onResetForAccount={() =>
-            Alert.alert(
-              "Start a fresh workspace?",
-              "Export a private backup first. Resetting removes this device’s saved workspace and attachments; cloud data is unchanged.",
-              [
-                { text: "Cancel", style: "cancel" },
-                {
-                  text: "Reset local workspace",
-                  style: "destructive",
-                  onPress: resetLocalWorkspace,
-                },
-              ],
-            )
-          }
-          conflictAreas={syncConflictWorkspace?.areas.map((area) => area.title) ?? null}
-          onUseServerVersion={useServerWorkspace}
-          onImport={importKnowledgeArea}
-          onExport={exportActiveArea}
-          onImportDelimited={importKnowledgeArea}
-          onExportDelimited={exportActiveArea}
-          onBackupRestore={restorePrivateBackup}
-          onBackupExport={exportPrivateBackup}
-          onExportAccount={exportAccountData}
-          onDeleteAccount={deleteAccountData}
-        />
+        <>
+          <NativeDailyReminderSettingsPanel controller={dailyReminders} />
+          {accountUserId && (
+            <NativeBudgetSettingsPanel key={accountUserId} accountId={`hosted:${accountUserId}`} />
+          )}
+          <NativeAccountPanel
+            cloudAvailable={supabaseAuthClient !== null}
+            account={accountEmail}
+            onRequestSignIn={async (email) => {
+              const result = await Effect.runPromise(Effect.either(sendNativeMagicLink(email)));
+              return Either.isRight(result) && result.right
+                ? "Check your email for a sign-in link."
+                : "Could not send a sign-in link. Check your email and connection.";
+            }}
+            onSignOut={async () => {
+              const client = supabaseAuthClient;
+              if (!client) return "Cloud sign-out is unavailable on this device.";
+              const result = await Effect.runPromise(
+                Effect.either(
+                  Effect.tryPromise({
+                    try: () => client.auth.signOut(),
+                    catch: () => ({ _tag: "SignOutRequestError" }) as const,
+                  }),
+                ),
+              );
+              return Either.isRight(result) && !result.right.error
+                ? "Signed out. This device’s local study data remains available."
+                : "Could not sign out. Your current account session is unchanged.";
+            }}
+            onSync={() => syncCloudWorkspace()}
+            ownershipIssue={
+              workspace?.syncOwnerId && accountUserId && workspace.syncOwnerId !== accountUserId
+                ? "account-mismatch"
+                : syncOwnershipIssue
+            }
+            onAdoptLegacyOwner={() => syncCloudWorkspace(true)}
+            onResetForAccount={() =>
+              Alert.alert(
+                "Start a fresh workspace?",
+                "Export a private backup first. Resetting removes this device’s saved workspace and attachments; cloud data is unchanged.",
+                [
+                  { text: "Cancel", style: "cancel" },
+                  {
+                    text: "Reset local workspace",
+                    style: "destructive",
+                    onPress: resetLocalWorkspace,
+                  },
+                ],
+              )
+            }
+            conflictAreas={syncConflictWorkspace?.areas.map((area) => area.title) ?? null}
+            onUseServerVersion={useServerWorkspace}
+            onImport={importKnowledgeArea}
+            onExport={exportActiveArea}
+            onImportDelimited={importKnowledgeArea}
+            onExportDelimited={exportActiveArea}
+            onBackupRestore={restorePrivateBackup}
+            onBackupExport={exportPrivateBackup}
+            onExportAccount={exportAccountData}
+            onDeleteAccount={deleteAccountData}
+          />
+        </>
       }
     />
   );

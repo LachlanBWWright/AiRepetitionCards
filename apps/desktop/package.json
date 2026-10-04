@@ -8,18 +8,18 @@
   "type": "module",
   "main": "./out/main/index.js",
   "scripts": {
-    "dev": "electron-vite dev",
-    "build": "electron-vite build",
-    "package": "electron-vite build && electron-builder --dir",
-    "dist:linux": "electron-vite build && electron-builder --linux AppImage --x64 --publish never",
-    "dist:mac": "electron-vite build && electron-builder --mac dmg zip --x64 --publish never -c.mac.identity=null",
-    "dist:mac:arm64": "electron-vite build && electron-builder --mac dmg zip --arm64 --publish never -c.mac.identity=null",
-    "dist:windows": "electron-vite build && electron-builder --win nsis --x64 --publish never",
+    "dev": "node ../web/scripts/prepare-ocr-assets.mjs desktop && electron-vite dev",
+    "build": "node ../web/scripts/prepare-ocr-assets.mjs desktop && electron-vite build",
+    "package": "node ../web/scripts/prepare-ocr-assets.mjs desktop && electron-vite build && electron-builder --dir",
+    "dist:linux": "node ../web/scripts/prepare-ocr-assets.mjs desktop && electron-vite build && electron-builder --linux AppImage --x64 --publish never",
+    "dist:mac": "node ../web/scripts/prepare-ocr-assets.mjs desktop && electron-vite build && electron-builder --mac dmg zip --x64 --publish never -c.mac.identity=null",
+    "dist:mac:arm64": "node ../web/scripts/prepare-ocr-assets.mjs desktop && electron-vite build && electron-builder --mac dmg zip --arm64 --publish never -c.mac.identity=null",
+    "dist:windows": "node ../web/scripts/prepare-ocr-assets.mjs desktop && electron-vite build && electron-builder --win nsis --x64 --publish never",
     "typecheck": "tsc --noEmit",
     "lint": "eslint --max-warnings=0",
-    "dist:mac:signed": "electron-vite build && electron-builder --mac dmg zip --x64 --publish never -c.forceCodeSigning=true -c.mac.hardenedRuntime=true -c.mac.notarize=true",
-    "dist:mac:arm64:signed": "electron-vite build && electron-builder --mac dmg zip --arm64 --publish never -c.forceCodeSigning=true -c.mac.hardenedRuntime=true -c.mac.notarize=true",
-    "dist:windows:signed": "electron-vite build && electron-builder --win nsis --x64 --publish never -c.forceCodeSigning=true -c.win.signExecutable=true"
+    "dist:mac:signed": "node ../web/scripts/prepare-ocr-assets.mjs desktop && electron-vite build && electron-builder --mac dmg zip --x64 --publish never -c.forceCodeSigning=true -c.mac.hardenedRuntime=true -c.mac.notarize=true",
+    "dist:mac:arm64:signed": "node ../web/scripts/prepare-ocr-assets.mjs desktop && electron-vite build && electron-builder --mac dmg zip --arm64 --publish never -c.forceCodeSigning=true -c.mac.hardenedRuntime=true -c.mac.notarize=true",
+    "dist:windows:signed": "node ../web/scripts/prepare-ocr-assets.mjs desktop && electron-vite build && electron-builder --win nsis --x64 --publish never -c.forceCodeSigning=true -c.win.signExecutable=true"
   },
   "build": {
     "appId": "com.recall.study",

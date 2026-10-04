@@ -1,0 +1,5 @@
+{
+  "platforms": ["apple", "android"],
+  "apple": { "modules": ["RecallOcrModule"] },
+  "android": { "modules": ["expo.modules.recallocr.RecallOcrModule"] }
+}

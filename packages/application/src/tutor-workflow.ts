@@ -1,6 +1,8 @@
 import { Effect, Either, Schema } from "effect";
 import {
   AnswerEvaluationSchema,
+  StudyCardResultSchema,
+  type StudyCardInput,
   AiProviderCapabilitiesSchema,
   MAX_TUTOR_INFERENCE_BYTES,
   type AiProviderCapabilities,
@@ -108,6 +110,12 @@ export function prepareTutorWorkflow(
       !context.knowledgeArea.objectives.some((item) => item.id === action.objectiveId)
     )
       return yield* Effect.fail(failure("unknown-objective"));
+    if (
+      action.action === "study-card" &&
+      action.material.objectiveId !== null &&
+      !context.knowledgeArea.objectives.some((item) => item.id === action.material.objectiveId)
+    )
+      return yield* Effect.fail(failure("unknown-objective"));
     if (action.action === "evaluate" && (!snapshot.pendingQuestion || snapshot.state.quiz))
       return yield* Effect.fail(failure("question-required"));
     if (action.action === "evaluate-quiz-answer") {
@@ -140,6 +148,9 @@ export function prepareTutorWorkflow(
 
 /** Provider effects are supplied by the app boundary; vendor failures retain their type. */
 export interface TutorWorkflowProvider<E> {
+  readonly generateStudyCard?: (
+    context: TutorContext & { readonly material: StudyCardInput },
+  ) => Effect.Effect<unknown, E>;
   readonly capabilities: AiProviderCapabilities;
   readonly generateQuestion: (context: TutorContext) => Effect.Effect<unknown, E>;
   readonly evaluateAnswer: (
@@ -212,7 +223,14 @@ export function executeTutorWorkflow<E, F = never>(
           Effect.flatMap(provider.generateTargetedQuiz),
         ),
     };
-    if (action.action === "question") inference = bounded.generateQuestion(context);
+    if (action.action === "study-card") {
+      if (!provider.generateStudyCard) return yield* Effect.fail(failure("unsupported-operation"));
+      const materialContext = yield* selectTutorInferenceContext(
+        { ...context, material: action.material },
+        maxInputBytes,
+      );
+      inference = provider.generateStudyCard(materialContext);
+    } else if (action.action === "question") inference = bounded.generateQuestion(context);
     else if (action.action === "targeted-quiz")
       inference = bounded.generateTargetedQuiz({ ...context, objectiveId: action.objectiveId });
     else if (action.action === "propose-card") {
@@ -252,7 +270,32 @@ export function executeTutorWorkflow<E, F = never>(
     let response: TutorActionResponse;
     let appendedHistory: readonly TutorHistoryMessage[] = [];
     let pendingQuestion = snapshot.pendingQuestion;
-    if (action.action === "question") {
+    if (action.action === "study-card") {
+      const result = yield* decodeResult(StudyCardResultSchema, metered.result);
+      if (
+        result.proposal.objectiveId !== action.material.objectiveId ||
+        result.sourceReferences.some(
+          (reference) =>
+            !action.material.sources.some(
+              (source) =>
+                source.materialId === reference.materialId &&
+                source.sectionId === reference.sectionId &&
+                source.pageNumber === reference.pageNumber &&
+                source.text.includes(reference.quote),
+            ),
+        )
+      )
+        return yield* Effect.fail(failure("invalid-provider-response"));
+      response = {
+        action: "study-card",
+        sessionId: state.sessionId,
+        proposalId,
+        result,
+        providerResolutionRequired: true,
+      };
+      state = { ...state, proposal: { proposalId, content: result.proposal } };
+      pendingQuestion = false;
+    } else if (action.action === "question") {
       const result = yield* decodeResult(TutorQuestionSchema, metered.result);
       response = { action: action.action, sessionId: state.sessionId, result };
       appendedHistory = [{ role: "assistant", content: result.question }];
@@ -325,9 +368,13 @@ export function executeTutorWorkflow<E, F = never>(
         response = { action: action.action, sessionId: state.sessionId, result };
       }
     }
+    const resultObjectiveId =
+      response.action === "study-card"
+        ? response.result.proposal.objectiveId
+        : response.result.objectiveId;
     if (
-      response.result.objectiveId !== null &&
-      !context.knowledgeArea.objectives.some((item) => item.id === response.result.objectiveId)
+      resultObjectiveId !== null &&
+      !context.knowledgeArea.objectives.some((item) => item.id === resultObjectiveId)
     )
       return yield* Effect.fail(failure("invalid-provider-response"));
     const validatedResponse = yield* decodeResult(TutorActionResponseSchema, response);

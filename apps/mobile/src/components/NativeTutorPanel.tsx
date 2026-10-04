@@ -14,7 +14,8 @@ import {
   selectTutorContextHistory,
   selectTutorInferenceContext,
 } from "@recall/ai-core";
-import type { KnowledgeArea } from "@recall/domain";
+import { NativeKnowledgeNotebookPanel } from "./NativeKnowledgeNotebookPanel";
+import type { ReviewEvent, KnowledgeArea } from "@recall/domain";
 import {
   accumulateTutorObservations,
   selectTutorQuizObjective,
@@ -28,20 +29,26 @@ type TutorApi = ReturnType<typeof makeNativeTutorApi>;
 
 export function NativeTutorPanel({
   area,
+  reviewEvents = [],
+  mayWrite = () => true,
   api,
   createId,
   initialSessionId,
   onSessionIdChange,
   onApproveProposal,
+  onStartReview,
   objectiveGaps = [],
   initialProposalDraft,
   initialNotice = null,
   initialAnswer = "",
 }: {
+  readonly onStartReview?: () => void;
   readonly initialProposalDraft?: { readonly proposalId: string; readonly content: CardProposal };
   readonly initialNotice?: string | null;
   readonly initialAnswer?: string;
   readonly area: KnowledgeArea | null;
+  readonly reviewEvents?: readonly ReviewEvent[];
+  readonly mayWrite?: () => boolean;
   readonly api: TutorApi | null;
   readonly createId: () => string;
   readonly initialSessionId: string | null;
@@ -174,7 +181,7 @@ export function NativeTutorPanel({
           })),
         },
       }));
-    } else
+    } else if (response.action === "evaluate-quiz-answer")
       setSession((current) => ({
         ...(current ?? emptySession(response.sessionId)),
         quiz: response.quiz,
@@ -354,6 +361,15 @@ export function NativeTutorPanel({
   const objective = session?.quiz?.questions.find((item) => item.learnerAnswer === null);
   return (
     <View testID="native-tutor-panel" style={styles.panel}>
+      <NativeKnowledgeNotebookPanel
+        area={area}
+        reviewEvents={reviewEvents}
+        api={api}
+        createId={createId}
+        mayWrite={mayWrite}
+        onApproveProposal={onApproveProposal}
+        onStartReview={onStartReview}
+      />
       <View style={styles.heading}>
         <View>
           <Text style={styles.eyebrow}>AI STUDY PARTNER</Text>

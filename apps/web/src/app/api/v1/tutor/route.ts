@@ -268,7 +268,14 @@ async function handlePOST(request: NextRequest): Promise<NextResponse> {
   const provider = createHostedTutorProvider(auth.userId, aiCallId, new Date());
   if (Either.isLeft(provider)) return aiFailureResponse(provider.left);
   const reservation = await Effect.runPromise(
-    Effect.either(reserveTutorCall(auth.client, aiCallId, operation.action, model)),
+    Effect.either(
+      reserveTutorCall(
+        auth.client,
+        aiCallId,
+        operation.action === "study-card" ? "propose-card" : operation.action,
+        model,
+      ),
+    ),
   );
   if (Either.isLeft(reservation)) return unavailable();
   if (!reservation.right)
@@ -296,7 +303,11 @@ async function handlePOST(request: NextRequest): Promise<NextResponse> {
     if (error._tag === "TutorWriteUnavailable") return unavailable();
     return aiFailureResponse(error);
   }
-  const { response, snapshot: next } = transition.right;
+  const { snapshot: next } = transition.right;
+  const response =
+    transition.right.response.action === "study-card"
+      ? { ...transition.right.response, providerResolutionRequired: false }
+      : transition.right.response;
   const sessionId = response.sessionId;
   if (prepared.right.createsSession) {
     const snapshotJson = await Effect.runPromise(
@@ -393,6 +404,9 @@ async function handlePOST(request: NextRequest): Promise<NextResponse> {
       ))
     )
       return unavailable();
+  } else if (response.action === "study-card") {
+    // Source proposals are approved locally. Existing SQL proposals require learner
+    // observations, which source extraction must never fabricate.
   } else {
     if (!observationId) return unavailable();
     const content = await Effect.runPromise(Effect.either(toDatabaseJson(response.result)));

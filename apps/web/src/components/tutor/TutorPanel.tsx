@@ -17,7 +17,7 @@ import {
   selectTutorInferenceContext,
 } from "@recall/ai-core";
 import { tutorApiFailureMessage } from "@recall/application";
-import type { KnowledgeArea } from "@recall/domain";
+import type { KnowledgeArea, ReviewEvent } from "@recall/domain";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { tutorApi } from "@/lib/tutor-api";
 import { tutorPrivacyApi } from "@/lib/tutor-privacy-api";
@@ -26,6 +26,7 @@ import {
   localWritesBlocked,
 } from "@/features/workspace/local-write-coordinator";
 import { TutorPrivacyControls } from "./TutorPrivacyControls";
+import { KnowledgeNotebookPanel } from "./KnowledgeNotebookPanel";
 
 type DialogueEntry = TutorContext["history"][number];
 export type TutorPanelInitialState = {
@@ -50,6 +51,8 @@ export function TutorPanel({
   api = tutorApi,
   sessionNamespace = "hosted",
   privacyApi = tutorPrivacyApi,
+  reviewEvents,
+  onStartReview,
 }: {
   knowledgeArea: KnowledgeArea;
   onApprove: (
@@ -64,6 +67,8 @@ export function TutorPanel({
   api?: typeof tutorApi;
   sessionNamespace?: string;
   privacyApi?: typeof tutorPrivacyApi;
+  reviewEvents?: readonly ReviewEvent[];
+  onStartReview?: () => void;
 }) {
   const restoreEpoch = useRef(0);
   const [history, setHistory] = useState<DialogueEntry[]>([...(initialState?.history ?? [])]);
@@ -226,7 +231,7 @@ export function TutorPanel({
             ],
           },
         });
-      } else {
+      } else if (input.action === "evaluate-quiz-answer") {
         const currentQuiz = quiz;
         const question = currentQuiz?.questions[input.questionIndex];
         if (!currentQuiz || !question) return;
@@ -361,8 +366,10 @@ export function TutorPanel({
       setSessionEvidence((current) => [...current, response.result]);
       return;
     }
-    setProposalId(response.proposalId);
-    setProposal(response.result);
+    if (response.action === "propose-card") {
+      setProposalId(response.proposalId);
+      setProposal(response.result);
+    }
   }
 
   function resolveProposal(state: "approved" | "rejected") {
@@ -530,280 +537,296 @@ export function TutorPanel({
   }
 
   return (
-    <section className="tutor-panel" aria-labelledby="tutor-panel-title">
-      <div className="tutor-panel-heading">
-        <div>
-          <p className="eyebrow">OPTIONAL AI PRACTICE</p>
-          <h2 id="tutor-panel-title">Study with a tutor</h2>
-        </div>
-        {history.length === 0 ? (
-          <button
-            className="text-button"
-            type="button"
-            disabled={busy}
-            onClick={() =>
-              send({ action: "question", context, ...(sessionId ? { sessionId } : {}) })
-            }
-          >
-            {busy ? "Starting…" : "Start"}
-          </button>
-        ) : (
-          <button
-            className="text-button"
-            type="button"
-            disabled={busy}
-            onClick={() =>
-              send({ action: "question", context, ...(sessionId ? { sessionId } : {}) })
-            }
-          >
-            Ask another
-          </button>
-        )}
-      </div>
-      <p className="tutor-context-status" role="status">
-        {Either.isRight(contextPreview)
-          ? `Tutor context: ${contextPreview.right.knowledgeArea.cards.length} of ${knowledgeArea.cards.length} cards, with objective definitions and AI instructions retained.`
-          : "Required context exceeds the tutor budget. Shorten objective descriptions or AI instructions."}
-      </p>
-      <TutorPrivacyControls
-        api={privacyApi}
+    <>
+      <KnowledgeNotebookPanel
+        key={`${sessionNamespace}:${knowledgeArea.id}`}
+        knowledgeArea={knowledgeArea}
+        api={api}
+        sessionNamespace={sessionNamespace}
         demo={demo}
-        local={sessionNamespace.startsWith("chatgpt:")}
-        disabled={busy}
-        onBusyChange={setBusy}
-        onCleared={clearTutorState}
+        onApprove={onApprove}
+        {...(reviewEvents === undefined ? {} : { reviewEvents })}
+        {...(onStartReview === undefined ? {} : { onStartReview })}
       />
-      {visibleGaps.length > 0 && (
-        <div className="tutor-gaps" aria-labelledby="tutor-gaps-title">
-          <p className="eyebrow" id="tutor-gaps-title">
-            OBJECTIVES TO PRACTICE
-          </p>
-          {visibleGaps.map((gap) => (
-            <div className="tutor-gap" key={gap.objectiveId}>
-              <div>
-                <div className="tutor-gap-heading">
-                  <strong>{gap.objectiveTitle}</strong>
-                  <StatusBadge tone={gap.severity === "high" ? "warning" : "neutral"}>
-                    {gap.severity === "high" ? "Priority" : "Practice"}
-                  </StatusBadge>
-                </div>
-                <p>{gap.evidenceSummary}</p>
-              </div>
-              <button
-                className="text-button"
-                type="button"
-                disabled={busy}
-                onClick={() => startTargetedQuiz(gap)}
-              >
-                Quiz this objective
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
-      {history.map((entry, index) => (
-        <p className={`tutor-message tutor-${entry.role}`} key={`${index}-${entry.role}`}>
-          <strong>{entry.role === "assistant" ? "Tutor" : "You"}</strong>
-          {entry.content}
-        </p>
-      ))}
-      {history.length > 0 && !busy && !evaluation && (
-        <form
-          className="tutor-answer-form"
-          onSubmit={(event) => {
-            event.preventDefault();
-            if (!answer.trim()) return;
-            if (sessionId) send({ action: "evaluate", sessionId, answer: answer.trim() });
-          }}
-        >
-          <label className="visually-hidden" htmlFor="tutor-answer">
-            Your answer
-          </label>
-          <textarea
-            id="tutor-answer"
-            value={answer}
-            onChange={(event) => setAnswer(event.target.value)}
-            placeholder="Write your answer…"
-            maxLength={8000}
-            required
-          />
-          <button className="text-button" type="submit" disabled={busy || !answer.trim()}>
-            {busy ? "Checking…" : "Check answer"}
-          </button>
-        </form>
-      )}
-      {evaluation && (
-        <div className="tutor-evaluation" role="status">
-          <span className={`history-rating rating-${evaluation.result}`}>{evaluation.result}</span>
-          <span>{Math.round(evaluation.confidence * 100)}% confidence</span>
-          <span>Objective: {objectiveTitle(evaluation.objectiveId)}</span>
-          {evaluation.misconception && <p>{evaluation.misconception}</p>}
-          {evaluation.suggestedAction === "propose-card" && !proposal && (
+      <section className="tutor-panel" aria-labelledby="tutor-panel-title">
+        <div className="tutor-panel-heading">
+          <div>
+            <p className="eyebrow">OPTIONAL AI PRACTICE</p>
+            <h2 id="tutor-panel-title">Study with a tutor</h2>
+          </div>
+          {history.length === 0 ? (
             <button
               className="text-button"
               type="button"
               disabled={busy}
-              onClick={() => {
-                if (sessionId) send({ action: "propose-card", sessionId });
-              }}
+              onClick={() =>
+                send({ action: "question", context, ...(sessionId ? { sessionId } : {}) })
+              }
             >
-              {busy ? "Drafting…" : "Suggest a flashcard"}
+              {busy ? "Starting…" : "Start"}
             </button>
-          )}
-        </div>
-      )}
-      {quiz && (
-        <div className="tutor-quiz">
-          <p className="eyebrow">TARGETED SELF-CHECK · {quiz.objectiveTitle}</p>
-          {quiz.questions.map((item, index) => (
-            <div className="tutor-quiz-question" key={`${quiz.objectiveId}-${index}`}>
-              <strong>
-                {index + 1}. {item.prompt}
-              </strong>
-              {!item.evaluation ? (
-                <form
-                  className="tutor-answer-form"
-                  onSubmit={(event) => {
-                    event.preventDefault();
-                    const submittedAnswer = item.learnerAnswer?.trim();
-                    if (!submittedAnswer || !sessionId) return;
-                    send({
-                      action: "evaluate-quiz-answer",
-                      sessionId,
-                      questionIndex: index,
-                      answer: submittedAnswer,
-                    });
-                  }}
-                >
-                  <label className="visually-hidden" htmlFor={`tutor-quiz-answer-${index}`}>
-                    Your answer to question {index + 1}
-                  </label>
-                  <textarea
-                    id={`tutor-quiz-answer-${index}`}
-                    disabled={busy && pendingQuizQuestionIndex === index}
-                    value={item.learnerAnswer ?? ""}
-                    onChange={(event) => {
-                      const learnerAnswer = event.target.value;
-                      setQuiz(
-                        (current) =>
-                          current && {
-                            ...current,
-                            questions: current.questions.map((question, questionIndex) =>
-                              questionIndex === index ? { ...question, learnerAnswer } : question,
-                            ),
-                          },
-                      );
-                    }}
-                    placeholder="Write your answer…"
-                    maxLength={8000}
-                    required
-                  />
-                  <button
-                    className="text-button"
-                    type="submit"
-                    disabled={busy || !item.learnerAnswer?.trim() || !sessionId}
-                  >
-                    {busy ? "Checking…" : "Check answer"}
-                  </button>
-                </form>
-              ) : (
-                <div className="tutor-evaluation" role="status">
-                  <span className={`history-rating rating-${item.evaluation.result}`}>
-                    {item.evaluation.result}
-                  </span>
-                  <span>{Math.round(item.evaluation.confidence * 100)}% confidence</span>
-                  <p>{item.evaluation.feedback}</p>
-                  <details>
-                    <summary>Compare with a sample answer</summary>
-                    <p>{item.expectedAnswer}</p>
-                  </details>
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
-      {proposal && (
-        <div className="tutor-proposal">
-          <p className="eyebrow">CARD PROPOSAL · REVIEW BEFORE ADDING</p>
-          <label htmlFor="tutor-proposal-front">Question</label>
-          <textarea
-            id="tutor-proposal-front"
-            value={proposal.front}
-            maxLength={1000}
-            disabled={busy || approvalSaved}
-            onChange={(event) => setProposal({ ...proposal, front: event.target.value })}
-          />
-          <label htmlFor="tutor-proposal-back">Answer</label>
-          <textarea
-            id="tutor-proposal-back"
-            value={proposal.back}
-            maxLength={3000}
-            disabled={busy || approvalSaved}
-            onChange={(event) => setProposal({ ...proposal, back: event.target.value })}
-          />
-          <label htmlFor="tutor-proposal-objective">Learning objective</label>
-          <select
-            id="tutor-proposal-objective"
-            value={proposal.objectiveId ?? ""}
-            disabled={busy || approvalSaved}
-            onChange={(event) =>
-              setProposal({ ...proposal, objectiveId: event.target.value || null })
-            }
-          >
-            <option value="">No objective</option>
-            {proposal.objectiveId &&
-              !knowledgeArea.objectives.some(
-                (objective) => objective.id === proposal.objectiveId,
-              ) && (
-                <option value={proposal.objectiveId}>Unavailable objective: choose another</option>
-              )}
-            {knowledgeArea.objectives.map((objective) => (
-              <option key={objective.id} value={objective.id}>
-                {objective.title}
-              </option>
-            ))}
-          </select>
-          <label htmlFor="tutor-proposal-rationale">Why this card helps</label>
-          <textarea
-            id="tutor-proposal-rationale"
-            value={proposal.rationale}
-            maxLength={1000}
-            disabled={busy || approvalSaved}
-            onChange={(event) => setProposal({ ...proposal, rationale: event.target.value })}
-          />
-          {approvalSaved && (
-            <small>
-              This card is saved on this device. Retry approval using the saved content; another
-              card will not be created.
-            </small>
-          )}
-          <div>
+          ) : (
             <button
               className="text-button"
               type="button"
-              disabled={busy || !proposalId || approvalSaved}
-              onClick={() => resolveProposal("rejected")}
+              disabled={busy}
+              onClick={() =>
+                send({ action: "question", context, ...(sessionId ? { sessionId } : {}) })
+              }
             >
-              Discard
+              Ask another
             </button>
-            <button
-              className="text-button"
-              type="button"
-              disabled={busy || !proposalId}
-              onClick={() => resolveProposal("approved")}
-            >
-              {busy ? "Saving…" : approvalSaved ? "Retry approval" : "Approve card"}
-            </button>
-          </div>
+          )}
         </div>
-      )}
-      {busy && history.length > 0 && <p className="saved-state">Tutor is thinking…</p>}
-      {message && (
-        <p className="tutor-error" role="alert">
-          {message}
+        <p className="tutor-context-status" role="status">
+          {Either.isRight(contextPreview)
+            ? `Tutor context: ${contextPreview.right.knowledgeArea.cards.length} of ${knowledgeArea.cards.length} cards, with objective definitions and AI instructions retained.`
+            : "Required context exceeds the tutor budget. Shorten objective descriptions or AI instructions."}
         </p>
-      )}
-    </section>
+        <TutorPrivacyControls
+          api={privacyApi}
+          demo={demo}
+          local={sessionNamespace.startsWith("chatgpt:")}
+          disabled={busy}
+          onBusyChange={setBusy}
+          onCleared={clearTutorState}
+        />
+        {visibleGaps.length > 0 && (
+          <div className="tutor-gaps" aria-labelledby="tutor-gaps-title">
+            <p className="eyebrow" id="tutor-gaps-title">
+              OBJECTIVES TO PRACTICE
+            </p>
+            {visibleGaps.map((gap) => (
+              <div className="tutor-gap" key={gap.objectiveId}>
+                <div>
+                  <div className="tutor-gap-heading">
+                    <strong>{gap.objectiveTitle}</strong>
+                    <StatusBadge tone={gap.severity === "high" ? "warning" : "neutral"}>
+                      {gap.severity === "high" ? "Priority" : "Practice"}
+                    </StatusBadge>
+                  </div>
+                  <p>{gap.evidenceSummary}</p>
+                </div>
+                <button
+                  className="text-button"
+                  type="button"
+                  disabled={busy}
+                  onClick={() => startTargetedQuiz(gap)}
+                >
+                  Quiz this objective
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+        {history.map((entry, index) => (
+          <p className={`tutor-message tutor-${entry.role}`} key={`${index}-${entry.role}`}>
+            <strong>{entry.role === "assistant" ? "Tutor" : "You"}</strong>
+            {entry.content}
+          </p>
+        ))}
+        {history.length > 0 && !busy && !evaluation && (
+          <form
+            className="tutor-answer-form"
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (!answer.trim()) return;
+              if (sessionId) send({ action: "evaluate", sessionId, answer: answer.trim() });
+            }}
+          >
+            <label className="visually-hidden" htmlFor="tutor-answer">
+              Your answer
+            </label>
+            <textarea
+              id="tutor-answer"
+              value={answer}
+              onChange={(event) => setAnswer(event.target.value)}
+              placeholder="Write your answer…"
+              maxLength={8000}
+              required
+            />
+            <button className="text-button" type="submit" disabled={busy || !answer.trim()}>
+              {busy ? "Checking…" : "Check answer"}
+            </button>
+          </form>
+        )}
+        {evaluation && (
+          <div className="tutor-evaluation" role="status">
+            <span className={`history-rating rating-${evaluation.result}`}>
+              {evaluation.result}
+            </span>
+            <span>{Math.round(evaluation.confidence * 100)}% confidence</span>
+            <span>Objective: {objectiveTitle(evaluation.objectiveId)}</span>
+            {evaluation.misconception && <p>{evaluation.misconception}</p>}
+            {evaluation.suggestedAction === "propose-card" && !proposal && (
+              <button
+                className="text-button"
+                type="button"
+                disabled={busy}
+                onClick={() => {
+                  if (sessionId) send({ action: "propose-card", sessionId });
+                }}
+              >
+                {busy ? "Drafting…" : "Suggest a flashcard"}
+              </button>
+            )}
+          </div>
+        )}
+        {quiz && (
+          <div className="tutor-quiz">
+            <p className="eyebrow">TARGETED SELF-CHECK · {quiz.objectiveTitle}</p>
+            {quiz.questions.map((item, index) => (
+              <div className="tutor-quiz-question" key={`${quiz.objectiveId}-${index}`}>
+                <strong>
+                  {index + 1}. {item.prompt}
+                </strong>
+                {!item.evaluation ? (
+                  <form
+                    className="tutor-answer-form"
+                    onSubmit={(event) => {
+                      event.preventDefault();
+                      const submittedAnswer = item.learnerAnswer?.trim();
+                      if (!submittedAnswer || !sessionId) return;
+                      send({
+                        action: "evaluate-quiz-answer",
+                        sessionId,
+                        questionIndex: index,
+                        answer: submittedAnswer,
+                      });
+                    }}
+                  >
+                    <label className="visually-hidden" htmlFor={`tutor-quiz-answer-${index}`}>
+                      Your answer to question {index + 1}
+                    </label>
+                    <textarea
+                      id={`tutor-quiz-answer-${index}`}
+                      disabled={busy && pendingQuizQuestionIndex === index}
+                      value={item.learnerAnswer ?? ""}
+                      onChange={(event) => {
+                        const learnerAnswer = event.target.value;
+                        setQuiz(
+                          (current) =>
+                            current && {
+                              ...current,
+                              questions: current.questions.map((question, questionIndex) =>
+                                questionIndex === index ? { ...question, learnerAnswer } : question,
+                              ),
+                            },
+                        );
+                      }}
+                      placeholder="Write your answer…"
+                      maxLength={8000}
+                      required
+                    />
+                    <button
+                      className="text-button"
+                      type="submit"
+                      disabled={busy || !item.learnerAnswer?.trim() || !sessionId}
+                    >
+                      {busy ? "Checking…" : "Check answer"}
+                    </button>
+                  </form>
+                ) : (
+                  <div className="tutor-evaluation" role="status">
+                    <span className={`history-rating rating-${item.evaluation.result}`}>
+                      {item.evaluation.result}
+                    </span>
+                    <span>{Math.round(item.evaluation.confidence * 100)}% confidence</span>
+                    <p>{item.evaluation.feedback}</p>
+                    <details>
+                      <summary>Compare with a sample answer</summary>
+                      <p>{item.expectedAnswer}</p>
+                    </details>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+        {proposal && (
+          <div className="tutor-proposal">
+            <p className="eyebrow">CARD PROPOSAL · REVIEW BEFORE ADDING</p>
+            <label htmlFor="tutor-proposal-front">Question</label>
+            <textarea
+              id="tutor-proposal-front"
+              value={proposal.front}
+              maxLength={1000}
+              disabled={busy || approvalSaved}
+              onChange={(event) => setProposal({ ...proposal, front: event.target.value })}
+            />
+            <label htmlFor="tutor-proposal-back">Answer</label>
+            <textarea
+              id="tutor-proposal-back"
+              value={proposal.back}
+              maxLength={3000}
+              disabled={busy || approvalSaved}
+              onChange={(event) => setProposal({ ...proposal, back: event.target.value })}
+            />
+            <label htmlFor="tutor-proposal-objective">Learning objective</label>
+            <select
+              id="tutor-proposal-objective"
+              value={proposal.objectiveId ?? ""}
+              disabled={busy || approvalSaved}
+              onChange={(event) =>
+                setProposal({ ...proposal, objectiveId: event.target.value || null })
+              }
+            >
+              <option value="">No objective</option>
+              {proposal.objectiveId &&
+                !knowledgeArea.objectives.some(
+                  (objective) => objective.id === proposal.objectiveId,
+                ) && (
+                  <option value={proposal.objectiveId}>
+                    Unavailable objective: choose another
+                  </option>
+                )}
+              {knowledgeArea.objectives.map((objective) => (
+                <option key={objective.id} value={objective.id}>
+                  {objective.title}
+                </option>
+              ))}
+            </select>
+            <label htmlFor="tutor-proposal-rationale">Why this card helps</label>
+            <textarea
+              id="tutor-proposal-rationale"
+              value={proposal.rationale}
+              maxLength={1000}
+              disabled={busy || approvalSaved}
+              onChange={(event) => setProposal({ ...proposal, rationale: event.target.value })}
+            />
+            {approvalSaved && (
+              <small>
+                This card is saved on this device. Retry approval using the saved content; another
+                card will not be created.
+              </small>
+            )}
+            <div>
+              <button
+                className="text-button"
+                type="button"
+                disabled={busy || !proposalId || approvalSaved}
+                onClick={() => resolveProposal("rejected")}
+              >
+                Discard
+              </button>
+              <button
+                className="text-button"
+                type="button"
+                disabled={busy || !proposalId}
+                onClick={() => resolveProposal("approved")}
+              >
+                {busy ? "Saving…" : approvalSaved ? "Retry approval" : "Approve card"}
+              </button>
+            </div>
+          </div>
+        )}
+        {busy && history.length > 0 && <p className="saved-state">Tutor is thinking…</p>}
+        {message && (
+          <p className="tutor-error" role="alert">
+            {message}
+          </p>
+        )}
+      </section>
+    </>
   );
 }

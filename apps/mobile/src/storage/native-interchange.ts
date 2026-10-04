@@ -1,4 +1,5 @@
 import { Effect } from "effect";
+import { Schema } from "effect";
 import * as DocumentPicker from "expo-document-picker";
 import { File, Paths } from "expo-file-system";
 import * as Sharing from "expo-sharing";
@@ -7,6 +8,7 @@ import {
   exportDelimitedCards,
   importDelimitedCards,
   exportWorkspaceBackupPackage,
+  KnowledgeNotebookSchema,
   fromKnowledgeArea,
   importKnowledgeAreaPackage,
   importWorkspaceBackupPackage,
@@ -214,6 +216,50 @@ export function shareWorkspaceBackup(
         Sharing.shareAsync(file.uri, {
           mimeType: "application/zip",
           dialogTitle: "Private workspace backup",
+        }),
+      catch: () => ({ _tag: "NativeInterchangeFailure", reason: "export-failed" }) as const,
+    });
+  });
+}
+
+/** Export one private notebook as a separate, portable JSON file. */
+export function shareKnowledgeNotebook(
+  notebookInput: unknown,
+): Effect.Effect<void, NativeInterchangeFailure> {
+  return Effect.gen(function* () {
+    const notebook = yield* Schema.decodeUnknown(KnowledgeNotebookSchema)(notebookInput).pipe(
+      Effect.mapError(
+        () => ({ _tag: "NativeInterchangeFailure", reason: "export-failed" }) as const,
+      ),
+    );
+    const available = yield* Effect.tryPromise({
+      try: () => Sharing.isAvailableAsync(),
+      catch: () => ({ _tag: "NativeInterchangeFailure", reason: "sharing-unavailable" }) as const,
+    });
+    if (!available)
+      return yield* Effect.fail({
+        _tag: "NativeInterchangeFailure",
+        reason: "sharing-unavailable",
+      } as const);
+    const content = yield* Effect.try({
+      try: () => JSON.stringify(notebook, null, 2),
+      catch: () => ({ _tag: "NativeInterchangeFailure", reason: "export-failed" }) as const,
+    });
+    if (content.length > 10 * 1024 * 1024)
+      return yield* Effect.fail({
+        _tag: "NativeInterchangeFailure",
+        reason: "file-too-large",
+      } as const);
+    const file = new File(Paths.cache, `recall-notebook-${notebook.areaId}.json`);
+    yield* Effect.try({
+      try: () => file.write(content),
+      catch: () => ({ _tag: "NativeInterchangeFailure", reason: "export-failed" }) as const,
+    });
+    yield* Effect.tryPromise({
+      try: () =>
+        Sharing.shareAsync(file.uri, {
+          mimeType: "application/json",
+          dialogTitle: "Private knowledge notebook",
         }),
       catch: () => ({ _tag: "NativeInterchangeFailure", reason: "export-failed" }) as const,
     });
