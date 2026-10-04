@@ -41,6 +41,9 @@ jobs:
           distribution: temurin
           java-version: 17
       - uses: android-actions/setup-android@v3
+        with:
+          # Override the action's default: the legacy "tools" SDK package is unavailable.
+          packages: platform-tools
       - uses: gradle/actions/setup-gradle@v4
       - run: pnpm install --frozen-lockfile
       - name: Generate Android project without Expo accounts
