@@ -4,7 +4,15 @@ plugins {
 }
 group = 'expo.modules.recallocr'
 version = '0.1.0'
-android { namespace 'expo.modules.recallocr' }
+android {
+  namespace 'expo.modules.recallocr'
+
+  defaultConfig {
+    versionCode 1
+    // Expo's publication configuration reads the Android version separately.
+    versionName project.version.toString()
+  }
+}
 dependencies {
   // Bundled model: no first-use network/model download.
   implementation 'com.google.mlkit:text-recognition:16.0.1'
