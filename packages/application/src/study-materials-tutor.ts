@@ -14,6 +14,7 @@ const GenerateInput = Schema.Struct({
   materialId: Schema.UUID,
   sectionId: Schema.UUID,
   conceptId: ObjectiveIdSchema,
+  claimId: Schema.optional(Schema.UUID),
   depth: Schema.Literal("overview", "standard", "detailed"),
   goal: Schema.optional(Schema.String.pipe(Schema.minLength(1), Schema.maxLength(2000))),
 });
@@ -68,6 +69,19 @@ export function createStudyMaterialsTutor(
               notebook,
             ),
           );
+        const claim =
+          options.claimId === undefined
+            ? undefined
+            : notebook.coveragePlans
+                ?.find(
+                  (plan) =>
+                    plan.materialId === options.materialId && plan.sectionId === options.sectionId,
+                )
+                ?.claims.find((item) => item.id === options.claimId);
+        if (options.claimId !== undefined && (!claim || claim.decision !== "selected"))
+          return yield* Effect.fail(
+            fail("Approve and select this coverage claim before generating a card.", notebook),
+          );
         const charged = yield* reserveNotebookRequest(notebook, now, "propose-card").pipe(
           Effect.mapError((error) => fail(error.message, notebook)),
         );
@@ -79,6 +93,7 @@ export function createStudyMaterialsTutor(
             material: {
               goal: options.goal ?? notebook.goal,
               depth: options.depth,
+              ...(claim ? { claim: { title: claim.title, description: claim.description } } : {}),
               objectiveId: concept.objectiveId ?? null,
               sources: [
                 {
@@ -127,6 +142,7 @@ export function createStudyMaterialsTutor(
             proposals: [
               {
                 id: response.proposalId,
+                ...(claim ? { claimId: claim.id } : {}),
                 conceptId: concept.id,
                 proposal: response.result.proposal,
                 sourceReferences: response.result.sourceReferences,

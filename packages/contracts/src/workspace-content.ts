@@ -1,5 +1,10 @@
 import { Schema } from "effect";
-import { AccountIdSchema, AreaIdSchema, CardIdSchema, KnowledgeAreaSchema } from "@recall/domain";
+import {
+  AccountIdSchema,
+  AreaIdSchema,
+  AssessmentIdSchema,
+  KnowledgeAreaSchema,
+} from "@recall/domain";
 
 const ContentHashSchema = Schema.String.pipe(Schema.pattern(/^[a-f0-9]{64}$/i));
 
@@ -24,7 +29,7 @@ export const WorkspaceContentPushAreaSchema = Schema.Struct({
 
 export const WorkspaceCardTombstoneSchema = Schema.Struct({
   areaId: AreaIdSchema,
-  cardId: CardIdSchema,
+  cardId: AssessmentIdSchema,
 });
 
 export const WorkspaceAreaTombstoneRequestSchema = Schema.Struct({

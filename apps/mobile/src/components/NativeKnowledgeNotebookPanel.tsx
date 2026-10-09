@@ -1,15 +1,22 @@
+import { NativeButton } from "./ui/NativeButton";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Alert, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { Alert, ScrollView, Text, TextInput, View } from "react-native";
 import { Effect, Either, Schema } from "effect";
-import { NativeButton } from "@recall/ui-native";
 import type { KnowledgeArea, ReviewEvent } from "@recall/domain";
 import {
+  findCardDuplicates,
+  knowledgeAreaDuplicateCandidates,
+  proposalDuplicateCandidates,
+  type CardDuplicateCandidate,
+  type WorkspaceSearchTarget,
   KnowledgeNotebookSchema,
   addNotebookConcepts,
   appendNotebookReviewEvidence,
   beginNotebookSession,
   controlNotebookSession,
   createKnowledgeNotebookTutor,
+  createCardAssistanceTutor,
+  applyNotebookRefinement,
   deriveNotebookAssessments,
   editNotebookProposal,
   markNotebookProposalAcknowledged,
@@ -20,10 +27,15 @@ import {
   type KnowledgeNotebook,
   type NotebookAssessment,
 } from "@recall/application";
-import type { CardProposal } from "@recall/ai-core";
-import { CardProposalSchema } from "@recall/ai-core";
+import type {
+  CardProposal,
+  CardRefinementInput,
+  CardRefinementResult,
+  CardInspectionResult,
+  StudySourcePassage,
+} from "@recall/ai-core";
+import { CardProposalSchema, cardIdForTutorProposal } from "@recall/ai-core";
 import { createObjectiveId } from "@recall/domain";
-import { designTokens } from "@recall/design-tokens";
 import type { makeNativeTutorApi } from "../storage/native-tutor-api";
 import {
   clearNativeKnowledgeNotebooks,
@@ -31,15 +43,30 @@ import {
   writeNativeKnowledgeNotebook,
 } from "../storage/native-knowledge-notebook-store";
 import { shareKnowledgeNotebook } from "../storage/native-interchange";
+import { NativeProposalDuplicateWarning } from "./NativeProposalDuplicateWarning";
+import { NativeCardAssistancePanel } from "./NativeCardAssistancePanel";
 import { NativeStudyMaterialsPanel } from "./NativeStudyMaterialsPanel";
 
-const palette = designTokens.color;
+const NotebookSection = {
+  Practice: "Practice",
+  StudyMaterials: "Study materials",
+  ReviewSuggestions: "Review suggestions",
+} as const;
+type NotebookSection = (typeof NotebookSection)[keyof typeof NotebookSection];
+const notebookSections = [
+  NotebookSection.Practice,
+  NotebookSection.StudyMaterials,
+  NotebookSection.ReviewSuggestions,
+] as const satisfies readonly NotebookSection[];
 type TutorApi = ReturnType<typeof makeNativeTutorApi>;
 const failureMessage =
   "The notebook could not be updated. Your saved cards and review history are unchanged.";
 
 export function NativeKnowledgeNotebookPanel({
   area,
+  searchTarget,
+  duplicateCandidates = knowledgeAreaDuplicateCandidates(area),
+  storageNamespace = "knowledge-notebook",
   reviewEvents,
   api,
   createId,
@@ -49,6 +76,9 @@ export function NativeKnowledgeNotebookPanel({
 }: {
   readonly onStartReview?: (() => void) | undefined;
   readonly area: KnowledgeArea;
+  readonly searchTarget?: WorkspaceSearchTarget | undefined;
+  readonly duplicateCandidates?: readonly CardDuplicateCandidate[];
+  readonly storageNamespace?: string;
   readonly reviewEvents: readonly ReviewEvent[];
   readonly api: TutorApi | null;
   readonly createId: () => string;
@@ -59,6 +89,17 @@ export function NativeKnowledgeNotebookPanel({
     sessionId: string,
   ) => Promise<{ readonly cardId: string; readonly content: CardProposal } | null>;
 }) {
+  const [section, setSection] = useState<NotebookSection>(
+    storageNamespace === "knowledge-notebook"
+      ? NotebookSection.Practice
+      : NotebookSection.ReviewSuggestions,
+  );
+  const [duplicateAcknowledgement, setDuplicateAcknowledgement] = useState<string | null>(null);
+  const [showSettings, setShowSettings] = useState(false);
+  const [showConcepts, setShowConcepts] = useState(false);
+  const [expandedConceptId, setExpandedConceptId] = useState<string | null>(null);
+  const [showEvidence, setShowEvidence] = useState(false);
+  const [showSources, setShowSources] = useState(false);
   const [notebook, setNotebook] = useState<KnowledgeNotebook | null>(null);
   const [goal, setGoal] = useState(area.title);
   const [maxQuestions, setMaxQuestions] = useState("30");
@@ -88,7 +129,7 @@ export function NativeKnowledgeNotebookPanel({
       mounted.current = false;
       generation.current += 1;
     };
-  }, [area.id]);
+  }, [area.id, storageNamespace]);
   const assessments = useMemo(() => {
     if (!notebook) return [] as readonly NotebookAssessment[];
     const result = Effect.runSync(Effect.either(deriveNotebookAssessments(notebook)));
@@ -98,16 +139,86 @@ export function NativeKnowledgeNotebookPanel({
     ? Effect.runSync(Effect.either(selectNotebookTarget(notebook, Date.now())))
     : null;
   const latestEvidence = notebook?.evidence.at(-1);
-  const pendingProposal = notebook?.proposals.find((proposal) => proposal.status === "pending");
+  const pendingProposal =
+    (searchTarget?.kind === "suggestion"
+      ? notebook?.proposals.find(
+          (proposal) => proposal.id === searchTarget.proposalId && proposal.status === "pending",
+        )
+      : undefined) ?? notebook?.proposals.find((proposal) => proposal.status === "pending");
+  useEffect(() => {
+    if (
+      !searchTarget ||
+      !("namespace" in searchTarget) ||
+      searchTarget.namespace !== storageNamespace
+    )
+      return;
+    const frame = requestAnimationFrame(() => {
+      if (
+        searchTarget.kind === "material" ||
+        searchTarget.kind === "passage" ||
+        searchTarget.kind === "claim"
+      ) {
+        setSection(NotebookSection.StudyMaterials);
+      } else if (searchTarget.kind === "suggestion") {
+        setSection(NotebookSection.ReviewSuggestions);
+        setShowSources(true);
+      } else {
+        setSection(NotebookSection.Practice);
+        setShowConcepts(true);
+        if (searchTarget.kind === "concept" || searchTarget.kind === "conversation")
+          setExpandedConceptId(searchTarget.conceptId);
+        if (searchTarget.kind === "conversation") setShowEvidence(true);
+      }
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [searchTarget, storageNamespace]);
+  const searchedConcept =
+    searchTarget?.kind === "concept"
+      ? notebook?.concepts.find((item) => item.id === searchTarget.conceptId)
+      : null;
+  const searchedEvidence =
+    searchTarget?.kind === "conversation"
+      ? notebook?.evidence.find((item) => item.id === searchTarget.evidenceId)
+      : null;
+  const searchedProposal =
+    searchTarget?.kind === "suggestion"
+      ? notebook?.proposals.find((item) => item.id === searchTarget.proposalId)
+      : null;
   const proposalContent = pendingProposal
     ? proposalDraft?.proposalId === pendingProposal.id
       ? proposalDraft.content
       : pendingProposal.proposal
     : null;
 
+  const ownCardId = pendingProposal ? cardIdForTutorProposal(pendingProposal.id) : null;
+  const duplicateMatches = proposalContent
+    ? findCardDuplicates(
+        proposalContent,
+        [
+          ...duplicateCandidates,
+          ...proposalDuplicateCandidates(
+            (notebook?.proposals ?? [])
+              .filter((item) => item.id !== pendingProposal?.id && item.status === "pending")
+              .map((item) => ({ id: `proposal:${item.id}`, proposal: item.proposal })),
+          ),
+        ],
+        ownCardId ? { excludeCardId: ownCardId } : {},
+      )
+    : [];
+  const duplicateKey = JSON.stringify([
+    pendingProposal?.id,
+    proposalContent?.front,
+    proposalContent?.back,
+    duplicateMatches.map((match) => match.candidate),
+  ]);
+  const duplicatesAllowed =
+    duplicateMatches.length === 0 || duplicateAcknowledgement === duplicateKey;
+
   useEffect(() => {
     let active = true;
-    void Effect.runPromise(Effect.either(readNativeKnowledgeNotebook(area.id))).then((result) => {
+    void Effect.runPromise(
+      Effect.either(readNativeKnowledgeNotebook(area.id, storageNamespace)),
+    ).then((result) => {
       if (!active) return;
       if (Either.isLeft(result)) {
         setLoadFailed(true);
@@ -130,7 +241,7 @@ export function NativeKnowledgeNotebookPanel({
     return () => {
       active = false;
     };
-  }, [area.id]);
+  }, [area.id, storageNamespace]);
 
   const save = useCallback(
     async (next: KnowledgeNotebook): Promise<boolean> => {
@@ -146,7 +257,9 @@ export function NativeKnowledgeNotebookPanel({
         return false;
       }
       const result = await Effect.runPromise(
-        Effect.either(writeNativeKnowledgeNotebook(area.id, decoded.right, mayWrite)),
+        Effect.either(
+          writeNativeKnowledgeNotebook(area.id, decoded.right, mayWrite, storageNamespace),
+        ),
       );
       if (!mounted.current || generation.current !== savedGeneration) return false;
       if (Either.isLeft(result)) {
@@ -160,7 +273,7 @@ export function NativeKnowledgeNotebookPanel({
       setNotebook(decoded.right);
       return true;
     },
-    [area.id, mayWrite],
+    [area.id, mayWrite, storageNamespace],
   );
 
   useEffect(() => {
@@ -329,9 +442,113 @@ export function NativeKnowledgeNotebookPanel({
   }
 
   function persistBeforeRequest(value: unknown) {
-    return writeNativeKnowledgeNotebook(area.id, value, () => mounted.current && mayWrite()).pipe(
-      Effect.mapError(() => ({ message: failureMessage }) as const),
-    );
+    return writeNativeKnowledgeNotebook(
+      area.id,
+      value,
+      () => mounted.current && mayWrite(),
+      storageNamespace,
+    ).pipe(Effect.mapError(() => ({ message: failureMessage }) as const));
+  }
+
+  function assistanceSources(): readonly StudySourcePassage[] {
+    const reference = pendingProposal?.sourceReferences?.[0];
+    if (!reference) return [];
+    const source = notebook?.materials
+      ?.find((item) => item.id === reference.materialId)
+      ?.sections.find((item) => item.id === reference.sectionId);
+    return source
+      ? [
+          {
+            materialId: reference.materialId,
+            sectionId: reference.sectionId,
+            text: source.text,
+            pageNumber: source.pageNumber,
+          },
+        ]
+      : [];
+  }
+
+  async function refineProposal(mode: CardRefinementInput["mode"], instructions: string) {
+    let response: CardRefinementResult | null = null;
+    if (!notebook || !proposalContent || !api) return response;
+    await runAction(async (isCurrent) => {
+      const result = await Effect.runPromise(
+        Effect.either(
+          createCardAssistanceTutor(api, persistBeforeRequest).refine(
+            notebook,
+            { knowledgeArea: area, history: [] },
+            { ...proposalContent, mode, instructions, sources: assistanceSources() },
+            Date.now(),
+          ),
+        ),
+      );
+      if (!isCurrent()) return;
+      if (Either.isLeft(result)) {
+        if (result.left.notebook) await save(result.left.notebook);
+        setNotice(result.left.message);
+      } else if (result.right.notebook && (await save(result.right.notebook)))
+        response = result.right.result;
+    });
+    return response;
+  }
+
+  async function inspectProposal() {
+    let response: CardInspectionResult | null = null;
+    if (!notebook || !proposalContent || !api) return response;
+    await runAction(async (isCurrent) => {
+      const result = await Effect.runPromise(
+        Effect.either(
+          createCardAssistanceTutor(api, persistBeforeRequest).inspect(
+            notebook,
+            { knowledgeArea: area, history: [] },
+            { ...proposalContent, sources: assistanceSources() },
+            Date.now(),
+          ),
+        ),
+      );
+      if (!isCurrent()) return;
+      if (Either.isLeft(result)) {
+        if (result.left.notebook) await save(result.left.notebook);
+        setNotice(result.left.message);
+      } else if (result.right.notebook && (await save(result.right.notebook)))
+        response = result.right.result;
+    });
+    return response;
+  }
+
+  async function applyRefinement(result: CardRefinementResult) {
+    let applied = false;
+    if (!notebook || !pendingProposal || !proposalContent) return false;
+    await runAction(async (isCurrent) => {
+      const next = Effect.runSync(
+        Effect.either(
+          applyNotebookRefinement(
+            notebook,
+            {
+              proposalId: pendingProposal.id,
+              baseline: {
+                front: pendingProposal.proposal.front,
+                back: pendingProposal.proposal.back,
+                objectiveId: pendingProposal.proposal.objectiveId,
+              },
+              cards: result.cards,
+              newProposalIds: result.cards.length > 1 ? result.cards.map(() => createId()) : [],
+            },
+            area.cards,
+          ),
+        ),
+      );
+      if (!isCurrent()) return;
+      if (Either.isLeft(next)) setNotice(next.left.message);
+      else if (await save(next.right)) {
+        setProposalDraft(null);
+        applied = true;
+        setNotice(
+          "Refined proposals saved. Review and approve each before adding it to your deck.",
+        );
+      }
+    });
+    return applied;
   }
 
   async function saveAnswerDraft() {
@@ -409,6 +626,10 @@ export function NativeKnowledgeNotebookPanel({
   async function resolveProposalAction(status: "accepted" | "discarded", isCurrent: () => boolean) {
     if (!notebook || !pendingProposal || unsaved || !mayWrite()) return;
     if (status === "accepted") {
+      if (!duplicatesAllowed) {
+        setNotice("Review the possible duplicates and choose Keep both before saving.");
+        return;
+      }
       const edited = Schema.decodeUnknownEither(CardProposalSchema)({
         ...proposalContent,
         front: proposalContent?.front.trim(),
@@ -550,28 +771,87 @@ export function NativeKnowledgeNotebookPanel({
   }
 
   return (
-    <View testID="native-knowledge-notebook" style={styles.panel}>
-      <View style={styles.heading}>
-        <View>
-          <Text style={styles.eyebrow}>ADAPTIVE STUDY</Text>
-          <Text style={styles.title}>Knowledge notebook</Text>
+    <View testID="native-knowledge-notebook" className={"gap-[11px] mt-[12px]"}>
+      {searchedConcept ? (
+        <View accessibilityLiveRegion="polite" className={"gap-[11px]"}>
+          <Text className={"text-recall-ink font-bold text-[13px]"}>{searchedConcept.title}</Text>
+          {searchedConcept.description ? (
+            <Text className={"text-recall-ink text-[13px] leading-[19px]"}>
+              {searchedConcept.description}
+            </Text>
+          ) : null}
         </View>
-        <Text style={styles.private}>Private on this device</Text>
+      ) : null}
+      {searchedEvidence ? (
+        <View accessibilityLiveRegion="polite" className={"gap-[11px]"}>
+          <Text className={"text-recall-ink font-bold text-[13px]"}>Selected discussion</Text>
+          {searchedEvidence.kind === "tutor" ? (
+            <>
+              <Text className={"text-recall-ink text-[13px] leading-[19px]"}>
+                {searchedEvidence.question}
+              </Text>
+              <Text className={"text-recall-ink text-[13px] leading-[19px]"}>
+                Your answer: {searchedEvidence.answer}
+              </Text>
+              <Text className={"text-recall-ink text-[13px] leading-[19px]"}>
+                {searchedEvidence.evaluation.feedback}
+              </Text>
+            </>
+          ) : (
+            <Text className={"text-recall-ink text-[13px] leading-[19px]"}>
+              Review rating: {searchedEvidence.reviewEvent.rating}
+            </Text>
+          )}
+        </View>
+      ) : null}
+      {searchedProposal && searchedProposal.status !== "pending" ? (
+        <View accessibilityLiveRegion="polite" className={"gap-[11px]"}>
+          <Text className={"text-recall-ink font-bold text-[13px]"}>
+            {searchedProposal.proposal.front}
+          </Text>
+          <Text className={"text-recall-ink text-[13px] leading-[19px]"}>
+            {searchedProposal.proposal.back}
+          </Text>
+          <Text className={"text-recall-muted text-[11px] leading-[16px]"}>
+            {searchedProposal.status}
+          </Text>
+        </View>
+      ) : null}
+      <View className={"flex-row flex-wrap gap-[7px]"}>
+        {notebookSections.map((item) => (
+          <NativeButton
+            key={item}
+            label={item}
+            onPress={() => setSection(item)}
+            className={
+              section === item
+                ? "py-[9px] px-[10px] bg-recall-darkGreen rounded-[5px]"
+                : "py-[9px] px-[4px]"
+            }
+            labelClassName={
+              section === item
+                ? "text-recall-surface text-[12px] font-bold"
+                : "text-recall-darkGreen text-[11px] font-bold"
+            }
+          />
+        ))}
       </View>
-      <Text style={styles.muted}>
-        Investigate concepts, track evidence, then decide which cards to keep.
-      </Text>
-      <NativeStudyMaterialsPanel
-        notebook={notebook}
-        area={area}
-        api={api}
-        goal={goal}
-        createId={createId}
-        disabled={busy || !loaded || loadFailed || !!unsaved || !mayWrite()}
-        save={save}
-        persistBeforeRequest={persistBeforeRequest}
-        runAction={runAction}
-      />
+      {notebook && (
+        <View className={section === NotebookSection.StudyMaterials ? "gap-[11px]" : "hidden"}>
+          <NativeStudyMaterialsPanel
+            notebook={notebook}
+            searchTarget={searchTarget}
+            area={area}
+            api={api}
+            goal={goal}
+            createId={createId}
+            disabled={busy || !loaded || loadFailed || !!unsaved || !mayWrite()}
+            save={save}
+            persistBeforeRequest={persistBeforeRequest}
+            runAction={runAction}
+          />
+        </View>
+      )}
       {unsaved ? (
         <NativeButton
           disabled={busy}
@@ -581,32 +861,49 @@ export function NativeKnowledgeNotebookPanel({
             })
           }
           label="Retry saving notebook"
-          style={styles.button}
-          labelStyle={styles.buttonText}
+          className={
+            "min-h-[40px] justify-center items-center px-[13px] rounded-[10px] bg-recall-darkGreen"
+          }
+          labelClassName="text-recall-surface text-[12px] font-bold"
         />
       ) : null}
-      {!notebook || notebook.session.phase !== "active" ? (
-        <View style={styles.row}>
+      <NativeButton
+        label={showSettings ? "Close session settings" : "Session settings"}
+        onPress={() => setShowSettings((current) => !current)}
+        className={"py-[9px] px-[4px]"}
+        labelClassName="text-recall-darkGreen text-[11px] font-bold"
+      />
+      {showSettings && (!notebook || notebook.session.phase !== "active") ? (
+        <View className={"gap-[11px]"}>
+          <Text className={"text-recall-muted text-[11px] leading-[16px]"}>Questions</Text>
           <TextInput
             accessibilityLabel="Question limit"
             keyboardType="number-pad"
             value={maxQuestions}
             onChangeText={setMaxQuestions}
-            style={styles.input}
+            className={
+              "min-h-[42px] px-[11px] py-[9px] rounded-[10px] bg-recall-paper text-recall-ink"
+            }
           />
+          <Text className={"text-recall-muted text-[11px] leading-[16px]"}>AI requests</Text>
           <TextInput
             accessibilityLabel="AI request limit"
             keyboardType="number-pad"
             value={maxRequests}
             onChangeText={setMaxRequests}
-            style={styles.input}
+            className={
+              "min-h-[42px] px-[11px] py-[9px] rounded-[10px] bg-recall-paper text-recall-ink"
+            }
           />
+          <Text className={"text-recall-muted text-[11px] leading-[16px]"}>Minutes</Text>
           <TextInput
             accessibilityLabel="Session minutes"
             keyboardType="number-pad"
             value={durationMinutes}
             onChangeText={setDurationMinutes}
-            style={styles.input}
+            className={
+              "min-h-[42px] px-[11px] py-[9px] rounded-[10px] bg-recall-paper text-recall-ink"
+            }
           />
         </View>
       ) : null}
@@ -615,17 +912,21 @@ export function NativeKnowledgeNotebookPanel({
           disabled={busy || !mayWrite()}
           onPress={clearNotebook}
           label="Clear unreadable notebook"
-          style={styles.softButton}
-          labelStyle={styles.softText}
+          className={
+            "min-h-[36px] justify-center items-center px-[10px] rounded-[10px] bg-transparent"
+          }
+          labelClassName="text-recall-darkGreen text-[11px] font-bold"
         />
       ) : null}
-      {!notebook ? (
+      {!notebook && section !== NotebookSection.ReviewSuggestions ? (
         <>
           <TextInput
             accessibilityLabel="Learning goal"
             onChangeText={setGoal}
             value={goal}
-            style={styles.input}
+            className={
+              "min-h-[42px] px-[11px] py-[9px] rounded-[10px] bg-recall-paper text-recall-ink"
+            }
             placeholder="What do you want to understand?"
           />
           <NativeButton
@@ -635,468 +936,557 @@ export function NativeKnowledgeNotebookPanel({
                 if (isCurrent()) await start();
               })
             }
-            label="Start investigation"
-            style={styles.button}
-            labelStyle={styles.buttonText}
+            label={section === NotebookSection.StudyMaterials ? "Start" : "Start practice"}
+            className={
+              "min-h-[40px] justify-center items-center px-[13px] rounded-[10px] bg-recall-darkGreen"
+            }
+            labelClassName="text-recall-surface text-[12px] font-bold"
           />
         </>
-      ) : (
+      ) : notebook ? (
         <>
-          <View style={styles.row}>
-            <TextInput
-              accessibilityLabel="Add a concept"
-              onChangeText={setConceptTitle}
-              value={conceptTitle}
-              style={[styles.input, styles.conceptInput]}
-              placeholder="Add a concept"
-            />
-            <NativeButton
-              disabled={busy || !mayWrite()}
-              onPress={() =>
-                void runAction(async (isCurrent) => {
-                  if (isCurrent()) await addManualConcept();
-                })
-              }
-              label="Add"
-              style={styles.softButton}
-              labelStyle={styles.softText}
-            />
-          </View>
-          <NativeButton
-            disabled={busy}
-            onPress={() =>
-              void Effect.runPromise(Effect.either(shareKnowledgeNotebook(notebook))).then(
-                (result) => {
-                  if (mounted.current)
-                    setNotice(
-                      Either.isRight(result)
-                        ? "Notebook JSON shared. Keep it private; it contains learning history."
-                        : "Notebook export is unavailable.",
-                    );
-                },
-              )
-            }
-            label="Export notebook JSON"
-            style={styles.softButton}
-            labelStyle={styles.softText}
-          />
-          <Text style={styles.goal}>{notebook.goal}</Text>
-          {notebook.session.phase === "finished" ? (
-            <View style={styles.feedback}>
-              <Text style={styles.conceptTitle}>Investigation complete</Text>
-              <Text style={styles.muted}>
-                {notebook.evidence.length} evidence items ·{" "}
-                {notebook.proposals.filter((item) => item.status === "accepted").length} approved
-                cards · {notebook.proposals.filter((item) => item.status === "pending").length}{" "}
-                proposals to review
-              </Text>
-              {onStartReview ? (
-                <NativeButton
-                  disabled={busy || !!unsaved}
-                  onPress={onStartReview}
-                  label="Start reviewing saved cards"
-                  style={styles.button}
-                  labelStyle={styles.buttonText}
-                />
-              ) : null}
-            </View>
-          ) : null}
-          <Text style={styles.muted}>
-            {notebook.session.phase === "active"
-              ? `Question ${notebook.session.askedQuestions}/${notebook.session.maxQuestions} · ${notebook.session.requestsUsed}/${notebook.session.maxRequests} tutor requests`
-              : notebook.session.phase === "finished"
-                ? "Investigation finished · evidence stays saved"
-                : "Investigation ready"}
-          </Text>
-          <ScrollView style={styles.concepts}>
-            {notebook.concepts.map((concept) => {
-              const assessment = assessments.find((item) => item.conceptId === concept.id);
-              return (
-                <View key={concept.id} style={styles.concept}>
-                  <Text style={styles.conceptTitle}>{concept.title}</Text>
-                  <Text style={styles.muted}>
-                    {assessment?.status ?? "unassessed"} · {assessment?.evidenceCount ?? 0} evidence
-                    item(s)
-                  </Text>
-                  {concept.parentId ? (
-                    <Text style={styles.muted}>
-                      Within:{" "}
-                      {notebook.concepts.find((item) => item.id === concept.parentId)?.title ??
-                        concept.parentId}
-                    </Text>
-                  ) : null}
-                  {concept.prerequisiteIds.length > 0 ? (
-                    <Text style={styles.muted}>
-                      Prerequisites:{" "}
-                      {concept.prerequisiteIds
-                        .map((id) => notebook.concepts.find((item) => item.id === id)?.title ?? id)
-                        .join(", ")}
-                    </Text>
-                  ) : null}
-                  {assessment?.reason ? (
-                    <Text style={styles.muted}>{assessment.reason}</Text>
-                  ) : null}
-                </View>
-              );
-            })}
-          </ScrollView>
-          {notebook.session.phase !== "active" ? (
-            <NativeButton
-              disabled={busy || !mayWrite()}
-              onPress={() =>
-                void runAction(async (isCurrent) => {
-                  if (isCurrent()) await start();
-                })
-              }
-              label="Continue with a new session"
-              style={styles.button}
-              labelStyle={styles.buttonText}
-            />
-          ) : notebook.session.pendingQuestion ? (
-            <View style={styles.question}>
-              {notebook.session.mode === "explain" &&
-              notebook.session.pendingQuestion.explanation ? (
-                <Text style={styles.response}>{notebook.session.pendingQuestion.explanation}</Text>
-              ) : null}
-              <Text style={styles.conceptTitle}>{notebook.session.pendingQuestion.question}</Text>
-              {notebook.session.pendingQuestion.conceptSuggestions?.map((suggestion, index) => (
-                <View key={`${suggestion.title}:${index}`} style={styles.suggestion}>
-                  <Text style={styles.conceptTitle}>Suggested concept: {suggestion.title}</Text>
-                  <Text style={styles.muted}>{suggestion.description}</Text>
+          <View className={section === NotebookSection.Practice ? "gap-[11px]" : "hidden"}>
+            <Text className={"text-recall-ink text-[14px] font-bold"}>{notebook.goal}</Text>
+            {notebook.session.phase === "finished" ? (
+              <View className={"gap-[7px] py-[12px] border-t border-t-recall-line"}>
+                <Text className={"text-recall-ink font-bold text-[13px]"}>Practice complete</Text>
+                <Text className={"text-recall-muted text-[11px] leading-[16px]"}>
+                  {notebook.evidence.length} evidence items ·{" "}
+                  {notebook.proposals.filter((item) => item.status === "accepted").length} approved
+                  cards · {notebook.proposals.filter((item) => item.status === "pending").length}{" "}
+                  proposals to review
+                </Text>
+                {onStartReview ? (
                   <NativeButton
-                    disabled={busy || !mayWrite()}
-                    onPress={() =>
-                      void runAction(async (isCurrent) => {
-                        if (isCurrent()) await approveSuggestedConcept(suggestion);
-                      })
+                    disabled={busy || !!unsaved}
+                    onPress={onStartReview}
+                    label="Start reviewing saved cards"
+                    className={
+                      "min-h-[40px] justify-center items-center px-[13px] rounded-[10px] bg-recall-darkGreen"
                     }
-                    label="Add suggested concept"
-                    style={styles.softButton}
-                    labelStyle={styles.softText}
+                    labelClassName="text-recall-surface text-[12px] font-bold"
                   />
-                </View>
-              ))}
-              <TextInput
-                accessibilityLabel="Your answer"
-                multiline
-                onChangeText={setAnswer}
-                value={answer}
-                style={styles.input}
-                placeholder="Write your answer, or choose I don't know"
-              />
-              <NativeButton
-                disabled={busy || !!unsaved || !mayWrite()}
-                onPress={() =>
-                  void runAction(async () => {
-                    await saveAnswerDraft();
-                  })
-                }
-                label="Save answer draft"
-                style={styles.softButton}
-                labelStyle={styles.softText}
-              />
-              <Text style={styles.muted}>How sure are you?</Text>
-              <View style={styles.row}>
-                {(["guess", "unsure", "confident"] as const).map((item) => (
-                  <NativeButton
-                    key={item}
-                    onPress={() => setConfidence(item)}
-                    label={`${confidence === item ? "✓ " : ""}${item}`}
-                    style={styles.softButton}
-                    labelStyle={styles.softText}
-                  />
-                ))}
+                ) : null}
               </View>
-              <View style={styles.row}>
-                <NativeButton
-                  disabled={busy || !api || !mayWrite()}
-                  onPress={() => void answerQuestion(answer, confidence)}
-                  label="Submit answer"
-                  style={styles.button}
-                  labelStyle={styles.buttonText}
-                />
-                <NativeButton
-                  disabled={busy || !api || !mayWrite()}
-                  onPress={() => void answerQuestion("I don't know", "guess")}
-                  label="I don't know"
-                  style={styles.softButton}
-                  labelStyle={styles.softText}
-                />
-              </View>
-              {!api ? (
-                <Text style={styles.muted}>
-                  Tutor unavailable offline. Your notebook and existing evidence remain readable.
-                </Text>
-              ) : null}
-            </View>
-          ) : (
-            <View style={styles.question}>
-              {activeTarget && Either.isRight(activeTarget) && activeTarget.right ? (
-                <Text style={styles.muted}>
-                  Next focus:{" "}
-                  {
-                    notebook.concepts.find((item) => item.id === activeTarget.right?.conceptId)
-                      ?.title
-                  }
-                </Text>
-              ) : null}
+            ) : null}
+            {notebook.session.phase !== "active" ? (
               <NativeButton
-                disabled={busy || !api || !mayWrite()}
-                onPress={() => void ask()}
-                label="Ask adaptive question"
-                style={styles.button}
-                labelStyle={styles.buttonText}
-              />
-              {!api ? (
-                <Text style={styles.muted}>
-                  Tutor unavailable offline; no AI response is simulated.
-                </Text>
-              ) : null}
-            </View>
-          )}
-          <View style={styles.row}>
-            {(["deeper", "explain", "skip", "finish"] as const).map((action) => (
-              <NativeButton
-                key={action}
-                disabled={busy || !!unsaved || !mayWrite() || notebook.session.phase !== "active"}
-                onPress={() =>
-                  void runAction(async () => {
-                    await control(action);
-                  })
-                }
-                label={action}
-                style={styles.softButton}
-                labelStyle={styles.softText}
-              />
-            ))}
-          </View>
-          <NativeButton
-            disabled={busy || !!unsaved || !api || !mayWrite()}
-            onPress={() => void proposeBatch()}
-            label="Propose cards from unresolved gaps"
-            style={styles.softButton}
-            labelStyle={styles.softText}
-          />
-          {notebook.proposals
-            .filter(
-              (item) =>
-                item.status !== "pending" &&
-                !item.providerAcknowledged &&
-                item.providerResolutionRequired !== false,
-            )
-            .map((item) => (
-              <NativeButton
-                key={item.id}
-                disabled={busy || !api || !mayWrite()}
+                disabled={busy || !mayWrite()}
                 onPress={() =>
                   void runAction(async (isCurrent) => {
-                    await acknowledgeProposal(item, isCurrent);
+                    if (isCurrent()) await start();
                   })
                 }
-                label={`Retry tutor acknowledgement · ${item.status}`}
-                style={styles.softButton}
-                labelStyle={styles.softText}
+                label="Continue practice"
+                className={
+                  "min-h-[40px] justify-center items-center px-[13px] rounded-[10px] bg-recall-darkGreen"
+                }
+                labelClassName="text-recall-surface text-[12px] font-bold"
               />
-            ))}
-          {latestEvidence?.kind === "tutor" ? (
-            <View style={styles.feedback}>
-              <Text style={styles.conceptTitle}>
-                Tutor feedback · {latestEvidence.evaluation.result}
-              </Text>
-              <Text style={styles.response}>{latestEvidence.evaluation.feedback}</Text>
-              <Text style={styles.muted}>
-                Model confidence: {Math.round(latestEvidence.evaluation.confidence * 100)}%. This is
-                not a measured probability of mastery.
-              </Text>
-              {latestEvidence.evaluation.misconception ? (
-                <Text style={styles.muted}>
-                  Possible misconception: {latestEvidence.evaluation.misconception}
+            ) : notebook.session.pendingQuestion ? (
+              <View className={"gap-[8px] py-[12px]"}>
+                {notebook.session.mode === "explain" &&
+                notebook.session.pendingQuestion.explanation ? (
+                  <Text className={"text-recall-ink text-[13px] leading-[19px]"}>
+                    {notebook.session.pendingQuestion.explanation}
+                  </Text>
+                ) : null}
+                <Text className={"text-recall-ink font-bold text-[13px]"}>
+                  {notebook.session.pendingQuestion.question}
                 </Text>
-              ) : null}
-            </View>
-          ) : null}
-          {notebook.evidence.length > 0 ? (
-            <View style={styles.feedback}>
-              <Text style={styles.conceptTitle}>Recent recorded evidence</Text>
-              {notebook.evidence
-                .slice(-10)
-                .reverse()
-                .map((entry) => (
-                  <View key={entry.id} style={styles.concept}>
-                    <Text style={styles.conceptTitle}>
-                      {notebook.concepts.find((item) => item.id === entry.conceptId)?.title}
+                {notebook.session.pendingQuestion.conceptSuggestions?.map((suggestion, index) => (
+                  <View key={`${suggestion.title}:${index}`} className={"gap-[6px] p-[8px]"}>
+                    <Text className={"text-recall-ink font-bold text-[13px]"}>
+                      Suggested concept: {suggestion.title}
                     </Text>
-                    {entry.kind === "tutor" ? (
-                      <>
-                        <Text style={styles.response}>{entry.question}</Text>
-                        <Text style={styles.muted}>
-                          Your answer: {entry.answer} · {entry.learnerConfidence}
-                        </Text>
-                        <Text style={styles.response}>{entry.evaluation.feedback}</Text>
-                      </>
-                    ) : (
-                      <Text style={styles.muted}>Review rating: {entry.reviewEvent.rating}</Text>
-                    )}
+                    <Text className={"text-recall-muted text-[11px] leading-[16px]"}>
+                      {suggestion.description}
+                    </Text>
+                    <NativeButton
+                      disabled={busy || !mayWrite()}
+                      onPress={() =>
+                        void runAction(async (isCurrent) => {
+                          if (isCurrent()) await approveSuggestedConcept(suggestion);
+                        })
+                      }
+                      label="Add suggested concept"
+                      className={
+                        "min-h-[36px] justify-center items-center px-[10px] rounded-[10px] bg-transparent"
+                      }
+                      labelClassName="text-recall-darkGreen text-[11px] font-bold"
+                    />
                   </View>
                 ))}
-            </View>
-          ) : null}
-          {pendingProposal ? (
-            <View style={styles.proposal}>
-              <Text style={styles.conceptTitle}>Proposed card · approval required</Text>
-              {pendingProposal.sourceReferences?.map((reference, index) => {
-                const source = notebook.materials?.find((item) => item.id === reference.materialId);
-                const passage = source?.sections.find((item) => item.id === reference.sectionId);
-                return (
-                  <View key={index} style={styles.feedback}>
-                    <Text style={styles.conceptTitle}>
-                      Source: {source?.name} · {passage?.title}
-                      {reference.pageNumber ? ` · page ${reference.pageNumber}` : ""}
-                    </Text>
-                    <Text selectable style={styles.response}>
-                      {reference.quote}
-                    </Text>
-                    <Text selectable style={styles.muted}>
-                      {passage?.text}
-                    </Text>
-                  </View>
-                );
-              })}
-              <TextInput
-                accessibilityLabel="Proposal question"
-                value={proposalContent?.front ?? ""}
-                onChangeText={(front) => {
-                  if (proposalContent)
-                    setProposalDraft({
-                      proposalId: pendingProposal.id,
-                      content: { ...proposalContent, front },
-                    });
-                }}
-                editable={!busy}
-                style={styles.input}
-              />
-              <TextInput
-                accessibilityLabel="Proposal answer"
-                value={proposalContent?.back ?? ""}
-                onChangeText={(back) => {
-                  if (proposalContent)
-                    setProposalDraft({
-                      proposalId: pendingProposal.id,
-                      content: { ...proposalContent, back },
-                    });
-                }}
-                editable={!busy}
-                multiline
-                style={styles.input}
-              />
-              <Text style={styles.muted}>
-                Evidence: {pendingProposal.evidenceIds.length} linked item(s). Review before saving.
-              </Text>
-              <NativeButton
-                disabled={busy || !!unsaved || !mayWrite()}
-                onPress={() =>
-                  void runAction(async () => {
-                    await saveProposalEdits();
-                  })
-                }
-                label="Save proposal edits"
-                style={styles.softButton}
-                labelStyle={styles.softText}
-              />
-              <View style={styles.row}>
-                <NativeButton
-                  disabled={busy || !!unsaved || !mayWrite()}
-                  onPress={() => void resolveProposal("accepted")}
-                  label="Save & approve"
-                  style={styles.button}
-                  labelStyle={styles.buttonText}
+                <TextInput
+                  accessibilityLabel="Your answer"
+                  multiline
+                  onChangeText={setAnswer}
+                  value={answer}
+                  className={
+                    "min-h-[42px] px-[11px] py-[9px] rounded-[10px] bg-recall-paper text-recall-ink"
+                  }
+                  placeholder="Write your answer, or choose I don't know"
                 />
                 <NativeButton
                   disabled={busy || !!unsaved || !mayWrite()}
-                  onPress={() => void resolveProposal("discarded")}
-                  label="Discard proposal"
-                  style={styles.softButton}
-                  labelStyle={styles.softText}
+                  onPress={() =>
+                    void runAction(async () => {
+                      await saveAnswerDraft();
+                    })
+                  }
+                  label="Save answer draft"
+                  className={
+                    "min-h-[36px] justify-center items-center px-[10px] rounded-[10px] bg-transparent"
+                  }
+                  labelClassName="text-recall-darkGreen text-[11px] font-bold"
+                />
+                <Text className={"text-recall-muted text-[11px] leading-[16px]"}>
+                  How sure are you?
+                </Text>
+                <View className={"flex-row flex-wrap gap-[7px]"}>
+                  {(["guess", "unsure", "confident"] as const).map((item) => (
+                    <NativeButton
+                      key={item}
+                      onPress={() => setConfidence(item)}
+                      label={`${confidence === item ? "✓ " : ""}${item}`}
+                      className={
+                        "min-h-[36px] justify-center items-center px-[10px] rounded-[10px] bg-transparent"
+                      }
+                      labelClassName="text-recall-darkGreen text-[11px] font-bold"
+                    />
+                  ))}
+                </View>
+                <View className={"flex-row flex-wrap gap-[7px]"}>
+                  <NativeButton
+                    disabled={busy || !api || !mayWrite()}
+                    onPress={() => void answerQuestion(answer, confidence)}
+                    label="Submit answer"
+                    className={
+                      "min-h-[40px] justify-center items-center px-[13px] rounded-[10px] bg-recall-darkGreen"
+                    }
+                    labelClassName="text-recall-surface text-[12px] font-bold"
+                  />
+                  <NativeButton
+                    disabled={busy || !api || !mayWrite()}
+                    onPress={() => void answerQuestion("I don't know", "guess")}
+                    label="I don't know"
+                    className={
+                      "min-h-[36px] justify-center items-center px-[10px] rounded-[10px] bg-transparent"
+                    }
+                    labelClassName="text-recall-darkGreen text-[11px] font-bold"
+                  />
+                </View>
+                {!api ? (
+                  <Text className={"text-recall-muted text-[11px] leading-[16px]"}>
+                    Connect AI in settings to check your answer.
+                  </Text>
+                ) : null}
+              </View>
+            ) : (
+              <View className={"gap-[8px] py-[12px]"}>
+                {activeTarget && Either.isRight(activeTarget) && activeTarget.right ? (
+                  <Text className={"text-recall-muted text-[11px] leading-[16px]"}>
+                    Next focus:{" "}
+                    {
+                      notebook.concepts.find((item) => item.id === activeTarget.right?.conceptId)
+                        ?.title
+                    }
+                  </Text>
+                ) : null}
+                <NativeButton
+                  disabled={busy || !api || !mayWrite()}
+                  onPress={() => void ask()}
+                  label="Next question"
+                  className={
+                    "min-h-[40px] justify-center items-center px-[13px] rounded-[10px] bg-recall-darkGreen"
+                  }
+                  labelClassName="text-recall-surface text-[12px] font-bold"
+                />
+                {!api ? (
+                  <Text className={"text-recall-muted text-[11px] leading-[16px]"}>
+                    Connect AI in settings to continue.
+                  </Text>
+                ) : null}
+              </View>
+            )}
+            <View className={"flex-row flex-wrap gap-[7px]"}>
+              {(["deeper", "explain", "skip", "finish"] as const).map((action) => (
+                <NativeButton
+                  key={action}
+                  disabled={busy || !!unsaved || !mayWrite() || notebook.session.phase !== "active"}
+                  onPress={() =>
+                    void runAction(async () => {
+                      await control(action);
+                    })
+                  }
+                  label={action}
+                  className={
+                    "min-h-[36px] justify-center items-center px-[10px] rounded-[10px] bg-transparent"
+                  }
+                  labelClassName="text-recall-darkGreen text-[11px] font-bold"
+                />
+              ))}
+            </View>
+            <NativeButton
+              label={showConcepts ? "Hide concepts" : "Concepts"}
+              onPress={() => setShowConcepts((current) => !current)}
+              className={"py-[9px] px-[4px]"}
+              labelClassName="text-recall-darkGreen text-[11px] font-bold"
+            />
+            <View className={showConcepts ? "gap-[11px]" : "hidden"}>
+              <View className={"flex-row flex-wrap gap-[7px]"}>
+                <TextInput
+                  accessibilityLabel="Add a concept"
+                  onChangeText={setConceptTitle}
+                  value={conceptTitle}
+                  className={`${"min-h-[42px] px-[11px] py-[9px] rounded-[10px] bg-recall-paper text-recall-ink"} ${"flex-1"}`}
+                  placeholder="Add a concept"
+                />
+                <NativeButton
+                  disabled={busy || !mayWrite()}
+                  onPress={() =>
+                    void runAction(async (isCurrent) => {
+                      if (isCurrent()) await addManualConcept();
+                    })
+                  }
+                  label="Add"
+                  className={
+                    "min-h-[36px] justify-center items-center px-[10px] rounded-[10px] bg-transparent"
+                  }
+                  labelClassName="text-recall-darkGreen text-[11px] font-bold"
                 />
               </View>
+              <Text className={"text-recall-muted text-[11px] leading-[16px]"}>
+                {notebook.session.phase === "active"
+                  ? `Question ${notebook.session.askedQuestions}/${notebook.session.maxQuestions} · ${notebook.session.requestsUsed}/${notebook.session.maxRequests} tutor requests`
+                  : notebook.session.phase === "finished"
+                    ? "Practice finished"
+                    : "Ready"}
+              </Text>
+              <ScrollView className={"max-h-[190px]"}>
+                {notebook.concepts.map((concept) => {
+                  const assessment = assessments.find((item) => item.conceptId === concept.id);
+                  return (
+                    <View
+                      key={concept.id}
+                      className={"gap-[3px] py-[7px] border-b-recall-line border-b"}
+                    >
+                      <NativeButton
+                        label={concept.title}
+                        onPress={() =>
+                          setExpandedConceptId((current) =>
+                            current === concept.id ? null : concept.id,
+                          )
+                        }
+                        className={"py-[9px] px-[4px]"}
+                        labelClassName="text-recall-ink text-[13px] font-bold"
+                      />
+                      {expandedConceptId === concept.id ? (
+                        <>
+                          <Text className={"text-recall-muted text-[11px] leading-[16px]"}>
+                            {assessment?.status ?? "unassessed"} · {assessment?.evidenceCount ?? 0}{" "}
+                            evidence item(s)
+                          </Text>
+                          {concept.parentId ? (
+                            <Text className={"text-recall-muted text-[11px] leading-[16px]"}>
+                              Within:{" "}
+                              {notebook.concepts.find((item) => item.id === concept.parentId)
+                                ?.title ?? concept.parentId}
+                            </Text>
+                          ) : null}
+                          {concept.prerequisiteIds.length > 0 ? (
+                            <Text className={"text-recall-muted text-[11px] leading-[16px]"}>
+                              Prerequisites:{" "}
+                              {concept.prerequisiteIds
+                                .map(
+                                  (id) =>
+                                    notebook.concepts.find((item) => item.id === id)?.title ?? id,
+                                )
+                                .join(", ")}
+                            </Text>
+                          ) : null}
+                          {assessment?.reason ? (
+                            <Text className={"text-recall-muted text-[11px] leading-[16px]"}>
+                              {assessment.reason}
+                            </Text>
+                          ) : null}
+                        </>
+                      ) : null}
+                    </View>
+                  );
+                })}
+              </ScrollView>
             </View>
-          ) : null}
-          <NativeButton
-            disabled={busy}
-            onPress={clearNotebook}
-            label="Clear notebook"
-            style={styles.softButton}
-            labelStyle={styles.softText}
-          />
+          </View>
+          <View className={section === NotebookSection.ReviewSuggestions ? "gap-[11px]" : "hidden"}>
+            <NativeButton
+              disabled={busy || !!unsaved || !api || !mayWrite()}
+              onPress={() => void proposeBatch()}
+              label="Suggest cards"
+              className={
+                "min-h-[36px] justify-center items-center px-[10px] rounded-[10px] bg-transparent"
+              }
+              labelClassName="text-recall-darkGreen text-[11px] font-bold"
+            />
+            {notebook.proposals
+              .filter(
+                (item) =>
+                  item.status !== "pending" &&
+                  !item.providerAcknowledged &&
+                  item.providerResolutionRequired !== false,
+              )
+              .map((item) => (
+                <NativeButton
+                  key={item.id}
+                  disabled={busy || !api || !mayWrite()}
+                  onPress={() =>
+                    void runAction(async (isCurrent) => {
+                      await acknowledgeProposal(item, isCurrent);
+                    })
+                  }
+                  label="Retry confirmation"
+                  className={
+                    "min-h-[36px] justify-center items-center px-[10px] rounded-[10px] bg-transparent"
+                  }
+                  labelClassName="text-recall-darkGreen text-[11px] font-bold"
+                />
+              ))}
+          </View>
+          <View className={section === NotebookSection.Practice ? "gap-[11px]" : "hidden"}>
+            {latestEvidence?.kind === "tutor" ? (
+              <View className={"gap-[7px] py-[12px] border-t border-t-recall-line"}>
+                <Text className={"text-recall-ink font-bold text-[13px]"}>
+                  Tutor feedback · {latestEvidence.evaluation.result}
+                </Text>
+                <Text className={"text-recall-ink text-[13px] leading-[19px]"}>
+                  {latestEvidence.evaluation.feedback}
+                </Text>
+                {latestEvidence.evaluation.misconception ? (
+                  <Text className={"text-recall-muted text-[11px] leading-[16px]"}>
+                    Possible misconception: {latestEvidence.evaluation.misconception}
+                  </Text>
+                ) : null}
+              </View>
+            ) : null}
+            <NativeButton
+              label={showEvidence ? "Hide history" : "Answer history"}
+              onPress={() => setShowEvidence((current) => !current)}
+              className={"py-[9px] px-[4px]"}
+              labelClassName="text-recall-darkGreen text-[11px] font-bold"
+            />
+            {showEvidence && notebook.evidence.length > 0 ? (
+              <View className={"gap-[7px] py-[12px] border-t border-t-recall-line"}>
+                <Text className={"text-recall-ink font-bold text-[13px]"}>
+                  Recent recorded evidence
+                </Text>
+                {notebook.evidence
+                  .slice(-10)
+                  .reverse()
+                  .map((entry) => (
+                    <View
+                      key={entry.id}
+                      className={"gap-[3px] py-[7px] border-b-recall-line border-b"}
+                    >
+                      <Text className={"text-recall-ink font-bold text-[13px]"}>
+                        {notebook.concepts.find((item) => item.id === entry.conceptId)?.title}
+                      </Text>
+                      {entry.kind === "tutor" ? (
+                        <>
+                          <Text className={"text-recall-ink text-[13px] leading-[19px]"}>
+                            {entry.question}
+                          </Text>
+                          <Text className={"text-recall-muted text-[11px] leading-[16px]"}>
+                            Your answer: {entry.answer} · {entry.learnerConfidence}
+                          </Text>
+                          <Text className={"text-recall-ink text-[13px] leading-[19px]"}>
+                            {entry.evaluation.feedback}
+                          </Text>
+                        </>
+                      ) : (
+                        <Text className={"text-recall-muted text-[11px] leading-[16px]"}>
+                          Review rating: {entry.reviewEvent.rating}
+                        </Text>
+                      )}
+                    </View>
+                  ))}
+              </View>
+            ) : null}
+          </View>
+          <View className={section === NotebookSection.ReviewSuggestions ? "gap-[11px]" : "hidden"}>
+            {!pendingProposal ? (
+              <Text className={"text-recall-muted text-[11px] leading-[16px]"}>
+                No suggestions to review.
+              </Text>
+            ) : null}
+            {pendingProposal ? (
+              <View className={"gap-[7px] py-[12px]"}>
+                <Text className={"text-recall-ink font-bold text-[13px]"}>Suggested card</Text>
+                {pendingProposal.sourceReferences?.length ? (
+                  <NativeButton
+                    label={showSources ? "Hide sources" : "Sources"}
+                    onPress={() => setShowSources((current) => !current)}
+                    className={"py-[9px] px-[4px]"}
+                    labelClassName="text-recall-darkGreen text-[11px] font-bold"
+                  />
+                ) : null}
+                {showSources
+                  ? pendingProposal.sourceReferences?.map((reference, index) => {
+                      const source = notebook.materials?.find(
+                        (item) => item.id === reference.materialId,
+                      );
+                      const passage = source?.sections.find(
+                        (item) => item.id === reference.sectionId,
+                      );
+                      return (
+                        <View
+                          key={index}
+                          className={"gap-[7px] py-[12px] border-t border-t-recall-line"}
+                        >
+                          <Text className={"text-recall-ink font-bold text-[13px]"}>
+                            Source: {source?.name} · {passage?.title}
+                            {reference.pageNumber ? ` · page ${reference.pageNumber}` : ""}
+                          </Text>
+                          <Text selectable className={"text-recall-ink text-[13px] leading-[19px]"}>
+                            {reference.quote}
+                          </Text>
+                          <Text
+                            selectable
+                            className={"text-recall-muted text-[11px] leading-[16px]"}
+                          >
+                            {passage?.text}
+                          </Text>
+                        </View>
+                      );
+                    })
+                  : null}
+                <TextInput
+                  accessibilityLabel="Proposal question"
+                  value={proposalContent?.front ?? ""}
+                  onChangeText={(front) => {
+                    if (proposalContent)
+                      setProposalDraft({
+                        proposalId: pendingProposal.id,
+                        content: { ...proposalContent, front },
+                      });
+                  }}
+                  editable={!busy}
+                  className={
+                    "min-h-[42px] px-[11px] py-[9px] rounded-[10px] bg-recall-paper text-recall-ink"
+                  }
+                />
+                <TextInput
+                  accessibilityLabel="Proposal answer"
+                  value={proposalContent?.back ?? ""}
+                  onChangeText={(back) => {
+                    if (proposalContent)
+                      setProposalDraft({
+                        proposalId: pendingProposal.id,
+                        content: { ...proposalContent, back },
+                      });
+                  }}
+                  editable={!busy}
+                  multiline
+                  className={
+                    "min-h-[42px] px-[11px] py-[9px] rounded-[10px] bg-recall-paper text-recall-ink"
+                  }
+                />
+                {proposalContent ? (
+                  <NativeCardAssistancePanel
+                    key={pendingProposal.id}
+                    proposalOnly
+                    content={proposalContent}
+                    disabled={busy || !!unsaved || !mayWrite()}
+                    onRefine={api ? refineProposal : undefined}
+                    onInspect={api ? inspectProposal : undefined}
+                    onApply={applyRefinement}
+                  />
+                ) : null}
+                <NativeButton
+                  disabled={busy || !!unsaved || !mayWrite()}
+                  onPress={() =>
+                    void runAction(async () => {
+                      await saveProposalEdits();
+                    })
+                  }
+                  label="Save proposal edits"
+                  className={
+                    "min-h-[36px] justify-center items-center px-[10px] rounded-[10px] bg-transparent"
+                  }
+                  labelClassName="text-recall-darkGreen text-[11px] font-bold"
+                />
+                <NativeProposalDuplicateWarning
+                  matches={duplicateMatches}
+                  acknowledged={duplicateAcknowledgement === duplicateKey}
+                  disabled={busy || !!unsaved || !mayWrite()}
+                  onChange={(value) => setDuplicateAcknowledgement(value ? duplicateKey : null)}
+                />
+                <View className={"flex-row flex-wrap gap-[7px]"}>
+                  <NativeButton
+                    disabled={busy || !!unsaved || !mayWrite() || !duplicatesAllowed}
+                    onPress={() => void resolveProposal("accepted")}
+                    label="Save & approve"
+                    className={
+                      "min-h-[40px] justify-center items-center px-[13px] rounded-[10px] bg-recall-darkGreen"
+                    }
+                    labelClassName="text-recall-surface text-[12px] font-bold"
+                  />
+                  <NativeButton
+                    disabled={busy || !!unsaved || !mayWrite()}
+                    onPress={() => void resolveProposal("discarded")}
+                    label="Discard proposal"
+                    className={
+                      "min-h-[36px] justify-center items-center px-[10px] rounded-[10px] bg-transparent"
+                    }
+                    labelClassName="text-recall-darkGreen text-[11px] font-bold"
+                  />
+                </View>
+              </View>
+            ) : null}
+          </View>
+          <View className={showSettings ? "gap-[11px]" : "hidden"}>
+            <NativeButton
+              disabled={busy}
+              onPress={() =>
+                void Effect.runPromise(Effect.either(shareKnowledgeNotebook(notebook))).then(
+                  (result) => {
+                    if (mounted.current)
+                      setNotice(
+                        Either.isRight(result)
+                          ? "Notebook JSON shared. Keep it private; it contains learning history."
+                          : "Notebook export is unavailable.",
+                      );
+                  },
+                )
+              }
+              label="Export notebook"
+              className={
+                "min-h-[36px] justify-center items-center px-[10px] rounded-[10px] bg-transparent"
+              }
+              labelClassName="text-recall-darkGreen text-[11px] font-bold"
+            />
+            <NativeButton
+              disabled={busy}
+              onPress={clearNotebook}
+              label="Clear notebook"
+              className={
+                "min-h-[36px] justify-center items-center px-[10px] rounded-[10px] bg-transparent"
+              }
+              labelClassName="text-recall-darkGreen text-[11px] font-bold"
+            />
+          </View>
         </>
-      )}
-      {busy ? <Text style={styles.muted}>Saving…</Text> : null}
+      ) : null}
+      {busy ? (
+        <Text className={"text-recall-muted text-[11px] leading-[16px]"}>Saving…</Text>
+      ) : null}
       {notice ? (
-        <Text accessibilityRole="alert" style={styles.notice}>
+        <Text
+          accessibilityRole="alert"
+          className={"text-recall-darkGreen bg-recall-paper p-[9px] rounded-[9px] text-[12px]"}
+        >
           {notice}
         </Text>
       ) : null}
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  panel: {
-    gap: 11,
-    marginTop: 18,
-    padding: 16,
-    borderRadius: 20,
-    backgroundColor: palette.surface,
-    borderColor: palette.line,
-    borderWidth: 1,
-  },
-  heading: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 8 },
-  eyebrow: { color: palette.muted, fontSize: 9, fontWeight: "800", letterSpacing: 1.1 },
-  title: { color: palette.ink, fontSize: 18, fontWeight: "700" },
-  private: { color: palette.darkGreen, fontSize: 10, fontWeight: "700" },
-  goal: { color: palette.ink, fontSize: 14, fontWeight: "700" },
-  muted: { color: palette.muted, fontSize: 11, lineHeight: 16 },
-  input: {
-    minHeight: 42,
-    paddingHorizontal: 11,
-    paddingVertical: 9,
-    borderRadius: 10,
-    backgroundColor: palette.paper,
-    color: palette.ink,
-  },
-  button: {
-    minHeight: 40,
-    justifyContent: "center",
-    alignItems: "center",
-    paddingHorizontal: 13,
-    borderRadius: 10,
-    backgroundColor: palette.darkGreen,
-  },
-  buttonText: { color: palette.surface, fontSize: 12, fontWeight: "700" },
-  softButton: {
-    minHeight: 36,
-    justifyContent: "center",
-    alignItems: "center",
-    paddingHorizontal: 10,
-    borderRadius: 10,
-    backgroundColor: palette.green,
-  },
-  softText: { color: palette.darkGreen, fontSize: 11, fontWeight: "700" },
-  row: { flexDirection: "row", flexWrap: "wrap", gap: 7 },
-  conceptInput: { flex: 1 },
-  suggestion: { gap: 6, padding: 8 },
-  concepts: { maxHeight: 190 },
-  concept: { gap: 3, paddingVertical: 7, borderBottomColor: palette.line, borderBottomWidth: 1 },
-  conceptTitle: { color: palette.ink, fontWeight: "700", fontSize: 13 },
-  question: { gap: 8, padding: 11, borderRadius: 12, backgroundColor: palette.paper },
-  feedback: { gap: 7, padding: 11, borderRadius: 12, backgroundColor: palette.paper },
-  response: { color: palette.ink, fontSize: 13, lineHeight: 19 },
-  proposal: { gap: 7, padding: 11, borderColor: palette.line, borderWidth: 1, borderRadius: 12 },
-  notice: {
-    color: palette.darkGreen,
-    backgroundColor: "#eaf3d9",
-    padding: 9,
-    borderRadius: 9,
-    fontSize: 12,
-  },
-});

@@ -1,20 +1,14 @@
-import { StyleSheet, Text, View } from "react-native";
-import { designTokens } from "@recall/design-tokens";
-
-const palette = designTokens.color;
+import { Text, View } from "react-native";
 
 export function NativeAudioAttachment({ uri }: { readonly uri: string }) {
   return (
     <View
       accessibilityLabel={uri.length ? "Audio attachment" : "No audio attached"}
-      style={styles.attachment}
+      className={"rounded-[12px] bg-recall-green p-[14px] my-[14px]"}
     >
-      <Text style={styles.label}>{uri.length ? "Audio attachment" : "No audio attached"}</Text>
+      <Text className={"text-recall-darkGreen text-[12px] font-bold"}>
+        {uri.length ? "Audio attachment" : "No audio attached"}
+      </Text>
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  attachment: { borderRadius: 12, backgroundColor: palette.green, padding: 14, marginVertical: 14 },
-  label: { color: palette.darkGreen, fontSize: 12, fontWeight: "700" },
-});

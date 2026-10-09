@@ -4,6 +4,7 @@ import { join, relative } from "node:path";
 const roots = [
   "apps/web/src",
   "apps/web/scripts",
+  "apps/web/tests",
   "apps/web/pwa",
   "apps/mobile/src",
   "apps/mobile/scripts",

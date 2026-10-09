@@ -1,16 +1,22 @@
-import { useEffect, useRef, useState } from "react";
-import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { NativeButton } from "./ui/NativeButton";
+import { useEffect, useRef, useState, type SetStateAction } from "react";
+import { Pressable, Text, TextInput, View } from "react-native";
 import { Effect, Schema, Either } from "effect";
-import { NativeButton } from "@recall/ui-native";
-import { designTokens } from "@recall/design-tokens";
 import {
   workspaceAuthoringBaseline,
   isSupportedMediaContent,
   formatTagInput,
   parseTagInput,
   WorkspaceAuthoringCommandSchema,
+  createCardAssistanceTutor,
+  refinementCardContent,
+  findCardDuplicates,
+  findDuplicateCardPairs,
+  workspaceDuplicateCandidates,
+  toKnowledgeArea,
   type AreaSettings,
   type CardContent,
+  type WorkspaceSearchResult,
 } from "@recall/application";
 import {
   SchedulerSettingsSchema,
@@ -21,6 +27,10 @@ import {
 } from "@recall/domain";
 
 import type { StoredMediaAsset } from "@recall/local-store";
+import type { CardProposal, CardRefinementResult } from "@recall/ai-core";
+import type { makeNativeTutorApi } from "../storage/native-tutor-api";
+import { NativeCardHistoryPanel } from "./NativeCardHistoryPanel";
+import { NativeCardAssistancePanel } from "./NativeCardAssistancePanel";
 
 type Editor =
   | { readonly kind: "scheduler"; readonly retentionPercent: string; readonly baseline?: string }
@@ -58,6 +68,7 @@ type Editor =
 export type NativeWorkspaceAuthoringPanelProps = {
   readonly workspace: Workspace | null;
   readonly activeAreaId: string | null;
+  readonly tutorApi?: ReturnType<typeof makeNativeTutorApi> | null;
   readonly disabled?: boolean;
   readonly disabledReason?: string;
   readonly createId: () => string;
@@ -83,8 +94,10 @@ export type NativeWorkspaceAuthoringPanelProps = {
   readonly initialMessage?: string;
   readonly initialObjectiveFilter?: string;
   readonly initialSearch?: string;
+  readonly initialShowDuplicates?: boolean;
+  readonly initialHistory?: boolean;
+  readonly searchTarget?: WorkspaceSearchResult | null;
 };
-const palette = designTokens.color;
 const settingsFor = (area: LearningArea): AreaSettings => ({
   description: area.description ?? null,
   language: area.language ?? "English",
@@ -110,6 +123,7 @@ const emptyContent: CardContent = {
 export function NativeWorkspaceAuthoringPanel({
   workspace,
   activeAreaId,
+  tutorApi = null,
   disabled = false,
   disabledReason,
   createId,
@@ -119,6 +133,9 @@ export function NativeWorkspaceAuthoringPanel({
   initialMessage,
   initialObjectiveFilter,
   initialSearch,
+  searchTarget,
+  initialShowDuplicates = false,
+  initialHistory = false,
 }: NativeWorkspaceAuthoringPanelProps) {
   const area = workspace?.areas.find((item) => item.id === activeAreaId) ?? workspace?.areas[0];
   const baseline = (command: unknown) =>
@@ -140,7 +157,7 @@ export function NativeWorkspaceAuthoringPanel({
       mode,
       id: mode === "edit" && area ? area.id : createId(),
       title: mode === "edit" ? (area?.title ?? "") : "",
-      color: mode === "edit" ? (area?.color ?? "#307f62") : "#307f62",
+      color: mode === "edit" ? (area?.color ?? "#3b82f6") : "#3b82f6",
       ...(mode === "edit" && area
         ? bound({ kind: "save-area", mode, id: area.id, title: area.title, color: area.color })
         : {}),
@@ -196,7 +213,7 @@ export function NativeWorkspaceAuthoringPanel({
       ...bound({ kind: "update-scheduler-settings", settings }),
     };
   }
-  const [editor, setEditor] = useState<Editor | null>(() => {
+  const [editor, setEditorState] = useState<Editor | null>(() => {
     if (initialEditor === "scheduler") return schedulerEditor();
     if (initialEditor === "create-area") return areaEditor("create");
     if (initialEditor === "edit-area") return areaEditor("edit");
@@ -215,6 +232,25 @@ export function NativeWorkspaceAuthoringPanel({
     if (initialEditor === "delete-card") return deleteEditor(area?.cards[0]?.id);
     return null;
   });
+  const [refinementDuplicate, setRefinementDuplicate] = useState<{
+    readonly result: CardRefinementResult;
+    readonly key: string;
+    readonly descriptions: readonly string[];
+  } | null>(null);
+  const [history, setHistory] = useState<{
+    readonly areaId?: string;
+    readonly cardId?: string;
+  } | null>(initialHistory ? {} : null);
+  const [showDuplicates, setShowDuplicates] = useState(initialShowDuplicates);
+  const [keptDuplicateDraft, setKeptDuplicateDraft] = useState<string | null>(null);
+  function setEditor(update: SetStateAction<Editor | null>) {
+    setKeptDuplicateDraft(null);
+    setEditorState(update);
+  }
+  const [areaMenu, setAreaMenu] = useState(false);
+  const [cardMenuId, setCardMenuId] = useState<string | null>(null);
+  const [showFilters, setShowFilters] = useState(Boolean(initialObjectiveFilter));
+  const [showCardDetails, setShowCardDetails] = useState(false);
   const [query, setQuery] = useState(initialSearch ?? "");
   const [objectiveSelection, setObjectiveSelection] = useState({
     areaId: area?.id ?? null,
@@ -257,6 +293,10 @@ export function NativeWorkspaceAuthoringPanel({
   });
   const locked = disabled || pending || picking;
   function open(next: Editor | null) {
+    setAreaMenu(false);
+    setCardMenuId(null);
+    setShowCardDetails(false);
+    setRefinementDuplicate(null);
     if (disabled || saveActive.current || (pickerToken.current !== null && next !== null)) return;
     editorGeneration.current += 1;
     pickerToken.current = null;
@@ -364,8 +404,8 @@ export function NativeWorkspaceAuthoringPanel({
     multiline = false,
     maxLength?: number,
   ) => (
-    <View style={styles.field}>
-      <Text style={styles.label}>{label}</Text>
+    <View className={"gap-[5px]"}>
+      <Text className={"text-recall-ink text-[13px] font-semibold"}>{label}</Text>
       <TextInput
         accessibilityLabel={label}
         editable={!locked}
@@ -373,7 +413,8 @@ export function NativeWorkspaceAuthoringPanel({
         onChangeText={onChangeText}
         multiline={multiline}
         {...(maxLength === undefined ? {} : { maxLength })}
-        style={[styles.input, multiline && styles.multiline]}
+        className={`min-h-[44px] border border-recall-line rounded-[9px] p-[10px] text-recall-ink bg-recall-surface ${multiline ? "min-h-[90px]" : ""}`}
+        style={multiline ? { textAlignVertical: "top" } : undefined}
       />
     </View>
   );
@@ -381,6 +422,151 @@ export function NativeWorkspaceAuthoringPanel({
     editor && "areaId" in editor
       ? workspace?.areas.find((item) => item.id === editor.areaId)
       : area;
+  const assistanceArea = editorArea
+    ? Effect.runSync(Effect.either(toKnowledgeArea(editorArea, false, true)))
+    : null;
+  const assistanceContent: CardProposal | null =
+    editor?.kind === "card"
+      ? {
+          front:
+            editor.content.kind === "cloze"
+              ? (editor.content.cloze?.text ?? "")
+              : editor.content.front,
+          back: editor.content.back,
+          objectiveId: editor.content.objectiveIds[0] ?? null,
+          rationale: "Improve this library card.",
+        }
+      : null;
+  async function applyRefinement(
+    result: CardRefinementResult,
+    acceptedKey?: string,
+  ): Promise<boolean> {
+    if (editor?.kind !== "card" || locked || !submitGuard.enter()) return false;
+    const generation = editorGeneration.current;
+    const tags = parseTagInput(editor.tagsText);
+    if (Either.isLeft(tags)) {
+      setMessage(tags.left.message);
+      submitGuard.leave();
+      return false;
+    }
+    const converted = Effect.runSync(
+      Effect.either(
+        Effect.all(
+          result.cards.map((card) =>
+            refinementCardContent(card, { ...editor.content, tags: tags.right }),
+          ),
+        ),
+      ),
+    );
+    if (Either.isLeft(converted)) {
+      setMessage(converted.left.message);
+      submitGuard.leave();
+      return false;
+    }
+    const first = converted.right[0];
+    if (!first) {
+      submitGuard.leave();
+      return false;
+    }
+    if (
+      converted.right.length === 1 &&
+      result.cards[0]?.meaningChanged === false &&
+      first.kind === editor.content.kind
+    ) {
+      setEditor({ ...editor, content: first });
+      setMessage("Refinement applied to your draft. Save the card to keep the wording change.");
+      submitGuard.leave();
+      return true;
+    }
+    const proposedCandidates = converted.right.map((content, index) => ({
+      id: `proposed:${index}`,
+      front: content.front,
+      back: content.back,
+      ...(content.cloze ? { cloze: content.cloze } : {}),
+    }));
+    const checks = converted.right.flatMap((content, index) =>
+      findCardDuplicates(
+        {
+          front: content.front,
+          back: content.back,
+          ...(content.cloze ? { cloze: content.cloze } : {}),
+        },
+        [
+          ...(workspace
+            ? workspaceDuplicateCandidates(workspace).filter(
+                (candidate) => candidate.id !== editor.id,
+              )
+            : []),
+          ...proposedCandidates.filter((_candidate, candidateIndex) => candidateIndex < index),
+        ],
+        { limit: 5 },
+      ),
+    );
+    const comparisonKey = JSON.stringify([editor.id, editor.content, result, checks]);
+    if (checks.length > 0 && acceptedKey !== comparisonKey) {
+      setRefinementDuplicate({
+        result,
+        key: comparisonKey,
+        descriptions: checks.map((match) => `${match.candidate.front} · ${match.reason}`),
+      });
+      setMessage(
+        "This refinement overlaps existing cards. Review the matches before keeping both.",
+      );
+      submitGuard.leave();
+      return false;
+    }
+    setRefinementDuplicate(null);
+    const cards = converted.right.map((content) => ({ cardId: createId(), content }));
+    const command =
+      editor.mode === "edit"
+        ? { kind: "replace-card", areaId: editor.areaId, cardId: editor.id, cards }
+        : { kind: "create-cards", areaId: editor.areaId, cards };
+    saveActive.current = true;
+    setPending(true);
+    const saved = await Effect.runPromise(
+      Effect.either(
+        Effect.tryPromise({
+          try: () => onCommand(command, editor.baseline, editor.stagedAssets),
+          catch: () => ({
+            message: "This refinement could not be saved. Your draft remains available.",
+          }),
+        }),
+      ),
+    );
+    saveActive.current = false;
+    submitGuard.leave();
+    if (!mounted.current || editorGeneration.current !== generation) return false;
+    setPending(false);
+    if (Either.isLeft(saved)) {
+      setMessage(saved.left.message);
+      return false;
+    }
+    setMessage(saved.right.message);
+    if (saved.right.ok) {
+      setEditor(null);
+      setConfirmation("");
+    }
+    return saved.right.ok;
+  }
+  const duplicateCandidates = workspace ? workspaceDuplicateCandidates(workspace) : [];
+  const draftDuplicates =
+    editor?.kind === "card"
+      ? findCardDuplicates(
+          {
+            front: editor.content.front,
+            back: editor.content.back,
+            ...(editor.content.cloze ? { cloze: editor.content.cloze } : {}),
+          },
+          duplicateCandidates,
+          { excludeCardId: editor.id, limit: 5 },
+        )
+      : [];
+  const duplicateDraftKey =
+    editor?.kind === "card" ? JSON.stringify([editor.id, editor.content, draftDuplicates]) : "";
+  const duplicatesAccepted = keptDuplicateDraft === duplicateDraftKey;
+  const duplicatePairs = showDuplicates
+    ? findDuplicateCardPairs(duplicateCandidates, { limit: 50 })
+    : [];
   const filteredCards =
     area?.cards.filter((card) => {
       const matchesSearch =
@@ -399,93 +585,240 @@ export function NativeWorkspaceAuthoringPanel({
       return matchesSearch && matchesObjective;
     }) ?? [];
   return (
-    <View style={styles.panel} testID="native-workspace-authoring">
-      <Text style={styles.eyebrow}>OFFLINE LIBRARY</Text>
-      <Text style={styles.title}>Manage your learning</Text>
+    <View className={"gap-[12px]"} testID="native-workspace-authoring">
       {message && (
-        <Text accessibilityRole="alert" style={styles.hint}>
+        <Text accessibilityRole="alert" className={"text-recall-muted text-[12px] leading-[18px]"}>
           {message}
         </Text>
       )}
       {disabledReason && (
-        <Text accessibilityLiveRegion="polite" style={styles.hint}>
+        <Text
+          accessibilityLiveRegion="polite"
+          className={"text-recall-muted text-[12px] leading-[18px]"}
+        >
           {disabledReason}
         </Text>
       )}
       {
         <NativeButton
-          label={"Create learning area"}
+          label="New area"
           tone="soft"
           disabled={locked}
           onPress={() => open(areaEditor("create"))}
         />
       }
-      {
-        <NativeButton
-          label={"Private review settings"}
-          tone="soft"
-          disabled={locked || !workspace}
-          onPress={() => open(schedulerEditor())}
-        />
-      }
+      {searchTarget && workspace && (
+        <View className={"gap-[8px] pb-[12px]"}>
+          <Text className={"text-recall-ink text-[13px] font-semibold"}>{searchTarget.title}</Text>
+          <Text className={"text-recall-muted text-[12px] leading-[18px]"}>
+            {searchTarget.snippet}
+          </Text>
+          {searchTarget.target.kind === "card" && (
+            <NativeButton
+              label={editor ? "Discard draft and open selected card" : "Edit selected card"}
+              tone="soft"
+              disabled={locked}
+              onPress={() => {
+                const target = searchTarget.target;
+                if (target.kind !== "card") return;
+                const foundArea = workspace.areas.find((item) => item.id === searchTarget.areaId);
+                const card = foundArea?.cards.find((item) => item.id === target.cardId);
+                if (!foundArea || !card) return;
+                open({
+                  kind: "card",
+                  mode: "edit",
+                  areaId: foundArea.id,
+                  id: card.id,
+                  tagsText: formatTagInput(card.tags ?? []),
+                  stagedAssets: [],
+                  content: {
+                    kind: card.cloze ? "cloze" : "basic",
+                    front: card.front,
+                    back: card.back,
+                    ...(card.cloze ? { cloze: card.cloze } : {}),
+                    objectiveIds: card.objectiveIds ?? [],
+                    tags: card.tags ?? [],
+                    media: card.media ?? [],
+                  },
+                  ...bound({ kind: "delete-card", areaId: foundArea.id, cardId: card.id }),
+                });
+              }}
+            />
+          )}
+          {searchTarget.target.kind === "objective" && (
+            <NativeButton
+              label="Filter cards by this objective"
+              tone="soft"
+              onPress={() => {
+                if (searchTarget.target.kind !== "objective") return;
+                setObjectiveSelection({
+                  areaId: searchTarget.areaId,
+                  value: `id:${searchTarget.target.objectiveId}`,
+                });
+                setShowFilters(true);
+              }}
+            />
+          )}
+        </View>
+      )}
+      {workspace && (
+        <View className={"gap-[8px] pb-[12px]"}>
+          <NativeButton
+            label={history ? "Hide history" : "Card history and recovery"}
+            tone="soft"
+            disabled={locked}
+            onPress={() => setHistory(history ? null : {})}
+          />
+          {history && editor && (
+            <Text className={"text-recall-muted text-[12px] leading-[18px]"}>
+              Save or cancel your draft before restoring a version.
+            </Text>
+          )}
+          {history && (
+            <NativeCardHistoryPanel
+              workspace={workspace}
+              {...history}
+              disabled={locked || editor !== null}
+              onRestore={(command, expectedBaseline) => submit(command, expectedBaseline)}
+            />
+          )}
+          <NativeButton
+            label={showDuplicates ? "Hide duplicates" : "Find duplicates"}
+            tone="soft"
+            disabled={locked}
+            onPress={() => setShowDuplicates(!showDuplicates)}
+          />
+          {showDuplicates && (
+            <View className={"gap-[8px] pb-[12px]"}>
+              {duplicatePairs.length === 0 && (
+                <Text className={"text-recall-muted text-[12px] leading-[18px]"}>
+                  No likely duplicates found.
+                </Text>
+              )}
+              {duplicatePairs.map((pair) => (
+                <View
+                  key={`${pair.left.id}:${pair.right.id}`}
+                  className={"border-t border-recall-line py-[8px]"}
+                >
+                  <Text className={"text-recall-ink text-[13px] font-semibold"}>
+                    {pair.left.front}
+                  </Text>
+                  <Text>{pair.right.front}</Text>
+                  <Text className={"text-recall-muted text-[12px] leading-[18px]"}>
+                    {pair.reason}
+                  </Text>
+                  <Text className={"text-recall-muted text-[12px] leading-[18px]"}>
+                    {pair.left.areaTitle} · {pair.right.areaTitle}
+                  </Text>
+                  {[pair.left, pair.right].map((candidate) => (
+                    <NativeButton
+                      key={candidate.id}
+                      label={`Edit: ${candidate.front.slice(0, 60)}`}
+                      tone="soft"
+                      disabled={locked}
+                      onPress={() => {
+                        const candidateArea = workspace.areas.find(
+                          (item) => item.id === candidate.areaId,
+                        );
+                        const card = candidateArea?.cards.find((item) => item.id === candidate.id);
+                        if (!candidateArea || !card) return;
+                        open({
+                          kind: "card",
+                          mode: "edit",
+                          areaId: candidateArea.id,
+                          id: card.id,
+                          tagsText: formatTagInput(card.tags ?? []),
+                          stagedAssets: [],
+                          content: {
+                            kind: card.cloze ? "cloze" : "basic",
+                            front: card.front,
+                            back: card.back,
+                            ...(card.cloze ? { cloze: card.cloze } : {}),
+                            objectiveIds: card.objectiveIds ?? [],
+                            tags: card.tags ?? [],
+                            media: card.media ?? [],
+                          },
+                          ...bound({
+                            kind: "delete-card",
+                            areaId: candidateArea.id,
+                            cardId: card.id,
+                          }),
+                        });
+                      }}
+                    />
+                  ))}
+                </View>
+              ))}
+            </View>
+          )}
+        </View>
+      )}
       {area && (
         <>
-          <Text style={styles.heading}>{area.title}</Text>
-          {
-            <NativeButton
-              label={"Rename or change color"}
-              tone="soft"
+          <View className={"flex-row items-center justify-between gap-[12px]"}>
+            <Text className={"text-recall-ink text-[16px] font-bold"}>{area.title}</Text>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Area actions"
+              accessibilityState={{ expanded: areaMenu, disabled: locked }}
               disabled={locked}
-              onPress={() => open(areaEditor("edit"))}
-            />
-          }
+              onPress={() => setAreaMenu((value) => !value)}
+              className={"min-w-[44px] min-h-[44px] items-center justify-center"}
+            >
+              <Text className={"text-recall-ink text-[16px] font-bold"}>⋯</Text>
+            </Pressable>
+          </View>
+          {areaMenu && (
+            <View className={"gap-[8px] pb-[12px]"}>
+              <NativeButton
+                label="Rename area"
+                tone="soft"
+                disabled={locked}
+                onPress={() => open(areaEditor("edit"))}
+              />
+              <NativeButton
+                label="Area settings"
+                tone="soft"
+                disabled={locked}
+                onPress={() =>
+                  open({
+                    kind: "settings",
+                    areaId: area.id,
+                    settings: settingsFor(area),
+                    tagsText: formatTagInput(area.tags ?? []),
+                    ...bound({ kind: "delete-area", areaId: area.id }),
+                  })
+                }
+              />
+              <NativeButton
+                label="Review settings"
+                tone="soft"
+                disabled={locked || !workspace}
+                onPress={() => open(schedulerEditor())}
+              />
+              <NativeButton
+                label="Delete area"
+                tone="soft"
+                disabled={locked}
+                onPress={() => open(deleteEditor())}
+              />
+            </View>
+          )}
           {
             <NativeButton
-              label={"Area settings and objectives"}
-              tone="soft"
-              disabled={locked}
-              onPress={() =>
-                open({
-                  kind: "settings",
-                  areaId: area.id,
-                  settings: settingsFor(area),
-                  tagsText: formatTagInput(area.tags ?? []),
-                  ...bound({ kind: "delete-area", areaId: area.id }),
-                })
-              }
-            />
-          }
-          {
-            <NativeButton
-              label={"Delete learning area"}
-              tone="soft"
-              disabled={locked}
-              onPress={() => open(deleteEditor())}
-            />
-          }
-          {
-            <NativeButton
-              label={"Add Basic card"}
+              label="Add card"
               tone="soft"
               disabled={locked}
               onPress={() => open(cardEditor())}
             />
           }
-          {
-            <NativeButton
-              label={"Add Cloze card"}
-              tone="soft"
-              disabled={locked}
-              onPress={() => open(cardEditor(undefined, "cloze"))}
-            />
-          }
         </>
       )}
       {editor?.kind === "scheduler" && (
-        <View style={styles.editor}>
-          <Text style={styles.heading}>Private review settings</Text>
-          <Text style={styles.label}>FSRS target retention</Text>
-          <Text style={styles.hint}>
+        <View className={"gap-[12px] py-[16px] border-t border-recall-line"}>
+          <Text className={"text-recall-ink text-[16px] font-bold"}>Review settings</Text>
+          <Text className={"text-recall-ink text-[13px] font-semibold"}>Remembering target</Text>
+          <Text className={"text-recall-muted text-[12px] leading-[18px]"}>
             Choose the chance of remembering a card when it is due. Higher targets mean more
             frequent reviews. Start at 90%.
           </Text>
@@ -496,7 +829,7 @@ export function NativeWorkspaceAuthoringPanel({
             false,
             20,
           )}
-          <View style={styles.row}>
+          <View className={"flex-row gap-[8px]"}>
             {([70, 90, 97] as const).map((percent) => (
               <Pressable
                 key={percent}
@@ -506,16 +839,15 @@ export function NativeWorkspaceAuthoringPanel({
                   selected: editor.retentionPercent === String(percent),
                   disabled: locked,
                 }}
-                style={styles.choice}
+                className={"p-[10px] bg-recall-surface rounded-[8px]"}
                 onPress={() => setEditor({ ...editor, retentionPercent: String(percent) })}
               >
                 <Text>{percent}%</Text>
               </Pressable>
             ))}
           </View>
-          <Text style={styles.hint}>
-            This target applies to future reviews. Existing due dates and append-only review history
-            stay unchanged. This private preference is excluded from published content.
+          <Text className={"text-recall-muted text-[12px] leading-[18px]"}>
+            Applies to future reviews.
           </Text>
           {
             <NativeButton
@@ -540,8 +872,8 @@ export function NativeWorkspaceAuthoringPanel({
         </View>
       )}
       {editor?.kind === "area" && (
-        <View style={styles.editor}>
-          <Text style={styles.heading}>
+        <View className={"gap-[12px] py-[16px] border-t border-recall-line"}>
+          <Text className={"text-recall-ink text-[16px] font-bold"}>
             {editor.mode === "create" ? "New learning area" : "Edit learning area"}
           </Text>
           {field("Area title", editor.title, (title) => setEditor({ ...editor, title }), false, 80)}
@@ -574,16 +906,18 @@ export function NativeWorkspaceAuthoringPanel({
         </View>
       )}
       {editor?.kind === "card" && (
-        <View style={styles.editor}>
-          <Text style={styles.heading}>{editor.mode === "create" ? "New card" : "Edit card"}</Text>
-          <View style={styles.row}>
+        <View className={"gap-[12px] py-[16px] border-t border-recall-line"}>
+          <Text className={"text-recall-ink text-[16px] font-bold"}>
+            {editor.mode === "create" ? "New card" : "Edit card"}
+          </Text>
+          <View className={"flex-row gap-[8px]"}>
             {(["basic", "cloze"] as const).map((kind) => (
               <Pressable
                 key={kind}
                 disabled={locked}
                 accessibilityRole="radio"
                 accessibilityState={{ selected: editor.content.kind === kind, disabled: locked }}
-                style={styles.choice}
+                className={"p-[10px] bg-recall-surface rounded-[8px]"}
                 onPress={() =>
                   setEditor({
                     ...editor,
@@ -632,7 +966,7 @@ export function NativeWorkspaceAuthoringPanel({
                 true,
                 20000,
               )}
-              <Text style={styles.hint}>
+              <Text className={"text-recall-muted text-[12px] leading-[18px]"}>
                 {"Example: Mitochondria produce {{c1::ATP::energy molecule}}."}
               </Text>
               {field("Deletion index", String(editor.content.cloze?.deletionIndex ?? 1), (index) =>
@@ -646,89 +980,197 @@ export function NativeWorkspaceAuthoringPanel({
               )}
             </>
           )}
-          {field(
-            "Card tags (comma separated)",
-            editor.tagsText,
-            (tagsText) => setEditor({ ...editor, tagsText }),
-            true,
-          )}
-          <Text style={styles.hint}>
-            Separate tags with commas. Quote tags containing commas; double embedded quotes inside a
-            quoted tag.
-          </Text>
-          <Text style={styles.label}>Learning objectives</Text>
-          {editorArea?.objectives?.map((objective) => (
-            <Pressable
-              key={objective.id}
+          {assistanceContent && (
+            <NativeCardAssistancePanel
+              key={editor.id}
+              content={assistanceContent}
               disabled={locked}
-              accessibilityRole="checkbox"
-              accessibilityState={{
-                checked: editor.content.objectiveIds.includes(objective.id),
-                disabled: locked,
-              }}
-              onPress={() =>
-                setEditor({
-                  ...editor,
-                  content: {
-                    ...editor.content,
-                    objectiveIds: editor.content.objectiveIds.includes(objective.id)
-                      ? editor.content.objectiveIds.filter((id) => id !== objective.id)
-                      : [...editor.content.objectiveIds, objective.id],
-                  },
-                })
-              }
-              style={styles.choice}
-            >
-              <Text>
-                {editor.content.objectiveIds.includes(objective.id) ? "☑" : "☐"} {objective.title}
+              onApply={applyRefinement}
+              {...(tutorApi && assistanceArea && Either.isRight(assistanceArea)
+                ? {
+                    onRefine: async (mode, instructions) => {
+                      const result = await Effect.runPromise(
+                        Effect.either(
+                          createCardAssistanceTutor(tutorApi).refine(
+                            null,
+                            { knowledgeArea: assistanceArea.right, history: [] },
+                            { ...assistanceContent, mode, instructions, sources: [] },
+                            Date.now(),
+                          ),
+                        ),
+                      );
+                      if (Either.isLeft(result)) {
+                        setMessage(result.left.message);
+                        return null;
+                      }
+                      return result.right.result;
+                    },
+                    onInspect: async () => {
+                      const result = await Effect.runPromise(
+                        Effect.either(
+                          createCardAssistanceTutor(tutorApi).inspect(
+                            null,
+                            { knowledgeArea: assistanceArea.right, history: [] },
+                            { ...assistanceContent, sources: [] },
+                            Date.now(),
+                          ),
+                        ),
+                      );
+                      if (Either.isLeft(result)) {
+                        setMessage(result.left.message);
+                        return null;
+                      }
+                      return result.right.result;
+                    },
+                  }
+                : {})}
+            />
+          )}
+          <NativeButton
+            label={showCardDetails ? "Hide card details" : "Card details"}
+            tone="soft"
+            onPress={() => setShowCardDetails((value) => !value)}
+          />
+          {showCardDetails && (
+            <>
+              {field(
+                "Card tags (comma separated)",
+                editor.tagsText,
+                (tagsText) => setEditor({ ...editor, tagsText }),
+                true,
+              )}
+              <Text className={"text-recall-muted text-[12px] leading-[18px]"}>
+                Separate tags with commas. Quote tags containing commas; double embedded quotes
+                inside a quoted tag.
               </Text>
-            </Pressable>
-          ))}
-          {editor.content.media.map((attachment) => (
-            <View key={attachment.id}>
-              <Text style={styles.hint}>
-                {attachment.mimeType} · {attachment.id.slice(0, 12)}
+              <Text className={"text-recall-ink text-[13px] font-semibold"}>
+                Learning objectives
               </Text>
-              {
-                <NativeButton
-                  label={"Remove attachment"}
-                  tone="soft"
+              {editorArea?.objectives?.map((objective) => (
+                <Pressable
+                  key={objective.id}
                   disabled={locked}
+                  accessibilityRole="checkbox"
+                  accessibilityState={{
+                    checked: editor.content.objectiveIds.includes(objective.id),
+                    disabled: locked,
+                  }}
                   onPress={() =>
                     setEditor({
                       ...editor,
                       content: {
                         ...editor.content,
-                        media: editor.content.media.filter((item) => item.id !== attachment.id),
+                        objectiveIds: editor.content.objectiveIds.includes(objective.id)
+                          ? editor.content.objectiveIds.filter((id) => id !== objective.id)
+                          : [...editor.content.objectiveIds, objective.id],
                       },
-                      stagedAssets: editor.stagedAssets.filter(
-                        (asset) => asset.reference.id !== attachment.id,
-                      ),
                     })
                   }
+                  className={"p-[10px] bg-recall-surface rounded-[8px]"}
+                >
+                  <Text>
+                    {editor.content.objectiveIds.includes(objective.id) ? "☑" : "☐"}{" "}
+                    {objective.title}
+                  </Text>
+                </Pressable>
+              ))}
+              {editor.content.media.map((attachment) => (
+                <View key={attachment.id}>
+                  <Text className={"text-recall-muted text-[12px] leading-[18px]"}>
+                    {attachment.mimeType.startsWith("image/") ? "Image" : "Audio"} attachment
+                  </Text>
+                  {
+                    <NativeButton
+                      label={"Remove attachment"}
+                      tone="soft"
+                      disabled={locked}
+                      onPress={() =>
+                        setEditor({
+                          ...editor,
+                          content: {
+                            ...editor.content,
+                            media: editor.content.media.filter((item) => item.id !== attachment.id),
+                          },
+                          stagedAssets: editor.stagedAssets.filter(
+                            (asset) => asset.reference.id !== attachment.id,
+                          ),
+                        })
+                      }
+                    />
+                  }
+                </View>
+              ))}
+              {onPickAttachment && (
+                <NativeButton
+                  label={picking ? "Choosing attachment…" : "Add image or audio"}
+                  tone="soft"
+                  disabled={locked || editor.content.media.length >= 20}
+                  onPress={() => {
+                    void pickAttachment();
+                  }}
                 />
-              }
-            </View>
-          ))}
-          {onPickAttachment && (
-            <NativeButton
-              label={picking ? "Choosing attachment…" : "Add image or audio"}
-              tone="soft"
-              disabled={locked || editor.content.media.length >= 20}
-              onPress={() => {
-                void pickAttachment();
-              }}
-            />
+              )}
+            </>
           )}
-          <Text style={styles.hint}>
-            Attachments are saved with your card. Your draft stays available if saving fails.
-          </Text>
+          {refinementDuplicate && (
+            <View className={"gap-[8px] pb-[12px]"}>
+              <Text className={"text-recall-ink text-[16px] font-bold"}>Refinement duplicates</Text>
+              {refinementDuplicate.descriptions.map((description, index) => (
+                <Text
+                  key={`${index}:${description}`}
+                  className={"text-recall-muted text-[12px] leading-[18px]"}
+                >
+                  {description}
+                </Text>
+              ))}
+              <NativeButton
+                label="Keep both and apply refinement"
+                tone="soft"
+                disabled={locked}
+                onPress={() => {
+                  void applyRefinement(refinementDuplicate.result, refinementDuplicate.key);
+                }}
+              />
+              <NativeButton
+                label="Cancel refinement"
+                tone="soft"
+                disabled={locked}
+                onPress={() => setRefinementDuplicate(null)}
+              />
+            </View>
+          )}
+          {draftDuplicates.length > 0 && (
+            <View className={"gap-[8px] pb-[12px]"}>
+              <Text className={"text-recall-ink text-[16px] font-bold"}>Possible duplicates</Text>
+              {draftDuplicates.map((match) => (
+                <View key={match.candidate.id} className={"border-t border-recall-line py-[8px]"}>
+                  <Text className={"text-recall-ink text-[13px] font-semibold"}>
+                    {match.candidate.front}
+                  </Text>
+                  <Text>{match.candidate.back}</Text>
+                  <Text className={"text-recall-muted text-[12px] leading-[18px]"}>
+                    {match.candidate.areaTitle} · {match.reason}
+                  </Text>
+                </View>
+              ))}
+              <NativeButton
+                label={duplicatesAccepted ? "Keep both selected" : "Keep both"}
+                tone="soft"
+                disabled={locked}
+                onPress={() => setKeptDuplicateDraft(duplicateDraftKey)}
+              />
+            </View>
+          )}
           {
             <NativeButton
               label={pending ? "Saving…" : "Save card"}
               tone="soft"
               disabled={locked}
               onPress={() => {
+                if (draftDuplicates.length > 0 && !duplicatesAccepted) {
+                  setMessage("Review the similar cards and choose Keep both to save this draft.");
+                  return;
+                }
                 const tags = parseTagInput(editor.tagsText);
                 if (Either.isLeft(tags)) {
                   setMessage(tags.left.message);
@@ -749,8 +1191,10 @@ export function NativeWorkspaceAuthoringPanel({
         </View>
       )}
       {editor?.kind === "settings" && (
-        <View style={styles.editor}>
-          <Text style={styles.heading}>Area settings and objectives</Text>
+        <View className={"gap-[12px] py-[16px] border-t border-recall-line"}>
+          <Text className={"text-recall-ink text-[16px] font-bold"}>
+            Area settings and objectives
+          </Text>
           {field(
             "Description",
             editor.settings.description ?? "",
@@ -771,7 +1215,7 @@ export function NativeWorkspaceAuthoringPanel({
             (tagsText) => setEditor({ ...editor, tagsText }),
             true,
           )}
-          <Text style={styles.hint}>
+          <Text className={"text-recall-muted text-[12px] leading-[18px]"}>
             Separate tags with commas. Quote tags containing commas; double embedded quotes inside a
             quoted tag.
           </Text>
@@ -826,11 +1270,11 @@ export function NativeWorkspaceAuthoringPanel({
             true,
             2000,
           )}
-          <Text style={styles.hint}>
+          <Text className={"text-recall-muted text-[12px] leading-[18px]"}>
             AI instructions guide proposals; generated cards still require approval.
           </Text>
           {editor.settings.objectives.map((objective) => (
-            <View key={objective.id} style={styles.editor}>
+            <View key={objective.id} className={"gap-[12px] py-[16px] border-t border-recall-line"}>
               {field("Objective title", objective.title, (title) =>
                 setEditor({
                   ...editor,
@@ -857,7 +1301,7 @@ export function NativeWorkspaceAuthoringPanel({
                   }),
                 true,
               )}
-              <Text style={styles.label}>Prerequisites</Text>
+              <Text className={"text-recall-ink text-[13px] font-semibold"}>Prerequisites</Text>
               {editor.settings.objectives
                 .filter((item) => item.id !== objective.id)
                 .map((prerequisite) => (
@@ -869,7 +1313,7 @@ export function NativeWorkspaceAuthoringPanel({
                       checked: objective.prerequisiteIds.includes(prerequisite.id),
                       disabled: locked,
                     }}
-                    style={styles.choice}
+                    className={"p-[10px] bg-recall-surface rounded-[8px]"}
                     onPress={() =>
                       setEditor({
                         ...editor,
@@ -969,11 +1413,10 @@ export function NativeWorkspaceAuthoringPanel({
         </View>
       )}
       {editor?.kind === "delete" && (
-        <View style={styles.editor}>
-          <Text style={styles.heading}>{editor.title}</Text>
-          <Text style={styles.hint}>
-            Active content is removed. Append-only review history remains available in private
-            backups. Type DELETE to confirm.
+        <View className={"gap-[12px] py-[16px] border-t border-recall-line"}>
+          <Text className={"text-recall-ink text-[16px] font-bold"}>{editor.title}</Text>
+          <Text className={"text-recall-muted text-[12px] leading-[18px]"}>
+            This removes the card or area. Review history is kept. Type DELETE to confirm.
           </Text>
           {field("Deletion confirmation", confirmation, setConfirmation)}
           {
@@ -996,60 +1439,109 @@ export function NativeWorkspaceAuthoringPanel({
       )}
       {area && (
         <>
-          <Text style={styles.heading}>All cards · {area.cards.length}</Text>
-          {field("Search cards, answers, tags or objectives", query, setQuery)}
-          <Text style={styles.label}>Filter by learning objective</Text>
-          {[
-            { value: "", title: "All objectives" },
-            ...objectives.map((objective) => ({
-              value: `id:${objective.id}`,
-              title: objective.title,
-            })),
-            ...legacyObjectives.map((title) => ({ value: `title:${title}`, title })),
-          ].map((choice) => (
-            <Pressable
-              key={choice.value}
-              disabled={locked}
-              accessibilityRole="radio"
-              accessibilityState={{ selected: objectiveFilter === choice.value, disabled: locked }}
-              style={styles.choice}
-              onPress={() => setObjectiveSelection({ areaId: area.id, value: choice.value })}
-            >
-              <Text>
-                {objectiveFilter === choice.value ? "◉" : "○"} {choice.title}
+          <Text className={"text-recall-ink text-[16px] font-bold"}>
+            All cards · {area.cards.length}
+          </Text>
+          {field("Search cards", query, setQuery)}
+          {(objectives.length > 0 || legacyObjectives.length > 0) && (
+            <NativeButton
+              label={showFilters ? "Hide filters" : "Filter"}
+              tone="soft"
+              onPress={() => setShowFilters((value) => !value)}
+            />
+          )}
+          {showFilters && (
+            <>
+              <Text className={"text-recall-ink text-[13px] font-semibold"}>
+                Filter by learning objective
               </Text>
-            </Pressable>
-          ))}
-          <Text accessibilityLiveRegion="polite" style={styles.hint}>
+              {[
+                { value: "", title: "All objectives" },
+                ...objectives.map((objective) => ({
+                  value: `id:${objective.id}`,
+                  title: objective.title,
+                })),
+                ...legacyObjectives.map((title) => ({ value: `title:${title}`, title })),
+              ].map((choice) => (
+                <Pressable
+                  key={choice.value}
+                  disabled={locked}
+                  accessibilityRole="radio"
+                  accessibilityState={{
+                    selected: objectiveFilter === choice.value,
+                    disabled: locked,
+                  }}
+                  className={"p-[10px] bg-recall-surface rounded-[8px]"}
+                  onPress={() => setObjectiveSelection({ areaId: area.id, value: choice.value })}
+                >
+                  <Text>
+                    {objectiveFilter === choice.value ? "◉" : "○"} {choice.title}
+                  </Text>
+                </Pressable>
+              ))}
+            </>
+          )}
+          <Text
+            accessibilityLiveRegion="polite"
+            className={"text-recall-muted text-[12px] leading-[18px]"}
+          >
             {filteredCards.length} of {area.cards.length} cards
           </Text>
 
           {filteredCards.map((card) => (
-            <View key={card.id} style={styles.editor}>
-              <Text style={styles.label}>{card.front}</Text>
-              <Text style={styles.hint}>{card.tags?.join(" · ") || card.objective}</Text>
-              {
-                <NativeButton
-                  label={"Edit card"}
-                  tone="soft"
+            <View key={card.id} className={"border-t border-recall-line py-[8px]"}>
+              <View className={"flex-row items-center justify-between gap-[12px]"}>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Edit ${card.front}`}
                   disabled={locked}
+                  accessibilityState={{ disabled: locked }}
                   onPress={() =>
                     open(cardEditor(area.cards.findIndex((item) => item.id === card.id)))
                   }
-                />
-              }
-              {
-                <NativeButton
-                  label={"Delete card"}
-                  tone="soft"
+                  className={"flex-1 min-h-[44px] justify-center"}
+                >
+                  <Text className={"text-recall-ink text-[13px] font-semibold"}>{card.front}</Text>
+                </Pressable>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Actions for ${card.front}`}
+                  accessibilityState={{ expanded: cardMenuId === card.id, disabled: locked }}
                   disabled={locked}
-                  onPress={() => open(deleteEditor(card.id))}
-                />
-              }
+                  onPress={() => setCardMenuId((value) => (value === card.id ? null : card.id))}
+                  className={"min-w-[44px] min-h-[44px] items-center justify-center"}
+                >
+                  <Text className={"text-recall-ink text-[16px] font-bold"}>⋯</Text>
+                </Pressable>
+              </View>
+              {cardMenuId === card.id && (
+                <View className={"gap-[8px] pb-[12px]"}>
+                  <NativeButton
+                    label="Edit"
+                    tone="soft"
+                    disabled={locked}
+                    onPress={() =>
+                      open(cardEditor(area.cards.findIndex((item) => item.id === card.id)))
+                    }
+                  />
+                  <NativeButton
+                    label="Version history"
+                    tone="soft"
+                    disabled={locked}
+                    onPress={() => setHistory({ areaId: area.id, cardId: card.id })}
+                  />
+                  <NativeButton
+                    label="Delete"
+                    tone="soft"
+                    disabled={locked}
+                    onPress={() => open(deleteEditor(card.id))}
+                  />
+                </View>
+              )}
             </View>
           ))}
           {filteredCards.length === 0 && (
-            <Text style={styles.hint}>
+            <Text className={"text-recall-muted text-[12px] leading-[18px]"}>
               {query || objectiveFilter
                 ? "No cards match this search and objective filter."
                 : "Add your first card to this area."}
@@ -1060,25 +1552,3 @@ export function NativeWorkspaceAuthoringPanel({
     </View>
   );
 }
-const styles = StyleSheet.create({
-  panel: { gap: 9, padding: 16, backgroundColor: palette.surface },
-  editor: { gap: 8, padding: 12, backgroundColor: palette.paper, borderRadius: 12 },
-  field: { gap: 5 },
-  input: {
-    minHeight: 44,
-    borderWidth: 1,
-    borderColor: palette.line,
-    borderRadius: 9,
-    padding: 10,
-    color: palette.ink,
-    backgroundColor: palette.surface,
-  },
-  multiline: { minHeight: 90, textAlignVertical: "top" },
-  eyebrow: { color: palette.darkGreen, fontSize: 11, letterSpacing: 1, fontWeight: "700" },
-  title: { color: palette.ink, fontSize: 20, fontWeight: "700" },
-  heading: { color: palette.ink, fontSize: 16, fontWeight: "700" },
-  label: { color: palette.ink, fontSize: 13, fontWeight: "600" },
-  hint: { color: palette.muted, fontSize: 12, lineHeight: 18 },
-  row: { flexDirection: "row", gap: 8 },
-  choice: { padding: 10, backgroundColor: palette.surface, borderRadius: 8 },
-});

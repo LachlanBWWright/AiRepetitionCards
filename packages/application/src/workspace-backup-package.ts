@@ -67,6 +67,9 @@ function referencesIn(workspace: Workspace): readonly MediaReference[] {
       for (const reference of card.media ?? []) references.set(reference.id, reference);
     }
   }
+  for (const version of workspace.cardVersions ?? []) {
+    for (const reference of version.card.media ?? []) references.set(reference.id, reference);
+  }
   return [...references.values()];
 }
 

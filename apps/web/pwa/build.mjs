@@ -35,7 +35,7 @@ await writeFile(
       id: base,
       name: "Recall",
       short_name: "Recall",
-      description: "Study your learning areas, including offline.",
+      description: "Study your learning areas with your Recall account.",
       lang: "en",
       start_url: base,
       scope: base,

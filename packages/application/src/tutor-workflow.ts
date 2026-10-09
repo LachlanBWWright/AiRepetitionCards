@@ -1,5 +1,13 @@
 import { Effect, Either, Schema } from "effect";
 import {
+  CardRefinementResultSchema,
+  CardInspectionResultSchema,
+  StudyPlanResultSchema,
+  type CardRefinementInput,
+  type CardInspectionInput,
+  type StudyPlanInput,
+  type StudySourceReference,
+  type StudySourcePassage,
   AnswerEvaluationSchema,
   StudyCardResultSchema,
   type StudyCardInput,
@@ -116,6 +124,17 @@ export function prepareTutorWorkflow(
       !context.knowledgeArea.objectives.some((item) => item.id === action.material.objectiveId)
     )
       return yield* Effect.fail(failure("unknown-objective"));
+    const assistanceObjective =
+      action.action === "refine-card"
+        ? action.refinement.objectiveId
+        : action.action === "inspect-card"
+          ? action.inspection.objectiveId
+          : null;
+    if (
+      assistanceObjective !== null &&
+      !context.knowledgeArea.objectives.some((item) => item.id === assistanceObjective)
+    )
+      return yield* Effect.fail(failure("unknown-objective"));
     if (action.action === "evaluate" && (!snapshot.pendingQuestion || snapshot.state.quiz))
       return yield* Effect.fail(failure("question-required"));
     if (action.action === "evaluate-quiz-answer") {
@@ -132,6 +151,9 @@ export function prepareTutorWorkflow(
     yield* selectTutorInferenceContext(
       {
         ...context,
+        ...("material" in action ? { material: action.material } : {}),
+        ...("refinement" in action ? { refinement: action.refinement } : {}),
+        ...("inspection" in action ? { inspection: action.inspection } : {}),
         ...("answer" in action ? { answer: action.answer } : {}),
         ...(snapshot.state.evaluation ? { observation: snapshot.state.evaluation } : {}),
       },
@@ -148,6 +170,15 @@ export function prepareTutorWorkflow(
 
 /** Provider effects are supplied by the app boundary; vendor failures retain their type. */
 export interface TutorWorkflowProvider<E> {
+  readonly refineCard?: (
+    context: TutorContext & { readonly refinement: CardRefinementInput },
+  ) => Effect.Effect<unknown, E>;
+  readonly inspectCard?: (
+    context: TutorContext & { readonly inspection: CardInspectionInput },
+  ) => Effect.Effect<unknown, E>;
+  readonly planStudy?: (
+    context: TutorContext & { readonly material: StudyPlanInput },
+  ) => Effect.Effect<unknown, E>;
   readonly generateStudyCard?: (
     context: TutorContext & { readonly material: StudyCardInput },
   ) => Effect.Effect<unknown, E>;
@@ -178,6 +209,21 @@ export type TutorWorkflowTransition = {
 function decodeResult<A, I>(schema: Schema.Schema<A, I>, input: unknown) {
   return Schema.decodeUnknown(schema)(input).pipe(
     Effect.mapError(() => failure("invalid-provider-response")),
+  );
+}
+
+function validReferences(
+  references: readonly StudySourceReference[],
+  sources: readonly StudySourcePassage[],
+): boolean {
+  return references.every((reference) =>
+    sources.some(
+      (source) =>
+        source.materialId === reference.materialId &&
+        source.sectionId === reference.sectionId &&
+        source.pageNumber === reference.pageNumber &&
+        source.text.includes(reference.quote),
+    ),
   );
 }
 
@@ -223,7 +269,31 @@ export function executeTutorWorkflow<E, F = never>(
           Effect.flatMap(provider.generateTargetedQuiz),
         ),
     };
-    if (action.action === "study-card") {
+    if (action.action === "refine-card") {
+      if (!provider.refineCard) return yield* Effect.fail(failure("unsupported-operation"));
+      inference = provider.refineCard(
+        yield* selectTutorInferenceContext(
+          { ...context, refinement: action.refinement },
+          maxInputBytes,
+        ),
+      );
+    } else if (action.action === "inspect-card") {
+      if (!provider.inspectCard) return yield* Effect.fail(failure("unsupported-operation"));
+      inference = provider.inspectCard(
+        yield* selectTutorInferenceContext(
+          { ...context, inspection: action.inspection },
+          maxInputBytes,
+        ),
+      );
+    } else if (action.action === "plan-study") {
+      if (!provider.planStudy) return yield* Effect.fail(failure("unsupported-operation"));
+      inference = provider.planStudy(
+        yield* selectTutorInferenceContext(
+          { ...context, material: action.material },
+          maxInputBytes,
+        ),
+      );
+    } else if (action.action === "study-card") {
       if (!provider.generateStudyCard) return yield* Effect.fail(failure("unsupported-operation"));
       const materialContext = yield* selectTutorInferenceContext(
         { ...context, material: action.material },
@@ -270,7 +340,32 @@ export function executeTutorWorkflow<E, F = never>(
     let response: TutorActionResponse;
     let appendedHistory: readonly TutorHistoryMessage[] = [];
     let pendingQuestion = snapshot.pendingQuestion;
-    if (action.action === "study-card") {
+    if (action.action === "refine-card") {
+      const result = yield* decodeResult(CardRefinementResultSchema, metered.result);
+      if (
+        result.cards.some(
+          (card) =>
+            card.objectiveId !== action.refinement.objectiveId ||
+            !validReferences(card.sourceReferences, action.refinement.sources) ||
+            (action.refinement.sources.length > 0 && card.sourceReferences.length === 0) ||
+            (action.refinement.mode === "cloze" && !/\{\{c[1-9]\d*::[^{}]+\}\}/u.test(card.front)),
+        )
+      )
+        return yield* Effect.fail(failure("invalid-provider-response"));
+      response = { action: action.action, sessionId: state.sessionId, result };
+    } else if (action.action === "inspect-card") {
+      const result = yield* decodeResult(CardInspectionResultSchema, metered.result);
+      response = { action: action.action, sessionId: state.sessionId, result };
+    } else if (action.action === "plan-study") {
+      const result = yield* decodeResult(StudyPlanResultSchema, metered.result);
+      if (
+        result.claims.some(
+          (claim) => !validReferences(claim.sourceReferences, action.material.sources),
+        )
+      )
+        return yield* Effect.fail(failure("invalid-provider-response"));
+      response = { action: action.action, sessionId: state.sessionId, result };
+    } else if (action.action === "study-card") {
       const result = yield* decodeResult(StudyCardResultSchema, metered.result);
       if (
         result.proposal.objectiveId !== action.material.objectiveId ||
@@ -371,7 +466,9 @@ export function executeTutorWorkflow<E, F = never>(
     const resultObjectiveId =
       response.action === "study-card"
         ? response.result.proposal.objectiveId
-        : response.result.objectiveId;
+        : "objectiveId" in response.result
+          ? response.result.objectiveId
+          : null;
     if (
       resultObjectiveId !== null &&
       !context.knowledgeArea.objectives.some((item) => item.id === resultObjectiveId)

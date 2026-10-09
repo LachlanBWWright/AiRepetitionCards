@@ -8,11 +8,11 @@ const meta = {
   parameters: { layout: "fullscreen" },
   decorators: [
     (Story) => (
-      <main className="component-catalog tutor-story">
+      <main className="mx-auto min-h-screen max-w-5xl space-y-6 bg-background p-8">
         <div>
-          <p className="eyebrow">RECALL · CELL BIOLOGY</p>
+          <p className="mb-1 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">RECALL · CELL BIOLOGY</p>
           <h1>Control your tutor history.</h1>
-          <section className="tutor-panel">
+          <section className="space-y-4 rounded-xl border bg-card p-5 shadow-sm">
             <Story />
           </section>
         </div>

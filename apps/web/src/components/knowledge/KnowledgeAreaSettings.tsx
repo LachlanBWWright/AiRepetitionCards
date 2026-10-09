@@ -13,6 +13,24 @@ import {
 } from "@recall/application";
 import { ObjectiveIdSchema, type LearningArea } from "@recall/domain";
 import { Button } from "@/components/ui/Button";
+import { Alert, AlertDescription, Input, Textarea } from "@recall/ui-web";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@recall/ui-web/components/alert-dialog";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@recall/ui-web/components/accordion";
+import { Checkbox } from "@recall/ui-web/components/checkbox";
 
 export type AreaSettingsSaveFailure = {
   readonly _tag: "AreaSettingsSaveFailure";
@@ -32,21 +50,12 @@ type Props = {
   readonly createId?: () => string;
 };
 const fieldStyle: CSSProperties = { display: "grid", gap: 6 };
-const inputStyle: CSSProperties = {
-  width: "100%",
-  padding: "10px 12px",
-  border: "1px solid var(--border, #d8ded3)",
-  borderRadius: 8,
-  background: "var(--surface, #fff)",
-  color: "inherit",
-  font: "inherit",
-};
 const panelStyle: CSSProperties = {
   display: "grid",
   gap: 16,
-  border: "1px solid var(--border, #d8ded3)",
-  borderRadius: 12,
-  padding: 20,
+  border: 0,
+  borderTop: "1px solid var(--border, #d8ded3)",
+  padding: "20px 0",
 };
 const nullable = (value: string): string | null => (value.trim() ? value : null);
 const initialSettings = (area: LearningArea): AreaSettings => {
@@ -91,6 +100,7 @@ export function KnowledgeAreaSettings({
   const saving = useRef(false);
   const mounted = useRef(true);
   const [busy, setBusy] = useState(false);
+  const [confirmReload, setConfirmReload] = useState(false);
   useEffect(() => {
     mounted.current = true;
     return () => {
@@ -123,7 +133,6 @@ export function KnowledgeAreaSettings({
   };
   const reload = () => {
     if (saving.current) return;
-    if (!window.confirm("Discard your draft and load the latest knowledge area settings?")) return;
     const latest = readLatest ? readLatest() : area;
     if (!latest || latest.id !== draftArea.id) {
       setFeedback({
@@ -165,7 +174,7 @@ export function KnowledgeAreaSettings({
     setDraftArea(result.right);
     setDraft(initialSettings(result.right));
     setTags(formatTagInput(result.right.tags ?? []));
-    setFeedback({ kind: "saved", text: "Knowledge area settings saved on this device." });
+    setFeedback({ kind: "saved", text: "Settings saved." });
   };
   const instructions = [
     {
@@ -186,36 +195,26 @@ export function KnowledgeAreaSettings({
   ] as const;
 
   return (
-    <form
-      className="knowledge-area-settings"
-      aria-busy={busy}
-      onSubmit={save}
-      style={{ display: "grid", gap: 20 }}
-    >
+    <form className="grid gap-5" aria-busy={busy} onSubmit={save}>
       <div>
-        <h2 style={{ marginBottom: 6 }}>Knowledge area settings</h2>
-        <p style={{ margin: 0 }}>Shape {area.title} and the learning goals your cards support.</p>
+        <h2 className="mb-2 text-lg font-semibold">{area.title} settings</h2>
       </div>
-      <fieldset
-        disabled={busy}
-        style={{ border: 0, padding: 0, margin: 0, minWidth: 0, display: "grid", gap: 20 }}
-      >
+      <fieldset disabled={busy} className="grid min-w-0 gap-5 border-0 p-0">
         {feedback && (
-          <p
+          <Alert
             role={feedback.kind === "error" ? "alert" : "status"}
-            style={{ margin: 0, color: feedback.kind === "error" ? "#a12e20" : "inherit" }}
+            variant={feedback.kind === "error" ? "destructive" : "default"}
           >
-            {feedback.text}
-          </p>
+            <AlertDescription>{feedback.text}</AlertDescription>
+          </Alert>
         )}
         <section aria-labelledby={`${prefix}-details`} style={panelStyle}>
-          <h3 id={`${prefix}-details`} style={{ margin: 0 }}>
-            Details and attribution
+          <h3 className="m-0 text-base font-semibold" id={`${prefix}-details`}>
+            Details
           </h3>
           <label style={fieldStyle}>
             Description
-            <textarea
-              style={inputStyle}
+            <Textarea
               rows={3}
               value={draft.description ?? ""}
               onChange={(event) => update({ description: nullable(event.target.value) })}
@@ -230,8 +229,7 @@ export function KnowledgeAreaSettings({
           >
             <label style={fieldStyle}>
               Language
-              <input
-                style={inputStyle}
+              <Input
                 required
                 maxLength={80}
                 placeholder="en"
@@ -241,8 +239,7 @@ export function KnowledgeAreaSettings({
             </label>
             <label style={fieldStyle}>
               Tags
-              <textarea
-                style={inputStyle}
+              <Textarea
                 rows={2}
                 placeholder="biology, cells"
                 value={tags}
@@ -251,14 +248,11 @@ export function KnowledgeAreaSettings({
                   setFeedback(null);
                 }}
               />
-              <small>
-                Separate with commas; quote a tag containing commas, double embedded quotes.
-              </small>
+              <small>Separate tags with commas.</small>
             </label>
             <label style={fieldStyle}>
               License
-              <input
-                style={inputStyle}
+              <Input
                 maxLength={120}
                 placeholder="e.g. CC BY 4.0"
                 value={draft.licence ?? ""}
@@ -267,8 +261,7 @@ export function KnowledgeAreaSettings({
             </label>
             <label style={fieldStyle}>
               Attribution
-              <textarea
-                style={inputStyle}
+              <Textarea
                 rows={2}
                 maxLength={500}
                 placeholder="Credit the original author or source."
@@ -278,40 +271,39 @@ export function KnowledgeAreaSettings({
             </label>
           </div>
         </section>
-        <section aria-labelledby={`${prefix}-ai`} style={panelStyle}>
-          <h3 id={`${prefix}-ai`} style={{ margin: 0 }}>
-            AI preferences
-          </h3>
-          <p style={{ margin: 0 }}>
-            These preferences guide AI suggestions. Review proposals before adding them to your
-            area.
-          </p>
-          {instructions.map(({ key, label, help }) => (
-            <label key={key} style={fieldStyle}>
-              {label}
-              <textarea
-                style={inputStyle}
-                rows={3}
-                maxLength={2000}
-                value={draft.ai[key] ?? ""}
-                onChange={(event) =>
-                  update({
-                    ai: {
-                      ...draft.ai,
-                      [key]:
-                        key === "tutorInstructions"
-                          ? event.target.value
-                          : nullable(event.target.value),
-                    },
-                  })
-                }
-              />
-              <small>
-                {help} {(draft.ai[key] ?? "").length}/2,000 characters
-              </small>
-            </label>
-          ))}
-        </section>
+        <Accordion type="single" collapsible className="border-t">
+          <AccordionItem value="ai-instructions" className="border-b-0">
+            <AccordionTrigger id={`${prefix}-ai`}>AI instructions</AccordionTrigger>
+            <AccordionContent>
+              <div style={{ display: "grid", gap: 16 }}>
+                {instructions.map(({ key, label, help }) => (
+                  <label key={key} style={fieldStyle}>
+                    {label}
+                    <Textarea
+                      rows={3}
+                      maxLength={2000}
+                      value={draft.ai[key] ?? ""}
+                      onChange={(event) =>
+                        update({
+                          ai: {
+                            ...draft.ai,
+                            [key]:
+                              key === "tutorInstructions"
+                                ? event.target.value
+                                : nullable(event.target.value),
+                          },
+                        })
+                      }
+                    />
+                    <small>
+                      {help} {(draft.ai[key] ?? "").length}/2,000 characters
+                    </small>
+                  </label>
+                ))}
+              </div>
+            </AccordionContent>
+          </AccordionItem>
+        </Accordion>
         <section aria-labelledby={`${prefix}-objectives`} style={panelStyle}>
           <div
             style={{
@@ -321,10 +313,11 @@ export function KnowledgeAreaSettings({
               gap: 12,
             }}
           >
-            <h3 id={`${prefix}-objectives`} style={{ margin: 0 }}>
+            <h3 className="m-0 text-base font-semibold" id={`${prefix}-objectives`}>
               Learning objectives
             </h3>
             <Button
+              type="button"
               variant="secondary"
               size="small"
               onClick={addObjective}
@@ -333,21 +326,13 @@ export function KnowledgeAreaSettings({
               Add objective
             </Button>
           </div>
-          <p style={{ margin: 0 }}>
-            Connect goals with prerequisites. Removing a goal unlinks its cards while preserving
-            their review progress.
-          </p>
-          <small>{draft.objectives.length}/200 objectives</small>
-          {draft.objectives.length === 0 && (
-            <p style={{ margin: 0 }}>No objectives yet. Add a goal to organize your cards.</p>
-          )}
+          {draft.objectives.length === 0 && <p style={{ margin: 0 }}>No objectives yet.</p>}
           {draft.objectives.map((objective, index) => (
             <fieldset key={objective.id} style={{ ...panelStyle, minWidth: 0 }}>
               <legend>Objective {index + 1}</legend>
               <label style={fieldStyle}>
                 Title
-                <input
-                  style={inputStyle}
+                <Input
                   required
                   value={objective.title}
                   onChange={(event) =>
@@ -359,56 +344,69 @@ export function KnowledgeAreaSettings({
                   }
                 />
               </label>
-              <label style={fieldStyle}>
-                Description
-                <textarea
-                  style={inputStyle}
-                  rows={2}
-                  value={objective.description ?? ""}
-                  onChange={(event) =>
-                    update({
-                      objectives: draft.objectives.map((item) =>
-                        item.id === objective.id
-                          ? { ...item, description: nullable(event.target.value) }
-                          : item,
-                      ),
-                    })
-                  }
-                />
-              </label>
-              <fieldset style={{ border: 0, padding: 0, margin: 0, display: "grid", gap: 8 }}>
-                <legend style={{ marginBottom: 8 }}>Prerequisites</legend>
-                {draft.objectives.length < 2 && (
-                  <small>Add another objective to choose prerequisites.</small>
-                )}
-                {draft.objectives
-                  .filter((item) => item.id !== objective.id)
-                  .map((prerequisite) => (
-                    <label key={prerequisite.id} style={{ display: "flex", gap: 8 }}>
-                      <input
-                        type="checkbox"
-                        checked={objective.prerequisiteIds.includes(prerequisite.id)}
-                        onChange={(event) =>
-                          update({
-                            objectives: draft.objectives.map((item) =>
-                              item.id === objective.id
-                                ? {
-                                    ...item,
-                                    prerequisiteIds: event.target.checked
-                                      ? [...item.prerequisiteIds, prerequisite.id]
-                                      : item.prerequisiteIds.filter((id) => id !== prerequisite.id),
-                                  }
-                                : item,
-                            ),
-                          })
-                        }
-                      />
-                      {prerequisite.title || "Untitled objective"}
-                    </label>
-                  ))}
-              </fieldset>
+              <Accordion type="single" collapsible>
+                <AccordionItem value={`objective-${objective.id}`} className="border-b-0">
+                  <AccordionTrigger>Description and prerequisites</AccordionTrigger>
+                  <AccordionContent>
+                    <div style={{ display: "grid", gap: 16 }}>
+                      <label style={fieldStyle}>
+                        Description
+                        <Textarea
+                          rows={2}
+                          value={objective.description ?? ""}
+                          onChange={(event) =>
+                            update({
+                              objectives: draft.objectives.map((item) =>
+                                item.id === objective.id
+                                  ? { ...item, description: nullable(event.target.value) }
+                                  : item,
+                              ),
+                            })
+                          }
+                        />
+                      </label>
+                      <fieldset
+                        style={{ border: 0, padding: 0, margin: 0, display: "grid", gap: 8 }}
+                      >
+                        <legend style={{ marginBottom: 8 }}>Prerequisites</legend>
+                        {draft.objectives.length < 2 && (
+                          <small>Add another objective to choose prerequisites.</small>
+                        )}
+                        {draft.objectives
+                          .filter((item) => item.id !== objective.id)
+                          .map((prerequisite) => (
+                            <label key={prerequisite.id} style={{ display: "flex", gap: 8 }}>
+                              <Checkbox
+                                checked={objective.prerequisiteIds.includes(prerequisite.id)}
+                                onCheckedChange={(checked) =>
+                                  update({
+                                    objectives: draft.objectives.map((item) =>
+                                      item.id === objective.id
+                                        ? {
+                                            ...item,
+                                            prerequisiteIds:
+                                              checked === true
+                                                ? [...item.prerequisiteIds, prerequisite.id]
+                                                : item.prerequisiteIds.filter(
+                                                    (id) => id !== prerequisite.id,
+                                                  ),
+                                          }
+                                        : item,
+                                    ),
+                                  })
+                                }
+                              />
+                              {prerequisite.title || "Untitled objective"}
+                            </label>
+                          ))}
+                      </fieldset>
+                    </div>
+                  </AccordionContent>
+                </AccordionItem>
+              </Accordion>
               <div>
                 <Button
+                  type="button"
                   variant="danger"
                   size="small"
                   onClick={() =>
@@ -421,6 +419,7 @@ export function KnowledgeAreaSettings({
                         })),
                     })
                   }
+                  title="Unlink this objective from cards without deleting their review history"
                 >
                   Remove objective
                 </Button>
@@ -430,11 +429,27 @@ export function KnowledgeAreaSettings({
         </section>
         <div>
           <Button type="submit">{busy ? "Saving settings…" : "Save settings"}</Button>
-          <Button variant="secondary" onClick={reload}>
+          <Button type="button" variant="secondary" onClick={() => setConfirmReload(true)}>
             Reload latest settings
           </Button>
         </div>
       </fieldset>
+      <AlertDialog open={confirmReload} onOpenChange={setConfirmReload}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Discard this draft?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Your unsaved changes will be replaced with the latest knowledge area settings.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Keep editing</AlertDialogCancel>
+            <AlertDialogAction type="button" onClick={reload}>
+              Reload settings
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </form>
   );
 }

@@ -1,23 +1,28 @@
 # Deployment and operations runbook
 
-This runbook covers the current hosted web stack: Next.js Route Handlers, Supabase Auth/Postgres/Storage, and optional server-side OpenAI tutoring. Mobile and desktop use the same hosted API; their store signing and release steps are platform-specific and remain separate work.
+This runbook covers the hosted Next.js frontend and ASP.NET Core API, with Supabase Auth/Postgres/Storage and optional server-side OpenAI tutoring. The Next.js same-origin proxy forwards browser API/auth paths to ASP.NET when configured; Electron and Expo call their configured API origin directly. Mobile and desktop signing and release remain platform-specific.
 
 ## Environments and secrets
 
 Use separate Supabase projects, OpenAI credentials, and deployment environments for local development, staging, and production. Never reuse a production service-role key in local development or preview deployments.
 
-Configure these values in the web deployment's server environment:
+Configure frontend values in the Next.js server environment and API secrets in the ASP.NET service environment. The API reads standard .NET providers such as environment variables; it does not load `apps/web/.env.local` or Next.js environment files. The Next.js proxy's `RECALL_API_URL` is the ASP.NET upstream; the Electron build's variable with the same name is its client-visible API origin. Keep those per-process values separate in production. For local startup and the full server-only feature list, see [ASP.NET setup](../backend/README.md).
 
 For a deployment with multiple instances, set `API_RATE_LIMIT_MODE=redis`, `API_RATE_LIMIT_STORE_REST_URL`, `API_RATE_LIMIT_STORE_REST_TOKEN` and a unique `API_RATE_LIMIT_STORE_PREFIX`. Production defaults to Redis and returns 503 if required storage configuration is missing. The local `.env.example` explicitly selects memory; change it for distributed deployments. To enable IP limits, configure a proxy that overwrites a single-address header and blocks direct origin access, then set `API_RATE_LIMIT_TRUSTED_IP_HEADER` and a shared random `API_RATE_LIMIT_IP_HMAC_SECRET` of at least 32 characters. See [HTTP operations](http-operations.md) for protocol, timeout, privacy and trust requirements. Redis and proxy enforcement need deployment acceptance before release.
 
-| Variable                               | Required             | Notes                                                                                |
-| -------------------------------------- | -------------------- | ------------------------------------------------------------------------------------ |
-| `NEXT_PUBLIC_SUPABASE_URL`             | Yes                  | Supabase project URL.                                                                |
-| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Yes                  | Publishable client key; database RLS remains mandatory.                              |
-| `RECALL_API_URL`                       | Desktop clients      | Public origin of the matching web API.                                               |
-| `SUPABASE_SERVICE_ROLE_KEY`            | For account deletion | Server-only; never prefix with `NEXT_PUBLIC_`. Deletion is unavailable when missing. |
-| `OPENAI_API_KEY`                       | Optional             | Server-only; omit to disable AI.                                                     |
-| `OPENAI_MODEL`                         | Optional             | Model name used by the server adapter.                                               |
+| Variable                               | Required             | Notes                                                                                                                                    |
+| -------------------------------------- | -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `NEXT_PUBLIC_SUPABASE_URL`             | Web frontend         | Supabase project URL used by browser sign-in.                                                                                            |
+| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Web frontend         | Publishable client key; database RLS remains mandatory.                                                                                  |
+| `RECALL_API_URL`                       | Next.js proxy        | ASP.NET upstream origin for same-origin `/api/*` and `/auth/*` forwarding. Do not point it back to the Next.js public origin.            |
+| `SUPABASE_URL`                         | ASP.NET API          | Supabase project URL; falls back to `NEXT_PUBLIC_SUPABASE_URL` if omitted.                                                               |
+| `SUPABASE_PUBLISHABLE_KEY`             | ASP.NET API          | Publishable key; falls back to `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` if omitted.                                                        |
+| `RECALL_TRUSTED_PROXY_IPS`             | ASP.NET API          | Comma-separated exact proxy peer IP addresses trusted for forwarded host and scheme. Restrict direct API access to the configured proxy. |
+| `SUPABASE_SERVICE_ROLE_KEY`            | Optional ASP.NET API | Server-only privilege for explicit account/privacy/retention operations; never prefix with `NEXT_PUBLIC_`.                               |
+| `OPENAI_API_KEY`                       | Optional ASP.NET API | Server-only; omit to disable hosted AI.                                                                                                  |
+| `OPENAI_MODEL`                         | Optional ASP.NET API | Default model name; task-specific tutor model settings may override it.                                                                  |
+
+Native clients use their own origin settings: `RECALL_API_URL` in an Electron build and `EXPO_PUBLIC_RECALL_API_URL` in Expo. Point each at the public HTTPS ASP.NET origin or a gateway that serves every path that client calls. The same setting name `RECALL_API_URL` has different values by process: the Next.js server needs its private ASP.NET upstream, while Electron needs a client-reachable API origin.
 
 Optional [hosted AI budgets](task-model-routing.md#daily-hosted-budgets) require `AI_DAILY_TOKEN_BUDGET` and/or `AI_DAILY_REQUEST_LIMIT`, plus server-only `AI_BUDGET_STORE_REST_URL` and `AI_BUDGET_STORE_REST_TOKEN`. Use an environment-specific prefix and Redis with atomic scripting, protected against eviction and data loss. Configured storage failures stop inference; unset limits preserve the existing Supabase call quota.
 
@@ -28,9 +33,9 @@ Store secrets in the hosting provider's encrypted secret manager. Do not commit 
 1. Create a fresh Supabase project and configure Auth email delivery. Set the production-style Site URL and allow-list the staging web `/auth/confirm` URL plus `recall://auth/confirm` for native email-link sign-in. Configure the Magic Link template to use `{{ .RedirectTo }}?token_hash={{ .TokenHash }}&type=email`.
 2. Apply every committed migration in timestamp order using the Supabase CLI linked to the staging project. Review the target project before applying. Generate database types from the applied schema with `pnpm supabase:types` and commit/regenerate them when migrations change.
 3. Set the deployment environment variables above. Add `SUPABASE_SERVICE_ROLE_KEY` only to the server environment. Configure SMTP before testing delivered sign-in messages; local Supabase uses an inbox capture service instead.
-4. Deploy the web app and confirm sign-in, sign-out, authenticated sync, content conflict handling, tutor (if enabled), account export/deletion, publication, and media read/write flows. Verify public and unlisted visibility separately, including revoked-link behavior.
+4. Deploy ASP.NET and the web frontend. Set the Next.js server's `RECALL_API_URL` to the ASP.NET upstream, then confirm sign-in, sign-out, authenticated sync, content conflict handling, tutor, account export/deletion, publication, and media read/write flows. Verify public and unlisted visibility separately, including revoked-link behavior.
 5. Run the repository quality gates in CI (`pnpm policy`, `pnpm typecheck`, `pnpm lint`, `pnpm format:check`, `pnpm build`, `pnpm build-storybook`). These do not prove runtime PostgreSQL/RLS correctness; staging must include database-level integration checks before production approval.
-6. Point a staging Electron/mobile build at the staging API and verify email-link return, bearer auth, sync, media, and deletion on supported devices. Do not treat web builds or Storybook as device validation.
+6. Set the staging Electron and mobile API origins to a client-reachable HTTPS API origin or gateway. Verify native email-link return, bearer auth, sync, media, tutoring, publishing and deletion on supported devices. Do not treat web builds or Storybook as device validation.
 
 ## Production release gates
 
@@ -52,7 +57,7 @@ For credential exposure, rotate the key and redeploy. For an unlisted-link leak,
 
 ## Local runtime
 
-Use `pnpm supabase:start` and copy the local URL/publishable key into `apps/web/.env.local`. Local mail is captured by Supabase's inbox service. `pnpm supabase:reset` is destructive to the local database. Generated database types are checked into `packages/infra-supabase/src/database.types.ts`. Historical setup notes do not prove current database state or isolation; live migration, RLS and Storage acceptance remains unverified in this audit. See [the root README](../README.md) for app startup and environment details.
+Use `pnpm supabase:start` and copy the local Supabase URL/publishable key into `apps/web/.env.local`. Run ASP.NET separately with `dotnet run --project backend/Recall.Api --urls http://localhost:5000`, set the API's `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` in its process environment, and keep `RECALL_API_URL=http://localhost:5000` in the web environment so Next.js proxies browser calls same-origin. Local mail is captured by Supabase's inbox service. `pnpm supabase:reset` is destructive to the local database. Generated database types are checked into `packages/infra-supabase/src/database.types.ts`. Historical setup notes do not prove current database state or isolation; live migration, RLS and Storage acceptance remains unverified in this audit. See [the root README](../README.md) and [ASP.NET setup](../backend/README.md) for app startup and environment details.
 
 ## Web content security policy
 

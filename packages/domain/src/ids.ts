@@ -5,7 +5,10 @@ export const ObjectiveIdSchema = Schema.String.pipe(
   Schema.minLength(1),
   Schema.brand("ObjectiveId"),
 );
-export const CardIdSchema = Schema.String.pipe(Schema.minLength(1), Schema.brand("CardId"));
+export const AssessmentIdSchema = Schema.String.pipe(
+  Schema.minLength(1),
+  Schema.brand("AssessmentId"),
+);
 export const ReviewEventIdSchema = Schema.String.pipe(
   Schema.minLength(1),
   Schema.brand("ReviewEventId"),
@@ -27,7 +30,7 @@ export const MediaIdSchema = Schema.String.pipe(
 
 export type AreaId = typeof AreaIdSchema.Type;
 export type ObjectiveId = typeof ObjectiveIdSchema.Type;
-export type CardId = typeof CardIdSchema.Type;
+export type AssessmentId = typeof AssessmentIdSchema.Type;
 export type ReviewEventId = typeof ReviewEventIdSchema.Type;
 export type DeviceId = typeof DeviceIdSchema.Type;
 export type TutorSessionId = typeof TutorSessionIdSchema.Type;
@@ -40,8 +43,8 @@ export const createAreaId = (value: string): AreaId =>
   Schema.decodeUnknownSync(AreaIdSchema)(value);
 export const createObjectiveId = (value: string): ObjectiveId =>
   Schema.decodeUnknownSync(ObjectiveIdSchema)(value);
-export const createCardId = (value: string): CardId =>
-  Schema.decodeUnknownSync(CardIdSchema)(value);
+export const createAssessmentId = (value: string): AssessmentId =>
+  Schema.decodeUnknownSync(AssessmentIdSchema)(value);
 export const createReviewEventId = (value: string): ReviewEventId =>
   Schema.decodeUnknownSync(ReviewEventIdSchema)(value);
 export const createDeviceId = (value: string): DeviceId =>

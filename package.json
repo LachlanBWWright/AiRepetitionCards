@@ -4,15 +4,18 @@
   "packageManager": "pnpm@10.26.2",
   "scripts": {
     "dev": "turbo run dev --filter=web",
+    "dev:api:next": "node scripts/dev-with-api.mjs next",
     "build": "turbo run build --filter=web",
     "build:mobile": "turbo run build --filter=mobile",
     "dev:desktop": "turbo run dev --filter=desktop",
+    "dev:api:desktop": "node scripts/dev-with-api.mjs desktop",
     "build:desktop": "turbo run build --filter=desktop",
     "package:desktop": "pnpm --filter desktop package",
     "lint": "turbo run lint lint:packages",
     "policy": "node scripts/generate-design-tokens.mjs --check && node scripts/check-policy.mjs && node scripts/check-migrations.mjs",
     "typecheck": "turbo run typecheck",
     "dev:mobile": "pnpm --filter mobile start",
+    "dev:api:mobile": "node scripts/dev-with-api.mjs mobile",
     "format:check": "pnpm --filter web format:check",
     "format:write": "pnpm --filter web format:write",
     "storybook": "pnpm --filter web storybook",
@@ -30,8 +33,10 @@
     "check:static": "pnpm policy:static && pnpm typecheck && pnpm lint && pnpm format:check && pnpm build:all && pnpm build-storybook",
     "test": "pnpm --filter @recall/verification test",
     "test:integration": "pnpm --filter @recall/verification test:integration",
-    "check:pure": "pnpm test && pnpm check:static",
-    "check": "pnpm test && pnpm test:integration && pnpm check:static"
+    "test:local-integration": "pnpm --filter @recall/verification test:local-integration",
+    "test:e2e": "pnpm --filter web test:e2e",
+    "check:pure": "pnpm test && pnpm test:local-integration && pnpm check:static",
+    "check": "pnpm test && pnpm test:local-integration && pnpm test:integration && pnpm check:static"
   },
   "devDependencies": {
     "eslint": "^9.39.5",

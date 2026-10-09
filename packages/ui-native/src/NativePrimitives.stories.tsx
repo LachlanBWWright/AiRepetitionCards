@@ -1,31 +1,23 @@
 import type { Meta, StoryObj } from "@storybook/react";
-import { StyleSheet, Text, View } from "react-native";
-import { designTokens } from "@recall/design-tokens";
-import { NativeButton, NativeEmptyState, NativeStatusBadge } from "./index";
+import { Text, View } from "react-native";
+import { NativeButton } from "./NativeButton";
 
 function NativeCatalog({ state }: { readonly state: "actions" | "empty" | "offline" }) {
   return (
-    <View style={styles.screen}>
-      <View style={styles.content}>
-        <View style={styles.header}>
-          <Text style={styles.brand}>Recall</Text>
-          <NativeStatusBadge label="OFFLINE READY" />
-        </View>
-        <Text style={styles.heading}>Your study space</Text>
+    <View className="flex-1 min-h-[900px] bg-recall-paper">
+      <View className="w-full max-w-[720px] self-center p-6 gap-6">
+        <Text className="text-recall-ink text-[32px] font-bold">Today</Text>
         {state === "empty" ? (
-          <NativeEmptyState
-            title="You’re all caught up"
-            description="There are no cards due in Cell Biology. Come back later for your next review."
-          />
+          <Text className="text-recall-muted text-[14px] leading-[22px]">No cards due</Text>
         ) : (
-          <View style={styles.card}>
-            <Text style={styles.title}>
-              {state === "offline" ? "Your library is available offline" : "Ready to study"}
+          <View className="bg-recall-surface rounded-recall-card border border-recall-line p-6 gap-3">
+            <Text className="text-recall-ink text-[20px] font-bold">
+              {state === "offline" ? "Library available" : "Ready to study"}
             </Text>
-            <Text style={styles.description}>
+            <Text className="text-recall-muted text-[14px] leading-[22px]">
               {state === "offline"
                 ? "Cards and review history stay on this device until you choose to sync."
-                : "12 cards are due in Cell Biology. Reveal an answer, then rate your recall."}
+                : "12 cards are due. Reveal an answer, then rate your recall."}
             </Text>
             <NativeButton label="Show answer" onPress={() => undefined} />
             <NativeButton label="Import Anki deck" tone="soft" onPress={() => undefined} />
@@ -48,21 +40,3 @@ type Story = StoryObj<typeof meta>;
 export const StudyActions: Story = { args: { state: "actions" } };
 export const CaughtUp: Story = { args: { state: "empty" } };
 export const OfflineLibrary: Story = { args: { state: "offline" } };
-
-const styles = StyleSheet.create({
-  screen: { flex: 1, minHeight: 900, backgroundColor: designTokens.color.paper },
-  content: { width: "100%", maxWidth: 720, alignSelf: "center", padding: 24, gap: 24 },
-  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  brand: { color: designTokens.color.ink, fontSize: 24, fontWeight: "700" },
-  heading: { color: designTokens.color.ink, fontSize: 32, fontWeight: "700" },
-  card: {
-    backgroundColor: designTokens.color.surface,
-    borderRadius: designTokens.radius.card,
-    borderColor: designTokens.color.line,
-    borderWidth: 1,
-    padding: 24,
-    gap: 12,
-  },
-  title: { color: designTokens.color.ink, fontSize: 20, fontWeight: "700" },
-  description: { color: designTokens.color.muted, fontSize: 14, lineHeight: 22 },
-});

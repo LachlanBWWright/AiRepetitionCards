@@ -1,9 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Button } from "@/components/ui/Button";
+import { Checkbox } from "@recall/ui-web/components/checkbox";
+import { Alert } from "@recall/ui-web";
 import { Effect, Either, Fiber, Schema } from "effect";
 import type { SyncPushResponse } from "@recall/contracts";
-import { AccountIdSchema, type AreaId, type CardId } from "@recall/domain";
+import { AccountIdSchema, type AreaId, type AssessmentId } from "@recall/domain";
 import {
   syncWorkspace,
   workspaceAccountFailureMessage,
@@ -43,6 +46,7 @@ function readSyncOwner(): Effect.Effect<string | null, { readonly _tag: "SyncAut
 
 export function WorkspaceSyncAction({
   workspace,
+  autoSync = false,
   demo = false,
   onSynced,
   onContentConflict,
@@ -55,6 +59,7 @@ export function WorkspaceSyncAction({
   onReviewProvisionCapacity,
 }: {
   workspace: Workspace;
+  autoSync?: boolean;
   demo?: boolean;
   checkpoint: (workspace: Workspace) => Effect.Effect<Workspace, WorkspaceSyncCheckpointFailure>;
   onExportOffline: () => void;
@@ -68,7 +73,7 @@ export function WorkspaceSyncAction({
     cursor: string,
     pulledEvents: readonly ReviewEvent[],
     pulledAreas: readonly LearningArea[],
-    deletedCardIds: readonly CardId[],
+    deletedCardIds: readonly AssessmentId[],
     syncedAreaTombstoneIds: readonly AreaId[],
     pulledDeletedAreaIds: readonly AreaId[],
     contentHashes: Readonly<Record<string, string>>,
@@ -88,6 +93,8 @@ export function WorkspaceSyncAction({
     demoAccountState || demoMissingReviewContent ? "12345678-1234-4234-8234-123456789abc" : null,
   );
   const ownerRef = useRef(ownerId);
+  const lastSyncedWorkspace = useRef<string | null>(null);
+  const syncRef = useRef<() => void>(() => undefined);
   const accountEpoch = useRef(0);
   const [accountFailure, setAccountFailure] = useState<typeof demoAccountState>(demoAccountState);
   const [adoptionConfirmed, setAdoptionConfirmed] = useState(false);
@@ -98,10 +105,11 @@ export function WorkspaceSyncAction({
       ? "account-mismatch"
       : undefined);
   const [busy, setBusy] = useState(false);
+  const [retrySignal, setRetrySignal] = useState(0);
   const missingReviewContentMessage =
-    "A pending review refers to deleted content that this older workspace no longer contains. Export this device's current private backup or review snapshot before replacing it with an older backup containing that card. Your reviews remain saved; backups are not automatically merged.";
+    "A pending review refers to deleted content that this tab no longer contains. Download a backup or review snapshot before replacing it with an older backup containing that card. Pending changes remain in this tab; backups are not automatically merged.";
   const provisionCapacityMessage =
-    "Cloud content and pending deleted-review content exceed this area's card or objective limits. Local cards and reviews remain saved. Export a private backup before changing cloud content to free capacity.";
+    "Cloud content and pending deleted-review content exceed this area's card or objective limits. Current tab changes remain in memory. Download a backup before changing cloud content to free capacity.";
   const [message, setMessage] = useState<string | null>(
     demoMissingReviewContent ? missingReviewContentMessage : null,
   );
@@ -292,8 +300,8 @@ export function WorkspaceSyncAction({
                 ? provisionCapacityMessage
                 : error._tag === "WorkspaceSyncFailure" &&
                     (error.reason === "content" || error.reason === "media")
-                  ? "Knowledge Areas could not sync. Your reviews are still saved on this device."
-                  : "Sync failed. Your reviews are still saved on this device.",
+                  ? "Knowledge Areas could not sync. Changes remain only in this tab until the server confirms them."
+                  : "Sync failed. Changes exist only in this tab until the server confirms them; retry before leaving.",
           );
         },
         onSuccess: (result) => {
@@ -326,9 +334,10 @@ export function WorkspaceSyncAction({
             result.baseline,
           );
           if (!applied) {
-            setMessage("Review history could not be replayed. Your local workspace remains saved.");
+            setMessage("Review history could not be replayed. Changes remain only in this tab.");
             return;
           }
+          lastSyncedWorkspace.current = JSON.stringify(applied);
           setConflictData(null);
           if ((applied.syncContentConflictAreaIds ?? []).length > 0) {
             setMessage(
@@ -341,14 +350,17 @@ export function WorkspaceSyncAction({
             !result.hasMore &&
             !result.uploadDeferred
           ) {
+            lastSyncedWorkspace.current = null;
             setMessage("Your newer local edits were preserved. Sync again to upload them.");
             return;
           }
           if (result.hasMore) {
+            lastSyncedWorkspace.current = null;
             setMessage("Sync progress saved. More remote changes remain; sync again to continue.");
             return;
           }
           if (result.uploadDeferred) {
+            lastSyncedWorkspace.current = null;
             setMessage(
               retainedCards > 0
                 ? "Reviews and deletion acknowledgements are still syncing. Deleted content stays hidden; sync again to finish."
@@ -357,6 +369,7 @@ export function WorkspaceSyncAction({
             return;
           }
           if (result.remainingPendingReviews > 0 && result.conflicts.length === 0) {
+            lastSyncedWorkspace.current = null;
             setMessage(
               `Sync progress saved. ${result.remainingPendingReviews} pending review${result.remainingPendingReviews === 1 ? " remains" : "s remain"}; sync again to continue.`,
             );
@@ -365,7 +378,7 @@ export function WorkspaceSyncAction({
           const { acceptedIds, conflicts } = result;
           setMessage(
             conflicts.length > 0
-              ? `${conflicts.length} review conflict${conflicts.length === 1 ? " was" : "s were"} rebased on this device. Sync again to finish.`
+              ? `${conflicts.length} review conflict${conflicts.length === 1 ? " was" : "s were"} rebased. Sync again to finish.`
               : acceptedIds.length === 0
                 ? result.pulledEvents.length === 0
                   ? "Everything is up to date."
@@ -374,95 +387,104 @@ export function WorkspaceSyncAction({
           );
         },
       }),
-      Effect.ensuring(Effect.sync(() => setBusy(false))),
+      Effect.ensuring(
+        Effect.sync(() => {
+          setBusy(false);
+          if (autoSync) window.setTimeout(() => setRetrySignal((value) => value + 1), 3_000);
+        }),
+      ),
     );
     Effect.runFork(program);
   }
 
+  syncRef.current = () => sync();
+
+  useEffect(() => {
+    if (!autoSync || !ownerId || demo || demoAccountState || demoMissingReviewContent) return;
+    if (lastSyncedWorkspace.current === JSON.stringify(workspace)) return;
+    const timer = window.setTimeout(() => syncRef.current(), 400);
+    return () => window.clearTimeout(timer);
+  }, [autoSync, demo, demoAccountState, demoMissingReviewContent, ownerId, retrySignal, workspace]);
+
   if ((demo && !demoAccountState && !demoMissingReviewContent) || !enabled || !ownerId) return null;
+  const messageIsError =
+    visibleAccountFailure !== null ||
+    (message !== null &&
+      /could not|couldn't|failed|failure|unavailable|not applied|mismatch|cannot/i.test(message));
   return (
-    <div className="workspace-sync-action">
-      <button
-        className="text-button"
+    <div className="relative">
+      <Button
         type="button"
         onClick={() => sync()}
         disabled={busy || visibleAccountFailure === "account-mismatch"}
       >
         {busy ? "Syncing…" : `Sync${pendingIds.length ? ` · ${pendingIds.length}` : ""}`}
-      </button>
+      </Button>
       <div
         className={
           visibleAccountFailure ||
           message === missingReviewContentMessage ||
           message === provisionCapacityMessage
-            ? "workspace-sync-account-notice"
-            : "workspace-sync-feedback"
+            ? "absolute right-0 top-[calc(100%+12px)] z-20 grid w-[min(390px,85vw)] gap-3.5 rounded-xl border bg-card p-5 shadow-lg [&>div]:grid [&>div]:gap-3.5 [&_label]:text-xs [&_label]:leading-relaxed"
+            : ""
         }
       >
         {retainedCards > 0 && (
-          <span
-            className="saved-state"
+          <Alert
+            role="status"
             title="Deleted content is retained privately until its reviews and deletion acknowledgements have synced."
           >
             {retainedCards} deleted · awaiting review sync
-          </span>
+          </Alert>
         )}
         {(message || visibleAccountFailure) && (
-          <span className="saved-state" role="status">
+          <Alert
+            role={messageIsError ? "alert" : "status"}
+            variant={messageIsError ? "destructive" : "default"}
+          >
             {message ??
               workspaceAccountFailureMessage({
                 _tag: "WorkspaceSyncFailure",
                 reason: visibleAccountFailure ?? "request",
               })}
-          </span>
+          </Alert>
         )}
         {accountFailure === "owner-adoption-required" && (
           <div>
-            <label>
-              <input
-                type="checkbox"
+            <label htmlFor="workspace-adoption-confirmed">
+              <Checkbox
+                id="workspace-adoption-confirmed"
                 checked={adoptionConfirmed}
-                onChange={(event) => setAdoptionConfirmed(event.target.checked)}
+                onCheckedChange={(checked) => setAdoptionConfirmed(checked === true)}
               />{" "}
               I confirm this older workspace belongs to the signed-in account.
             </label>
-            <button
-              className="text-button"
-              type="button"
-              disabled={busy || !adoptionConfirmed}
-              onClick={() => sync(true)}
-            >
+            <Button type="button" disabled={busy || !adoptionConfirmed} onClick={() => sync(true)}>
               Confirm ownership and sync
-            </button>
+            </Button>
           </div>
         )}
         {visibleAccountFailure === "account-mismatch" && (
           <div>
-            <button className="text-button" type="button" onClick={onExportOffline}>
-              Export offline backup
-            </button>
-            <label>
-              <input
-                type="checkbox"
+            <Button type="button" onClick={onExportOffline}>
+              Download tab backup
+            </Button>
+            <label htmlFor="workspace-clear-confirmed">
+              <Checkbox
+                id="workspace-clear-confirmed"
                 checked={clearConfirmed}
-                onChange={(event) => setClearConfirmed(event.target.checked)}
+                onCheckedChange={(checked) => setClearConfirmed(checked === true)}
               />{" "}
-              Clear this device workspace and attachments to start fresh.
+              Clear this tab's working copy and attachments to continue with this account.
             </label>
-            <button
-              className="text-button"
-              type="button"
-              disabled={busy || !clearConfirmed}
-              onClick={onClearWorkspace}
-            >
-              Clear device workspace
-            </button>
+            <Button type="button" disabled={busy || !clearConfirmed} onClick={onClearWorkspace}>
+              Clear tab workspace
+            </Button>
           </div>
         )}
       </div>
       {conflictData && (
-        <button
-          className="text-button"
+        <Button
           type="button"
           onClick={() => {
             const preview = conflictData;
@@ -496,7 +518,7 @@ export function WorkspaceSyncAction({
                     );
                     if (!applied) {
                       setMessage(
-                        "Server history could not be replayed. Your local workspace remains saved.",
+                        "Server history could not be replayed. The current tab's workspace was preserved.",
                       );
                       return;
                     }
@@ -509,7 +531,7 @@ export function WorkspaceSyncAction({
           }}
         >
           Use server version
-        </button>
+        </Button>
       )}
     </div>
   );

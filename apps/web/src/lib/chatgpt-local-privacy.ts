@@ -2,6 +2,7 @@ import { Effect, Either, Schema } from "effect";
 import { createTutorPrivacyApi, type TutorPrivacyFailure } from "@recall/application";
 import "./desktop-api";
 import { localWritesBlocked } from "@/features/workspace/local-write-coordinator";
+import { volatileStorage } from "@/lib/volatile-storage";
 
 const StatusReply = Schema.Struct({
   _tag: Schema.Literal("Success"),
@@ -46,10 +47,10 @@ export function createLocalTutorPrivacyApi(profile: string) {
       const snapshot = yield* Effect.try({
         try: () => {
           const entries: { readonly key: string; readonly value: string }[] = [];
-          for (let index = 0; index < localStorage.length; index += 1) {
-            const key = localStorage.key(index);
+          for (let index = 0; index < volatileStorage.length; index += 1) {
+            const key = volatileStorage.key(index);
             if (key && prefixes.some((prefix) => key.startsWith(prefix))) {
-              const value = localStorage.getItem(key);
+              const value = volatileStorage.getItem(key);
               if (value !== null) entries.push({ key, value });
             }
           }
@@ -58,14 +59,17 @@ export function createLocalTutorPrivacyApi(profile: string) {
         catch: unavailable,
       });
       yield* Effect.forEach(snapshot, ({ key }) =>
-        Effect.try({ try: () => localStorage.removeItem(key), catch: unavailable }),
+        Effect.try({ try: () => volatileStorage.removeItem(key), catch: unavailable }),
       ).pipe(
         Effect.catchAll((error) =>
           Effect.forEach(snapshot, ({ key, value }) =>
             Effect.suspend(() =>
               localWritesBlocked()
                 ? Effect.fail(unavailable())
-                : Effect.try({ try: () => localStorage.setItem(key, value), catch: unavailable }),
+                : Effect.try({
+                    try: () => volatileStorage.setItem(key, value),
+                    catch: unavailable,
+                  }),
             ).pipe(Effect.ignore),
           ).pipe(Effect.andThen(Effect.fail(error))),
         ),

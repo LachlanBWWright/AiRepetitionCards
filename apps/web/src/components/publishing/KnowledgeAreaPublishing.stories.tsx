@@ -9,7 +9,7 @@ import {
 } from "@recall/contracts";
 import {
   createAreaId,
-  createCardId,
+  createAssessmentId,
   createObjectiveId,
   MediaReferenceSchema,
 } from "@recall/domain";
@@ -25,7 +25,7 @@ const storyArea = {
   id: createAreaId(storyUuid(1)),
   cards: mockWorkspace.areas[0]!.cards.map((card, index) => ({
     ...card,
-    id: createCardId(storyUuid(index + 2)),
+    id: createAssessmentId(storyUuid(index + 2)),
   })),
 };
 const areaResult = Effect.runSync(Effect.either(toKnowledgeArea(storyArea, true)));
@@ -101,7 +101,7 @@ function PublishingStory({
 }) {
   const selectedResult = media ? mediaAreaResult : areaResult;
   if (Either.isLeft(selectedResult))
-    return <main className="publication-panel">Story data could not be prepared.</main>;
+    return <main className="mx-auto mt-12 w-full max-w-5xl rounded-xl border bg-card p-5 shadow-sm sm:p-8">Story data could not be prepared.</main>;
   const area =
     rights === "inherited"
       ? {
@@ -123,7 +123,7 @@ function PublishingStory({
     })),
     cards: area.cards.map((card, index) => ({
       ...card,
-      id: createCardId(storyUuid(index + 402)),
+      id: createAssessmentId(storyUuid(index + 402)),
       sourceId: card.id,
     })),
   };

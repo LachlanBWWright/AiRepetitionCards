@@ -1,18 +1,29 @@
 "use client";
-import { useEffect, useMemo, useState, type ComponentProps } from "react";
+import { useEffect, useMemo, useState, type ComponentProps, type ReactNode } from "react";
 import { Effect, Either, Schema } from "effect";
-import { Dialog } from "@recall/ui-web";
+import { Button, Dialog } from "@recall/ui-web";
+import { Label } from "@recall/ui-web/components/label";
+import { Checkbox } from "@recall/ui-web/components/checkbox";
+import { NativeSelect } from "@recall/ui-web/components/native-select";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@recall/ui-web/components/collapsible";
 import { BudgetSettingsPanel } from "../auth/BudgetSettingsPanel";
 import { localChatGPTUsageApi } from "@/lib/chatgpt-local-usage";
 import { localBudgetFailure } from "@recall/application";
 import { TutorPanel } from "./TutorPanel";
 import { ChatGPTResearchPanel } from "./ChatGPTResearchPanel";
 import { createLocalChatGptTutor } from "@/lib/chatgpt-local-tutor";
+import { tutorApi } from "@/lib/tutor-api";
 import { createLocalTutorPrivacyApi } from "@/lib/chatgpt-local-privacy";
 import { chatGptPlanFailureMessage } from "@/lib/chatgpt-plan-errors";
 import "@/lib/desktop-api";
 import { localWritesBlocked } from "@/features/workspace/local-write-coordinator";
+import { volatileStorage } from "@/lib/volatile-storage";
 
+import { Alert, AlertDescription } from "@recall/ui-web/components/alert";
 const desktopBudgetApi = {
   read: (accountId: string) =>
     localChatGPTUsageApi
@@ -65,6 +76,7 @@ export function ChatGPTPlanControls({
   onSignOut,
   onReloadModels,
   onResumePlan,
+  initialExpanded = false,
 }: {
   state: LocalChatGPTState;
   models: typeof Models.Type;
@@ -79,163 +91,182 @@ export function ChatGPTPlanControls({
   onSignOut: (clientId: string) => void;
   onReloadModels?: () => void;
   onResumePlan?: (clientId: string) => void;
+  readonly initialExpanded?: boolean;
 }) {
   if (!state.enabled) return null;
   const account = state.accounts.find((item) => item.clientId === state.activeClientId);
   return (
-    <section className="tutor-panel" aria-label="ChatGPT plan tutor">
-      <p className="eyebrow">DESKTOP · CHATGPT ACCOUNT</p>
-      <h2>Your tutor connection</h2>
-      <p>
-        Connect your ChatGPT account on this device. Enabling plan tutoring sends the selected
-        learning area and your answers directly to OpenAI and uses your ChatGPT plan allowance.
-      </p>
-      <div>
-        <button
-          type="button"
-          className="text-button"
-          disabled={busy}
-          onClick={() => onSignIn(null, false)}
-        >
-          Continue with ChatGPT
-        </button>
-        {account && (
-          <button
+    <Collapsible
+      className="space-y-4 py-4"
+      aria-label="ChatGPT plan tutor"
+      open={initialExpanded || Boolean(message) || Boolean(account?.usagePaused)}
+    >
+      <CollapsibleTrigger className="w-full text-left font-medium">
+        AI connection{account?.signedIn ? ` · ${account.email ?? account.label}` : ""}
+      </CollapsibleTrigger>
+      <CollapsibleContent>
+        <h2 className="text-lg font-semibold">ChatGPT connection</h2>
+        <p>
+          Using ChatGPT sends the selected topic, your answers and requested source passages to
+          OpenAI. Requests use your ChatGPT allowance.
+        </p>
+        <div>
+          <Button
             type="button"
-            className="text-button"
+            variant="outline"
             disabled={busy}
-            onClick={() => onSignIn(account.clientId, true)}
+            onClick={() => onSignIn(null, false)}
           >
-            Enable ChatGPT plan tutoring
-          </button>
-        )}
-      </div>
-      {state.accounts.map((item) => (
-        <div key={item.clientId} className="tutor-gap">
-          <span>
-            {item.label} · {item.email ?? "No email available"}
-            {item.clientId === state.activeClientId && " · active"}
-            {!item.signedIn && " · signed out"}
-          </span>
-          <button
-            type="button"
-            className="text-button"
-            disabled={busy || !item.signedIn || item.clientId === state.activeClientId}
-            onClick={() => onSelect(item.clientId)}
-          >
-            Use account
-          </button>
-          <button
-            type="button"
-            className="text-button"
-            disabled={busy || !item.signedIn}
-            onClick={() => onSignOut(item.clientId)}
-          >
-            Sign out and revoke access
-          </button>
-          {!item.signedIn && (
-            <button
+            Continue with ChatGPT
+          </Button>
+          {account && (
+            <Button
               type="button"
-              className="text-button"
+              variant="outline"
               disabled={busy}
-              onClick={() => onSignIn(item.clientId, false)}
+              onClick={() => onSignIn(account.clientId, true)}
             >
-              Sign in again
-            </button>
+              Enable ChatGPT access
+            </Button>
           )}
         </div>
-      ))}
-      <label>
-        <input
-          type="checkbox"
-          checked={usePlan}
-          disabled={busy || (!usePlan && (!account?.planEnabled || models.length === 0))}
-          onChange={(event) => onUsePlan(event.target.checked)}
-        />{" "}
-        Use my ChatGPT plan for this tutor
-      </label>
-      {usePlan && !account?.planEnabled && (
-        <p role="status">
-          ChatGPT plan remains selected. Reconnect or enable access to continue; hosted tutoring
-          requires switching this choice explicitly.
-        </p>
-      )}
-      {account?.usagePaused && (
-        <div role="status">
-          <p>
-            Plan requests are paused after a usage limit. Check your app allowance before retrying.
-          </p>
-          <a
-            className="primary-button"
-            href="https://chatgpt.com/settings/usage"
-            target="_blank"
-            rel="noreferrer"
-          >
-            Manage usage
-          </a>{" "}
-          <button
-            type="button"
-            className="text-button"
-            disabled={busy}
-            onClick={() => onResumePlan?.(account.clientId)}
-          >
-            Retry after checking usage
-          </button>
-        </div>
-      )}
-      {account?.planEnabled && (
-        <div>
-          <label htmlFor="chatgpt-tutor-model">
-            {usePlan ? "Using ChatGPT plan" : "ChatGPT plan model"}
-          </label>
-          <select
-            id="chatgpt-tutor-model"
-            value={model}
-            disabled={busy || models.length === 0}
-            onChange={(event) => onModel(event.target.value)}
-          >
-            {models.map((item) => (
-              <option key={item.slug} value={item.slug}>
-                {item.displayName}
-              </option>
-            ))}
-          </select>{" "}
-          <button type="button" className="text-button" disabled={busy} onClick={onReloadModels}>
-            Reload available models
-          </button>{" "}
-          <a href="https://chatgpt.com/settings/usage" target="_blank" rel="noreferrer">
-            Manage usage
-          </a>
-        </div>
-      )}
-      <p>
-        Plan tutoring is available only for eligible ChatGPT accounts and supported app usage.{" "}
-        <a href="https://help.openai.com/" target="_blank" rel="noreferrer">
-          Learn more
-        </a>
-      </p>
-      {message && <p role="status">{message}</p>}
-    </section>
+        {state.accounts.map((item) => (
+          <div key={item.clientId} className="flex flex-wrap items-center gap-3">
+            <span>
+              {item.label} · {item.email ?? "No email available"}
+              {item.clientId === state.activeClientId && " · active"}
+              {!item.signedIn && " · signed out"}
+            </span>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={busy || !item.signedIn || item.clientId === state.activeClientId}
+              onClick={() => onSelect(item.clientId)}
+            >
+              Use account
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={busy || !item.signedIn}
+              onClick={() => onSignOut(item.clientId)}
+            >
+              Sign out
+            </Button>
+            {!item.signedIn && (
+              <Button
+                type="button"
+                variant="outline"
+                disabled={busy}
+                onClick={() => onSignIn(item.clientId, false)}
+              >
+                Sign in again
+              </Button>
+            )}
+          </div>
+        ))}
+        <Label>
+          <Checkbox
+            checked={usePlan}
+            disabled={busy || (!usePlan && (!account?.planEnabled || models.length === 0))}
+            onCheckedChange={(checked) => onUsePlan(checked === true)}
+          />{" "}
+          Use ChatGPT
+        </Label>
+        {usePlan && !account?.planEnabled && (
+          <Alert role="status">
+            <AlertDescription>Reconnect ChatGPT or enable access to continue.</AlertDescription>
+          </Alert>
+        )}
+        {account?.usagePaused && (
+          <Alert role="status">
+            <AlertDescription>
+              Plan requests are paused after a usage limit. Check your app allowance before
+              retrying.
+            </AlertDescription>
+            <Button asChild>
+              <a href="https://chatgpt.com/settings/usage" target="_blank" rel="noreferrer">
+                Manage usage
+              </a>
+            </Button>{" "}
+            <Button
+              type="button"
+              variant="outline"
+              disabled={busy}
+              onClick={() => onResumePlan?.(account.clientId)}
+            >
+              Retry after checking usage
+            </Button>
+          </Alert>
+        )}
+        {account?.planEnabled && (
+          <div>
+            <Label htmlFor="chatgpt-tutor-model">
+              {usePlan ? "Using ChatGPT plan" : "ChatGPT plan model"}
+            </Label>
+            <NativeSelect
+              id="chatgpt-tutor-model"
+              value={model}
+              disabled={busy || models.length === 0}
+              onChange={(event) => onModel(event.target.value)}
+            >
+              {models.map((item) => (
+                <option key={item.slug} value={item.slug}>
+                  {item.displayName}
+                </option>
+              ))}
+            </NativeSelect>{" "}
+            <Button type="button" variant="outline" disabled={busy} onClick={onReloadModels}>
+              Refresh models
+            </Button>{" "}
+            <a href="https://chatgpt.com/settings/usage" target="_blank" rel="noreferrer">
+              Manage usage
+            </a>
+          </div>
+        )}
+        <Collapsible>
+          <CollapsibleTrigger className="w-full text-left font-medium">
+            Account eligibility
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <p>
+              Availability depends on your ChatGPT account.{" "}
+              <a href="https://help.openai.com/" target="_blank" rel="noreferrer">
+                Learn more
+              </a>
+            </p>
+          </CollapsibleContent>
+        </Collapsible>
+        {message && (
+          <Alert role="status">
+            <AlertDescription>{message}</AlertDescription>
+          </Alert>
+        )}
+      </CollapsibleContent>
+    </Collapsible>
   );
 }
 export function ChatGPTPlanWelcome({ onDismiss }: { onDismiss: () => void }) {
   return (
     <Dialog labelledBy="chatgpt-plan-welcome" onClose={onDismiss}>
-      <h2 id="chatgpt-plan-welcome">You’re using your ChatGPT plan</h2>
-      <p>
-        Eligible AI requests on this device can use your ChatGPT plan allowance when you select plan
-        tutoring. Manage this app’s limits in ChatGPT Settings → Usage.
-      </p>
+      <h2 className="text-lg font-semibold" id="chatgpt-plan-welcome">
+        ChatGPT connected
+      </h2>
+      <p>AI requests use your ChatGPT allowance. You can change the connection in AI settings.</p>
       <a href="https://chatgpt.com/settings/usage" target="_blank" rel="noreferrer">
         Manage usage
       </a>
-      <button className="text-button" type="button" onClick={onDismiss}>
+      <Button variant="outline" type="button" onClick={onDismiss}>
         Got it
-      </button>
+      </Button>
     </Dialog>
   );
 }
-export function LocalChatGPTTutor(props: ComponentProps<typeof TutorPanel>) {
+export function LocalChatGPTTutor(
+  props: ComponentProps<typeof TutorPanel> & {
+    readonly renderContent?: (api: typeof tutorApi) => ReactNode;
+  },
+) {
   const [state, setState] = useState<LocalChatGPTState | null>(null);
   const [models, setModels] = useState<typeof Models.Type>([]);
   const [model, setModel] = useState("");
@@ -244,6 +275,21 @@ export function LocalChatGPTTutor(props: ComponentProps<typeof TutorPanel>) {
   const [message, setMessage] = useState<string | null>(null);
   const [welcome, setWelcome] = useState<string | null>(null);
   const profile = state?.activeClientId ?? "";
+  useEffect(() => {
+    const target = props.searchTarget;
+    if (!target || !("namespace" in target)) return;
+    const frame = window.requestAnimationFrame(() => {
+      if (target.namespace === "hosted" || target.namespace === "hosted:card-refinements")
+        setUsePlan(false);
+      else if (
+        profile &&
+        (target.namespace === `chatgpt:${profile}` ||
+          target.namespace === `chatgpt:${profile}:card-refinements`)
+      )
+        setUsePlan(true);
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [props.searchTarget, profile]);
   const privacyApi = useMemo(() => createLocalTutorPrivacyApi(profile), [profile]);
   const api = useMemo(
     () => createLocalChatGptTutor(profile, model, props.knowledgeArea.id),
@@ -272,7 +318,7 @@ export function LocalChatGPTTutor(props: ComponentProps<typeof TutorPanel>) {
         return;
       }
       const welcomed = yield* Effect.try({
-        try: () => localStorage.getItem(`recall-chatgpt-welcome:${account.clientId}`),
+        try: () => volatileStorage.getItem(`recall-chatgpt-welcome:${account.clientId}`),
         catch: () => null,
       });
       if (!welcomed) setWelcome(account.clientId);
@@ -373,14 +419,23 @@ export function LocalChatGPTTutor(props: ComponentProps<typeof TutorPanel>) {
           onResumePlan={(id) => operate(() => bridge.resumePlan(id))}
         />
       )}
-      {profile && <BudgetSettingsPanel key={profile} api={desktopBudgetApi} accountId={profile} />}
+      {profile && (
+        <Collapsible className="space-y-4 py-4">
+          <CollapsibleTrigger className="w-full text-left font-medium">
+            AI usage limits
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <BudgetSettingsPanel key={profile} api={desktopBudgetApi} accountId={profile} />
+          </CollapsibleContent>
+        </Collapsible>
+      )}
       {welcome && (
         <ChatGPTPlanWelcome
           onDismiss={() => {
             if (localWritesBlocked()) return;
             Effect.runSync(
               Effect.try({
-                try: () => localStorage.setItem(`recall-chatgpt-welcome:${welcome}`, "1"),
+                try: () => volatileStorage.setItem(`recall-chatgpt-welcome:${welcome}`, "1"),
                 catch: () => null,
               }).pipe(Effect.catchAll(() => Effect.void)),
             );
@@ -396,22 +451,35 @@ export function LocalChatGPTTutor(props: ComponentProps<typeof TutorPanel>) {
         state.accounts.some(
           (account) => account.clientId === profile && account.signedIn && account.planEnabled,
         ) && (
-          <ChatGPTResearchPanel
-            key={`research:${profile}:${model}:${props.knowledgeArea.id}`}
-            expectedClientId={profile}
-            model={model}
-            areaId={props.knowledgeArea.id}
-            disabled={
-              busy ||
-              Boolean(state.accounts.find((account) => account.clientId === profile)?.usagePaused)
-            }
-          />
+          <Collapsible className="space-y-4 py-4">
+            <CollapsibleTrigger className="w-full text-left font-medium">
+              Research a topic
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <ChatGPTResearchPanel
+                key={`research:${profile}:${model}:${props.knowledgeArea.id}`}
+                expectedClientId={profile}
+                model={model}
+                areaId={props.knowledgeArea.id}
+                disabled={
+                  busy ||
+                  Boolean(
+                    state.accounts.find((account) => account.clientId === profile)?.usagePaused,
+                  )
+                }
+              />
+            </CollapsibleContent>
+          </Collapsible>
         )}
-      <TutorPanel
-        key={usePlan ? `chatgpt:${profile}:${model}` : "hosted"}
-        {...props}
-        {...(usePlan ? { api, privacyApi, sessionNamespace: `chatgpt:${profile}` } : {})}
-      />
+      {props.renderContent ? (
+        props.renderContent(usePlan ? api : (props.api ?? tutorApi))
+      ) : (
+        <TutorPanel
+          key={usePlan ? `chatgpt:${profile}:${model}` : "hosted"}
+          {...props}
+          {...(usePlan ? { api, privacyApi, sessionNamespace: `chatgpt:${profile}` } : {})}
+        />
+      )}
     </>
   );
 }

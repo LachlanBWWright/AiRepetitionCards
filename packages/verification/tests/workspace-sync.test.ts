@@ -5,7 +5,7 @@ import { Effect, Either, Schema } from "effect";
 import {
   AccountIdSchema,
   createAreaId,
-  createCardId,
+  createAssessmentId,
   createDeviceId,
   MediaIdSchema,
   createObjectiveId,
@@ -40,7 +40,7 @@ const uuid = (value: number): string =>
 const owner = Schema.decodeUnknownSync(AccountIdSchema)(uuid(7));
 const areaId = createAreaId(uuid(1));
 const objectiveId = createObjectiveId(uuid(2));
-const cardId = createCardId(uuid(3));
+const cardId = createAssessmentId(uuid(3));
 const deviceId = createDeviceId(uuid(4));
 function review(id = 5, reviewedCard = cardId, raw = time): ReviewEvent {
   return {
@@ -384,7 +384,7 @@ await test("lost review response retries exactly once and canonical receipt work
 });
 
 await test("mixed deleted/live review batch provisions both identities before upload and releases only deleted evidence", () => {
-  const liveCardId = createCardId(uuid(6));
+  const liveCardId = createAssessmentId(uuid(6));
   const local = workspace([review(), review(10, liveCardId)]);
   const original = local.areas[0];
   assert.ok(original);

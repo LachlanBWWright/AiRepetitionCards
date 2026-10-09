@@ -1,7 +1,9 @@
+import { useState } from "react";
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
+import { Button } from "@recall/ui-web";
 import { NativeWorkspaceAuthoringPanel } from "../../../mobile/src/components/NativeWorkspaceAuthoringPanel";
 import { mockWorkspace } from "../features/workspace/mock-data";
-import type { Workspace } from "@recall/domain";
+import { createAssessmentId, type Workspace } from "@recall/domain";
 const storyWorkspace: Workspace = mockWorkspace;
 const importedTagsWorkspace: Workspace = {
   ...storyWorkspace,
@@ -151,5 +153,57 @@ export const CombinedSearchAndObjectiveFilter: Story = {
   args: {
     initialObjectiveFilter: `title:${storyWorkspace.areas[0]?.cards[0]?.objective ?? ""}`,
     initialSearch: "ATP",
+  },
+};
+
+export const DuplicateCards: Story = {
+  args: {
+    initialShowDuplicates: true,
+    workspace: {
+      ...storyWorkspace,
+      areas: storyWorkspace.areas.map((area, index) =>
+        index === 0 && area.cards[0]
+          ? {
+              ...area,
+              cards: [
+                ...area.cards,
+                {
+                  ...area.cards[0],
+                  id: createAssessmentId("00000000-0000-4000-8000-000000000908"),
+                  back: "A conflicting answer.",
+                },
+              ],
+            }
+          : area,
+      ),
+    },
+  },
+};
+
+export const NewCardDraft: Story = { args: { initialEditor: "basic" } };
+export const PendingSaveInteraction: Story = {
+  args: { initialEditor: "edit-card" },
+  render: function PendingSave(args) {
+    const [release, setRelease] = useState<(() => void) | null>(null);
+    return (
+      <>
+        <NativeWorkspaceAuthoringPanel
+          {...args}
+          onCommand={() =>
+            new Promise((resolve) => {
+              setRelease(() => () => {
+                resolve({ ok: true, message: "Saved." });
+                setRelease(null);
+              });
+            })
+          }
+        />
+        {release && (
+          <Button type="button" onClick={release}>
+            Complete mock save
+          </Button>
+        )}
+      </>
+    );
   },
 };

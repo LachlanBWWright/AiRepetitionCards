@@ -1,3 +1,4 @@
+import { captureCardVersion } from "./card-history";
 import { retainReviewDeletionContent } from "./review-deletion-retention";
 import { AreaIdSchema, WorkspaceSchema, type LearningArea, type Workspace } from "@recall/domain";
 import { Effect, Schema } from "effect";
@@ -71,6 +72,7 @@ export type AreaDeletionResult = {
 export function deleteLearningArea(
   workspaceInput: unknown,
   areaIdInput: unknown,
+  now: Date = new Date(),
 ): Effect.Effect<AreaDeletionResult, AreaManagementFailure> {
   return Effect.gen(function* () {
     const workspace = yield* decodeWorkspace(workspaceInput);
@@ -84,6 +86,12 @@ export function deleteLearningArea(
         return { workspace, removedArea: retained, requiresSync: true };
       return yield* Effect.fail({ _tag: "AreaNotFound" } as const);
     }
+    if (!Number.isFinite(now.getTime()))
+      return yield* Effect.fail({ _tag: "AreaDetailsInvalid" } as const);
+    const captured = removedArea.cards.reduce(
+      (current, card) => captureCardVersion(current, removedArea, card, "delete", now),
+      workspace,
+    );
     const baseContentHash = workspace.syncContentHashes?.[areaId];
     const deletedAreas = [
       ...(workspace.deletedAreas ?? []).filter((area) => area.areaId !== areaId),
@@ -91,7 +99,7 @@ export function deleteLearningArea(
     ];
     const retainedWorkspace = yield* retainReviewDeletionContent(
       {
-        ...workspace,
+        ...captured,
         areas: workspace.areas.filter((area) => area.id !== areaId),
         deletedCards: (workspace.deletedCards ?? []).filter((card) => card.areaId !== areaId),
         deletedAreas,

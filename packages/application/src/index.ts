@@ -1,7 +1,7 @@
 import { Effect, Either, Schema } from "effect";
 import {
   AreaIdSchema,
-  CardIdSchema,
+  AssessmentIdSchema,
   ReviewEventIdSchema,
   ReviewEventSchema,
   type ReviewEvent,
@@ -167,7 +167,7 @@ export function recordReview(
     if (Either.isLeft(areaId)) {
       return yield* Effect.fail({ _tag: "ReviewIdentifierInvalid", identifier: "area" } as const);
     }
-    const cardId = Schema.decodeUnknownEither(CardIdSchema)(input.cardId);
+    const cardId = Schema.decodeUnknownEither(AssessmentIdSchema)(input.cardId);
     if (Either.isLeft(cardId)) {
       return yield* Effect.fail({ _tag: "ReviewIdentifierInvalid", identifier: "card" } as const);
     }
@@ -277,6 +277,7 @@ export {
   publicationNeedsReuseConfirmation,
   createPublicationFork,
   publicationForkIdentity,
+  PublicationForkIdKind,
   pendingPublicationForkOperation,
 } from "./publication-fork";
 export type {
@@ -347,6 +348,7 @@ export {
   WorkspaceAuthoringCommandSchema,
   applyWorkspaceAuthoringCommand,
   workspaceAuthoringBaseline,
+  refinementCardContent,
 } from "./workspace-authoring";
 export type {
   WorkspaceAuthoringCommand,
@@ -412,3 +414,25 @@ export {
   validateDailyReminderSettings,
   type DailyReminderSettings,
 } from "./daily-reminders";
+
+export * from "./card-quality";
+export * from "./study-coverage";
+export { createCardAssistanceTutor } from "./card-assistance-tutor";
+
+export { applyNotebookRefinement } from "./card-refinement";
+
+export { importTutorProposal } from "./tutor-proposal-import";
+
+export * from "./card-duplicates";
+
+export { searchWorkspace } from "./workspace-search";
+export type {
+  WorkspaceSearchTarget,
+  WorkspaceSearchKind,
+  WorkspaceSearchNotebook,
+  WorkspaceSearchNotebookLoadResult,
+  WorkspaceSearchResult,
+  WorkspaceSearchOptions,
+} from "./workspace-search";
+
+export * from "./card-history";

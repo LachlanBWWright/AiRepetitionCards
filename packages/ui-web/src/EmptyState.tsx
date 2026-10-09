@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { cn } from "./lib/utils";
 
 export function EmptyState({
   icon,
@@ -14,10 +15,10 @@ export function EmptyState({
   className?: string;
 }) {
   return (
-    <div className={`empty-state ${className}`.trim()}>
-      {icon && <span aria-hidden="true">{icon}</span>}
-      <h3>{title}</h3>
-      <p>{description}</p>
+    <div className={cn("text-center", className)}>
+      {icon && <span className="mb-2 block text-2xl text-primary" aria-hidden="true">{icon}</span>}
+      <h3 className="my-2 text-lg font-semibold">{title}</h3>
+      <p className="mb-3 text-sm text-muted-foreground">{description}</p>
       {action}
     </div>
   );

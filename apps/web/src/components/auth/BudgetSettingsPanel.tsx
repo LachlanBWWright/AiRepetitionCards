@@ -1,6 +1,13 @@
 "use client";
 import { useEffect, useState } from "react";
 import { Effect, Either } from "effect";
+import { Button } from "@/components/ui/Button";
+import { Alert, Input, toast } from "@recall/ui-web";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@recall/ui-web/components/collapsible";
 import {
   parseLocalBudgetLimit,
   type LocalBudgetApi,
@@ -78,49 +85,49 @@ export function BudgetSettingsPanel({
     setBusy(false);
     if (Either.isRight(result)) {
       publish(result.right);
-      setMessage("Limits saved. Recorded usage is unchanged.");
+      toast.success("AI usage limits saved.");
     } else setMessage(result.left.message);
   }
   return (
-    <section className="tutor-panel" aria-label="AI budget settings">
-      <p className="eyebrow">THIS DEVICE · AI USAGE</p>
-      <h2>AI budget settings</h2>
-      <p>
-        Limits apply to this account on this installation. They do not show your remaining ChatGPT
-        allowance or enforce a monetary spending cap.
-      </p>
-      <p>
-        Days reset at midnight UTC. Weeks reset Monday at midnight UTC. Failed and pending requests
-        count. Blank means unlimited; 0 blocks new requests.
-      </p>
-      <button type="button" className="text-button" disabled={busy} onClick={() => void refresh()}>
+    <section className="space-y-4 py-4" aria-label="AI budget settings">
+      <h2 className="mb-2 text-lg font-semibold">AI usage limits</h2>
+      <p>Request limits for this account on this device. Leave blank for unlimited.</p>
+      <Button variant="secondary" type="button" disabled={busy} onClick={() => void refresh()}>
         Refresh usage
-      </button>
+      </Button>
       {snapshot && (
         <>
-          <dl>
-            <dt>Today / this week</dt>
-            <dd>
-              {snapshot.summary.daily.requests} / {snapshot.summary.weekly.requests} requests
-            </dd>
-            <dt>Today’s completed / failed / pending</dt>
-            <dd>
-              {snapshot.summary.daily.completed} / {snapshot.summary.daily.failed} /{" "}
-              {snapshot.summary.daily.pending}
-            </dd>
-            <dt>Research today</dt>
-            <dd>{snapshot.summary.daily.researchRequests} requests</dd>
-            <dt>Known tokens today</dt>
-            <dd>
-              {snapshot.summary.daily.inputTokens} input · {snapshot.summary.daily.outputTokens}{" "}
-              output · {snapshot.summary.daily.unknownUsageRequests} requests with unknown usage
-            </dd>
-          </dl>
+          <p>
+            {snapshot.summary.daily.requests} requests today · {snapshot.summary.weekly.requests}{" "}
+            this week
+          </p>
+          <Collapsible>
+            <CollapsibleTrigger className="font-medium underline underline-offset-4 hover:text-primary">
+              Usage details and reset times
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <p>
+                Today: {snapshot.summary.daily.completed} completed ·{" "}
+                {snapshot.summary.daily.failed} failed · {snapshot.summary.daily.pending} pending.
+              </p>
+              <p>{snapshot.summary.daily.researchRequests} research requests.</p>
+              <p>
+                Known tokens: {snapshot.summary.daily.inputTokens} input ·{" "}
+                {snapshot.summary.daily.outputTokens} output. Usage unavailable for{" "}
+                {snapshot.summary.daily.unknownUsageRequests} requests.
+              </p>
+              <p>
+                Days reset at midnight UTC; weeks on Monday. Failed and pending requests count. A
+                limit of 0 blocks new requests.
+              </p>
+              <p>These limits do not show remaining ChatGPT allowance or set a spending cap.</p>
+            </CollapsibleContent>
+          </Collapsible>
           {(["Daily requests", "Weekly requests", "Daily research requests"] as const).map(
             (label, index) => (
-              <label key={label} style={{ display: "block", marginBottom: 12 }}>
+              <label key={label} className="mb-3 block">
                 {label}
-                <input
+                <Input
                   aria-label={label}
                   type="text"
                   inputMode="numeric"
@@ -138,17 +145,12 @@ export function BudgetSettingsPanel({
               </label>
             ),
           )}
-          <button
-            type="button"
-            className="primary-button"
-            disabled={busy}
-            onClick={() => void save()}
-          >
+          <Button type="button" disabled={busy} onClick={() => void save()}>
             {busy ? "Saving…" : "Save limits"}
-          </button>
+          </Button>
         </>
       )}
-      {message && <p role="status">{message}</p>}
+      {message && <Alert variant="destructive">{message}</Alert>}
     </section>
   );
 }

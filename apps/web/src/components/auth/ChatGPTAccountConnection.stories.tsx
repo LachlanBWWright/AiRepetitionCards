@@ -9,11 +9,15 @@ const meta = {
   args: { demo: true, demoAvailable: true },
   decorators: [
     (Story: () => JSX.Element) => (
-      <main className="auth-page">
-        <section className="auth-panel">
-          <p className="eyebrow">ACCOUNT SETTINGS</p>
-          <h1>Your sign-in methods.</h1>
-          <p className="auth-copy">Signed in as learner@example.com</p>
+      <main className="flex min-h-screen flex-col items-center justify-center gap-8 px-4 py-10">
+        <section className="w-full max-w-md space-y-4 rounded-xl border bg-card p-6 shadow-sm sm:p-8">
+          <p className="mb-1 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+            ACCOUNT SETTINGS
+          </p>
+          <h1 className="my-0 text-3xl font-semibold tracking-tight">Your sign-in methods.</h1>
+          <p className="text-sm leading-relaxed text-muted-foreground">
+            Signed in as learner@example.com
+          </p>
           <Story />
         </section>
       </main>

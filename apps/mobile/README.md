@@ -1,6 +1,6 @@
 # Recall Mobile
 
-The Expo client shares the domain, Effect application use cases, scheduler, local-store port, and design tokens with the web workspace. It starts with a small sample Knowledge Area, stores the complete workspace snapshot in SQLite, and records FSRS reviews while offline.
+The Expo client shares the domain, Effect application use cases, scheduler, local-store port, and design tokens with the web workspace. It starts with an empty library, stores the complete workspace snapshot in app-private SQLite, and records FSRS reviews while offline. App-private storage does not require an Android storage permission.
 
 Bottom navigation separates Today, Library, Tutor, Sharing and Account. Switching tabs preserves open forms and pending actions; Library, Tutor and Sharing include a learning-area selector. Forms scroll above the keyboard instead of sharing fixed screen space with the study card.
 
@@ -13,9 +13,11 @@ pnpm install
 pnpm dev:mobile
 ```
 
+For a quick phone preview, install **Expo Go** and run `./scripts/expo-quick-test.sh` from the repository root. The script uses Expo's tunnel so the phone can reach Metro even when the computer is behind a container or VPN; no Android SDK or native build is needed. The Expo Go preview uses standard React Navigation tabs. The installed app keeps the native iOS/Android tab bar, and mobile OCR still requires a native build.
+
 No credentials, `.env` file, Supabase setup or running web server are required for local use. Create and edit cards, study, import/export and keep private backups with SQLite on the device. Hosted tutoring, account sync and cloud sharing require optional service configuration.
 
-Use Expo Go for SDK 57, or launch an installed development build with `pnpm --filter mobile android` or `pnpm --filter mobile ios`. An iOS simulator build requires macOS; a physical iOS device can use Expo Go.
+The installed app uses native iOS and Android bottom tabs through React Navigation and `react-native-screens`. Reminder time and learning-area selection use Expo UI platform pickers. Native builds can be launched with `pnpm --filter mobile android:run` or `pnpm --filter mobile ios:run`; rebuild after changing native dependencies. An iOS simulator build requires macOS.
 
 The SQLite database is the native source of truth for workspace snapshots and media. Email-link sessions are stored with SecureStore; bearer-token sync pushes content and reviews and pulls changes. Knowledge Areas import from validated JSON or media ZIP packages and export through the native share sheet. Imported areas receive fresh IDs, schedules, and review history. Use **Export private backup** to share a complete workspace archive with its review history, schedules, and attachments. **Restore private backup** validates the archive, asks before replacing the local workspace, and rolls back newly written media if the workspace write fails.
 
@@ -31,21 +33,21 @@ The existing tutor quiz action targets the strongest combined review/coverage ga
 
 Area settings edit descriptions, language, licensing, attribution, AI instructions, objectives and prerequisite links. Shared application commands validate each change against the latest workspace before SQLite commits it. Editing captures an authored-content baseline, so stale drafts cannot overwrite newer edits; review scheduling changes do not invalidate drafts. Failed writes retain the open form. Area and card deletion ask for explicit confirmation and preserve append-only review history in private backups.
 
-## Private practice preferences and history
+## Private practice preferences
 
 Review settings save a private FSRS target retention between 70% and 97% (default 90%). Changes affect future reviews; they do not rebuild existing schedules or rewrite history, and shared exports omit them. The card library combines search and learning-objective filters.
 
-Your practice shows today's and the last seven days' recorded review counts, rating totals and the latest 20 reviews. Deleted cards and areas retain their review evidence. Older aggregate totals without individual events are disclosed separately. Tutor feedback exposes model-reported confidence and qualifies uncertain assessments; confidence is not a probability of mastery. Completed quiz answers keep their feedback visible.
+Review events remain in the local workspace and private backups, including evidence for deleted cards and areas. Tutor feedback exposes model-reported confidence and qualifies uncertain assessments; confidence is not a probability of mastery. Completed quiz answers keep their feedback visible.
 
 ## Optional cloud sign-in and sync
 
-For cloud features, copy `.env.example` to `.env` and set `EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, and `EXPO_PUBLIC_RECALL_API_URL`. Use the deployed Recall web origin outside local development. For a physical device, replace `localhost` and `127.0.0.1` with the development machine's LAN address, and make sure the web API and local Supabase are reachable from the device; restart Expo after changing environment values. Add the native redirect `recall://auth/confirm` to the Supabase project's allowed redirect URLs and configure its email template to send the `token_hash` and `type` query values through to the redirect. The session is persisted with Expo SecureStore. The mobile client can push Knowledge Areas and pending reviews, then pull remote changes with bearer access tokens; web browser sessions continue to use secure cookies.
+For cloud features, copy `.env.example` to `.env` and set `EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, and `EXPO_PUBLIC_RECALL_API_URL`. To start ASP.NET and Expo together, run `pnpm dev:api:mobile` from the repository root. The API binds to all interfaces; use `http://<development-machine-LAN-IP>:5000` for a physical device. An iOS simulator can use `localhost`; Android emulators may need their host-machine alias. The combined launcher passes public Supabase settings from the Expo `.env` file to ASP.NET. Put server-only settings in the ignored root `.env.backend.local`; ASP.NET does not load Expo or Next.js `.env` files itself. See [backend setup](../../backend/README.md). Outside local development, use the public HTTPS ASP.NET origin or an API gateway serving the same route paths. Expo native requests include Supabase bearer tokens, so they do not use the web cookie session or require browser CORS. Ensure the API and Supabase are reachable from the device, then restart Expo after changing environment values. Add `recall://auth/confirm` to the Supabase project's allowed redirect URLs and configure its email template to pass `token_hash` and `type` through to the redirect. Native sign-in verifies the link directly with Supabase Auth and persists the session in Expo SecureStore; API calls use the bearer token. Web browser sessions continue to use secure cookies through the same-origin Next.js proxy. Production EAS builds require an HTTPS API URL.
 
 ## Styling foundation
 
-NativeWind 4.2.7 uses the mobile-local Tailwind 3.4.17 config, Expo Babel preset and Metro CSS integration. Utilities include `bg-recall-paper`, `text-recall-ink`, `p-recall-md` and `rounded-recall-card`, sourced from the same canonical design tokens as web. Tailwind scans `App.tsx`, native components and `packages/ui-native/src`; keep utility names statically discoverable.
+NativeWind 4.2.7 uses the mobile-local Tailwind 3.4.17 config, Expo Babel preset and Metro CSS integration. The mobile shell uses utilities such as `bg-recall-paper`, `text-recall-ink` and `p-recall-md`, sourced from the same canonical design tokens as web. Tailwind scans `App.tsx`, native components and `packages/ui-native/src`; keep utility names statically discoverable. Shared visual primitives retain portable React Native styles for Storybook.
 
-After configuration changes, restart Metro with `pnpm --filter mobile start --clear`. Changes to Reanimated, Worklets or safe-area-context also require rebuilding an existing native development client. Shared native primitives keep their StyleSheet styles for portable Storybook previews. See [ADR 0010](../../docs/adr/0010-nativewind-styling.md) for the pinned versions and remaining device validation.
+After configuration changes, restart Metro with `pnpm --filter mobile start --clear`. Changes to React Navigation, React Native Screens, Reanimated, Worklets or safe-area-context require rebuilding the native development app. See [ADR 0010](../../docs/adr/0010-nativewind-styling.md) for the pinned versions and remaining device validation.
 
 ## Native release artifacts
 
@@ -62,6 +64,18 @@ The Tutor screen includes a local knowledge notebook for each learning area: con
 Notebooks are separate from workspace ZIP backups and cloud sync. Use **Export notebook JSON** to share a private copy containing learning history. Clearing one notebook preserves cards and reviews. Device reset or account data deletion removes every notebook, including records belonging to deleted areas.
 
 ## Study materials
+
+Card editors and pending notebook proposals include offline quality hints and
+optional budgeted AI inspection/refinement. Preview revisions before applying
+them. Wording changes enter the editor draft; splits, cloze conversions and
+meaning-changing library revisions create fresh replacement cards when approved,
+preserving the original review history. Refined notebook proposals still require
+separate approval into the deck. AI operations need the optional tutor connection.
+
+Request a coverage outline for each selected source passage, review its cited
+claims, select or skip them, and set priorities. Planned generation targets selected
+claims without pending or approved cards. Saved plans work offline and are included
+in notebook JSON exports. Coverage indicates card activity, not proven mastery.
 
 The Tutor notebook supports pasted text and local TXT, Markdown, DOCX and text-based
 PDF files up to 16 MiB. Review/correct extraction and select passages before generation.

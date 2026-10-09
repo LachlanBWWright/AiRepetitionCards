@@ -14,9 +14,9 @@ const meta = {
   parameters: { layout: "fullscreen" },
   decorators: [
     (Story) => (
-      <main className="component-catalog tutor-story">
+      <main className="mx-auto max-w-5xl space-y-6 p-8">
         <div>
-          <h1>Device settings</h1>
+          <h1 className="my-0 text-3xl font-semibold tracking-tight">Device settings</h1>
           <Story />
         </div>
       </main>

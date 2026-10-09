@@ -55,13 +55,13 @@ export const FullScreenCatalog: Story = {
   name: "Full-screen · study card catalog",
   args: Question.args,
   render: () => (
-    <main className="component-catalog">
-      <p className="eyebrow">RECALL · DESIGN SYSTEM</p>
+    <main className="mx-auto max-w-5xl space-y-6 p-8">
+      <p className="mb-1 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">RECALL · DESIGN SYSTEM</p>
       <h1>
         Study at your <em>own pace.</em>
       </h1>
-      <p className="subheading">Question, answer, recall ratings, and completion states.</p>
-      <div className="component-catalog-grid">
+      <p className="text-sm leading-relaxed text-muted-foreground">Question, answer, recall ratings, and completion states.</p>
+      <div className="grid gap-6 md:grid-cols-2">
         <section>
           <h2>Question</h2>
           <p>Recall before revealing the answer.</p>

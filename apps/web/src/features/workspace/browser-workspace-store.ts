@@ -1,6 +1,6 @@
 import { Effect } from "effect";
 import type { LocalStoreFailure, WorkspaceStore } from "@recall/local-store";
-import { indexedDbWorkspaceStore } from "./indexeddb-workspace-store";
+import { volatileWorkspaceStore } from "./volatile-workspace-store";
 import { coordinateLocalWrite } from "./local-write-coordinator";
 import { localSnapshotStale } from "./local-snapshot-status";
 import { uncoordinatedMediaStore } from "./browser-media-store";
@@ -52,7 +52,7 @@ export const uncoordinatedWorkspaceStore: WorkspaceStore = {
             ),
           catch: () => storageFailure("read"),
         }).pipe(Effect.flatten)
-      : indexedDbWorkspaceStore.read;
+      : volatileWorkspaceStore.read;
   }),
   write: (serializedWorkspace) =>
     Effect.suspend(() => {
@@ -63,7 +63,7 @@ export const uncoordinatedWorkspaceStore: WorkspaceStore = {
               desktopCommand(await desktopWorkspace.write(serializedWorkspace), "write"),
             catch: () => storageFailure("write"),
           }).pipe(Effect.flatten)
-        : indexedDbWorkspaceStore.write(serializedWorkspace);
+        : volatileWorkspaceStore.write(serializedWorkspace);
     }),
   clear: Effect.suspend(() => {
     const desktopWorkspace = window.recallDesktop?.workspace;
@@ -72,7 +72,7 @@ export const uncoordinatedWorkspaceStore: WorkspaceStore = {
           try: async () => desktopCommand(await desktopWorkspace.clear(), "clear"),
           catch: () => storageFailure("clear"),
         }).pipe(Effect.flatten)
-      : indexedDbWorkspaceStore.clear;
+      : volatileWorkspaceStore.clear;
   }),
 };
 

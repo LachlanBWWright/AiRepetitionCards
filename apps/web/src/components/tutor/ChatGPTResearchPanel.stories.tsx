@@ -27,10 +27,9 @@ const meta = {
   parameters: { layout: "fullscreen" },
   decorators: [
     (Story) => (
-      <main className="component-catalog tutor-story">
+      <main className="mx-auto min-h-screen max-w-5xl space-y-6 bg-background p-8">
         <div>
-          <p className="eyebrow">RECALL · DESKTOP · MOCK DATA</p>
-          <h1>Research with your ChatGPT plan</h1>
+          <h1>Research</h1>
           <Story />
         </div>
       </main>

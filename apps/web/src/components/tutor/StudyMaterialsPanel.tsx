@@ -1,9 +1,23 @@
 "use client";
 
+import { Alert, AlertDescription } from "@recall/ui-web/components/alert";
+import { Progress } from "@recall/ui-web/components/progress";
+import { Button, Input, Textarea } from "@recall/ui-web";
+import { Label } from "@recall/ui-web/components/label";
+import { Checkbox } from "@recall/ui-web/components/checkbox";
+import { NativeSelect } from "@recall/ui-web/components/native-select";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@recall/ui-web/components/collapsible";
 import { useEffect, useRef, useState } from "react";
 import { Effect, Either } from "effect";
 import {
   addNotebookConcepts,
+  createCardAssistanceTutor,
+  deriveStudyClaimCoverage,
+  updateStudyCoverageClaim,
   addNotebookMaterial,
   updateNotebookMaterial,
   createStudyMaterialsTutor,
@@ -77,6 +91,8 @@ export function StudyMaterialsPanel({
   const materials = notebook.materials ?? [];
   const coverageResult = Effect.runSync(Effect.either(deriveStudyMaterialCoverage(notebook)));
   const coverage = Either.isRight(coverageResult) ? coverageResult.right : [];
+  const claimResult = Effect.runSync(Effect.either(deriveStudyClaimCoverage(notebook)));
+  const claimCoverage = Either.isRight(claimResult) ? claimResult.right : [];
   const selected = materials.flatMap((material) =>
     material.sections
       .filter((section) => section.selected)
@@ -168,6 +184,26 @@ export function StudyMaterialsPanel({
   function update(material: StudyMaterial) {
     run(updateNotebookMaterial(notebook, material).pipe(Effect.flatMap(save)));
   }
+  function plan(materialId: string, sectionId: string) {
+    const tutor = createCardAssistanceTutor(api, (next) => save(next).pipe(Effect.asVoid));
+    run(
+      tutor
+        .plan(
+          notebook,
+          { knowledgeArea, history: [] },
+          {
+            materialId,
+            sectionId,
+            depth,
+            goal,
+            planId: crypto.randomUUID(),
+            claimIds: Array.from({ length: 20 }, () => crypto.randomUUID()),
+          },
+          clock(),
+        )
+        .pipe(Effect.flatMap(save)),
+    );
+  }
   function generate() {
     const requested = Number(count);
     if (!Number.isInteger(requested) || requested < 1 || requested > 100) {
@@ -183,7 +219,33 @@ export function StudyMaterialsPanel({
         let next = notebook;
         for (let index = 0; index < requested; index += 1) {
           if (stopRequested.current || next.session.requestsUsed >= next.session.maxRequests) break;
-          const source = selectNextStudyMaterialSection(next);
+          const currentClaims = yield* deriveStudyClaimCoverage(next);
+          const planned = (next.coveragePlans?.length ?? 0) > 0;
+          const rank = { high: 0, medium: 1, low: 2 };
+          const claim = currentClaims
+            .filter(
+              (item) =>
+                item.decision === "selected" &&
+                item.status === "uncovered" &&
+                next.materials?.some(
+                  (material) =>
+                    material.id === item.materialId &&
+                    material.sections.some(
+                      (section) => section.id === item.sectionId && section.selected,
+                    ),
+                ),
+            )
+            .sort((left, right) => rank[left.priority] - rank[right.priority])[0];
+          const material = claim
+            ? next.materials?.find((item) => item.id === claim.materialId)
+            : undefined;
+          const section = material?.sections.find((item) => item.id === claim?.sectionId);
+          const source =
+            claim && material && section
+              ? { material, section }
+              : planned
+                ? null
+                : selectNextStudyMaterialSection(next);
           if (!source) break;
           const result = yield* tutor.generate(
             next,
@@ -194,6 +256,7 @@ export function StudyMaterialsPanel({
               conceptId: target.id,
               depth,
               goal,
+              ...(claim ? { claimId: claim.claimId } : {}),
             },
             clock(),
             knowledgeArea.cards,
@@ -206,102 +269,125 @@ export function StudyMaterialsPanel({
     );
   }
   return (
-    <section className="tutor-gaps" aria-label="Study from materials">
-      <p className="eyebrow">STUDY FROM MATERIALS</p>
-      <h3>Turn your sources into a growing deck</h3>
-      <p>
-        Extract and correct text on this device. Only the selected section shown below is sent to
-        your AI provider for each request. Original files are not uploaded or retained; extracted
-        passages are saved in your private notebook.
-      </p>
-      <label>
-        Material name
-        <input
-          disabled={disabled}
-          value={name}
-          maxLength={200}
-          onChange={(event) => setName(event.target.value)}
-        />
-      </label>
-      <label>
-        Paste study text
-        <textarea
-          disabled={disabled}
-          value={text}
-          maxLength={500000}
-          onChange={(event) => setText(event.target.value)}
-          placeholder="Paste lecture notes, a chapter, or code examples…"
-        />
-      </label>
-      <button
-        type="button"
-        className="text-button"
-        disabled={disabled || !text.trim()}
-        onClick={paste}
-      >
-        Save pasted material
-      </button>
-      <label>
-        Import documents or images
-        <input
-          type="file"
-          accept=".txt,.md,.markdown,.docx,.pdf,.png,.jpg,.jpeg,.webp"
-          disabled={disabled || importing}
-          onChange={(event) => {
-            const file = event.target.files?.[0];
-            if (file) importFile(file);
-            event.target.value = "";
-          }}
-        />
-      </label>
-      <label>
-        <input
-          type="checkbox"
-          checked={ocrScans}
-          disabled={disabled || importing}
-          onChange={(event) => setOcrScans(event.target.checked)}
-        />
-        Use local OCR for scanned PDFs (up to 30 pages)
-      </label>
-      <p>
-        TXT, Markdown, DOCX and PDF, or PNG, JPEG and WebP images. Image OCR uses bundled English
-        recognition on this device, without uploads. Enable OCR to read scanned PDF pages, including
-        partial text layers. Check spelling, tables, formulas and code before generating cards.
-      </p>
-      {importing && (
-        <>
-          <p role="status">
-            {ocrProgress
-              ? `Reading page ${String(ocrProgress.page)} of ${String(ocrProgress.pages)} · ${String(Math.round(ocrProgress.progress * 100))}%`
-              : "Extracting document text locally…"}
-          </p>
-          <button
+    <section className="flex flex-col gap-4" aria-label="Study materials">
+      <h3 className="text-base font-semibold">Study materials</h3>
+      <Collapsible className="border-b py-4" open={materials.length === 0}>
+        <CollapsibleTrigger className="w-full text-left font-medium">
+          1. Add material
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <Label>
+            Material name
+            <Input
+              disabled={disabled}
+              value={name}
+              maxLength={200}
+              onChange={(event) => setName(event.target.value)}
+            />
+          </Label>
+          <Label>
+            Paste study text
+            <Textarea
+              disabled={disabled}
+              value={text}
+              maxLength={500000}
+              onChange={(event) => setText(event.target.value)}
+              placeholder="Paste lecture notes, a chapter, or code examples…"
+            />
+          </Label>
+          <Button
             type="button"
-            className="text-button"
-            onClick={() => importController.current?.abort()}
+            variant="outline"
+            disabled={disabled || !text.trim()}
+            onClick={paste}
           >
-            Cancel import
-          </button>
-        </>
+            Save pasted material
+          </Button>
+          <Label>
+            Import documents or images
+            <input
+              type="file"
+              accept=".txt,.md,.markdown,.docx,.pdf,.png,.jpg,.jpeg,.webp"
+              disabled={disabled || importing}
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                if (file) importFile(file);
+                event.target.value = "";
+              }}
+            />
+          </Label>
+          <Collapsible>
+            <CollapsibleTrigger className="w-full text-left font-medium">
+              Scanned PDFs and import help
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <Label>
+                <Checkbox
+                  checked={ocrScans}
+                  disabled={disabled || importing}
+                  onCheckedChange={(checked) => setOcrScans(checked === true)}
+                />
+                Read scanned PDF pages (up to 30)
+              </Label>
+              <p>
+                Supports TXT, Markdown, DOCX, PDF, PNG, JPEG and WebP. Scanned text recognition is
+                English only. Check spelling, tables, formulas and code after import. Files are read
+                on this device.
+              </p>
+            </CollapsibleContent>
+          </Collapsible>
+          {importing && (
+            <>
+              <Alert role="status">
+                <AlertDescription>
+                  {ocrProgress
+                    ? `Reading page ${String(ocrProgress.page)} of ${String(ocrProgress.pages)} · ${String(Math.round(ocrProgress.progress * 100))}%`
+                    : "Extracting document text locally…"}
+                </AlertDescription>
+              </Alert>
+              {ocrProgress && (
+                <Progress
+                  value={Math.max(0, Math.min(100, Math.round(ocrProgress.progress * 100)))}
+                  aria-label={`Reading page ${String(ocrProgress.page)} of ${String(ocrProgress.pages)}`}
+                />
+              )}
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => importController.current?.abort()}
+              >
+                Cancel import
+              </Button>
+            </>
+          )}
+        </CollapsibleContent>
+      </Collapsible>
+      {materials.length > 0 && (
+        <h4 className="text-sm font-semibold">2. Check text · 3. Choose topics</h4>
       )}
       {materials.map((material) => (
-        <article key={material.id} className="rounded-xl border border-stone-200 p-3">
-          <h4>{material.name}</h4>
+        <article
+          key={material.id}
+          tabIndex={-1}
+          data-search-target={`material:${material.id}`}
+          className="border-b py-3"
+        >
+          <h4 className="text-sm font-semibold">{material.name}</h4>
           {material.warnings.map((warning, index) => (
-            <p key={index} role="status">
-              {warning}
-            </p>
+            <Alert key={index} role="status">
+              <AlertDescription>{warning}</AlertDescription>
+            </Alert>
           ))}
-          <button
+          <Button
             type="button"
-            className="text-button"
+            variant="outline"
             disabled={disabled}
             onClick={() =>
               run(removeNotebookMaterial(notebook, material.id).pipe(Effect.flatMap(save)))
             }
           >
             Remove material
-          </button>
+          </Button>
           {material.sections.map((section) => {
             const progress = coverage.find(
               (item) => item.materialId === material.id && item.sectionId === section.id,
@@ -313,102 +399,211 @@ export function StudyMaterialsPanel({
               ),
             );
             return (
-              <details
+              <Collapsible
                 key={section.id}
                 id={`study-source-${section.id}`}
+                tabIndex={-1}
+                data-search-target={`passage:${section.id}`}
                 open={materials.length === 1 && material.sections.length === 1}
               >
-                <summary>
+                <CollapsibleTrigger className="w-full text-left font-medium">
                   {section.title}
                   {section.pageNumber ? ` · page ${section.pageNumber}` : ""} ·{" "}
                   {progress?.status ?? "unprocessed"} · {progress?.approvedCards ?? 0} approved
                   cards
-                </summary>
-                <label>
-                  <input
-                    type="checkbox"
-                    checked={section.selected}
-                    disabled={disabled}
-                    onChange={(event) =>
-                      update({
-                        ...material,
-                        sections: material.sections.map((item) =>
-                          item.id === section.id
-                            ? { ...item, selected: event.target.checked }
-                            : item,
-                        ),
-                      })
-                    }
-                  />
-                  Include this section
-                </label>
-                <label>
-                  Extracted passage / exact AI source
-                  <textarea
-                    value={passageDrafts[section.id] ?? section.text}
-                    maxLength={12000}
-                    readOnly={hasProposals}
-                    disabled={disabled}
-                    onChange={(event) =>
-                      setPassageDrafts((previous) => ({
-                        ...previous,
-                        [section.id]: event.target.value,
-                      }))
-                    }
-                  />
-                </label>
-                {!hasProposals && passageDrafts[section.id] !== undefined && (
-                  <button
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                  <Label>
+                    <Checkbox
+                      checked={section.selected}
+                      disabled={disabled}
+                      onCheckedChange={(checked) =>
+                        update({
+                          ...material,
+                          sections: material.sections.map((item) =>
+                            item.id === section.id ? { ...item, selected: checked === true } : item,
+                          ),
+                        })
+                      }
+                    />
+                    Include this section
+                  </Label>
+                  <Label>
+                    Check extracted text
+                    <Textarea
+                      value={passageDrafts[section.id] ?? section.text}
+                      maxLength={12000}
+                      readOnly={hasProposals}
+                      disabled={disabled}
+                      onChange={(event) =>
+                        setPassageDrafts((previous) => ({
+                          ...previous,
+                          [section.id]: event.target.value,
+                        }))
+                      }
+                    />
+                  </Label>
+                  {!hasProposals && passageDrafts[section.id] !== undefined && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={disabled || !passageDrafts[section.id]?.trim()}
+                      onClick={() => {
+                        const value = passageDrafts[section.id];
+                        if (value?.trim())
+                          run(
+                            updateNotebookMaterial(notebook, {
+                              ...material,
+                              sections: material.sections.map((item) =>
+                                item.id === section.id ? { ...item, text: value } : item,
+                              ),
+                            }).pipe(Effect.flatMap(save)),
+                            () =>
+                              setPassageDrafts((previous) => {
+                                const next = { ...previous };
+                                delete next[section.id];
+                                return next;
+                              }),
+                          );
+                      }}
+                    >
+                      Save corrected passage
+                    </Button>
+                  )}
+                  <Button
                     type="button"
-                    className="text-button"
-                    disabled={disabled || !passageDrafts[section.id]?.trim()}
-                    onClick={() => {
-                      const value = passageDrafts[section.id];
-                      if (value?.trim())
-                        run(
-                          updateNotebookMaterial(notebook, {
-                            ...material,
-                            sections: material.sections.map((item) =>
-                              item.id === section.id ? { ...item, text: value } : item,
-                            ),
-                          }).pipe(Effect.flatMap(save)),
-                          () =>
-                            setPassageDrafts((previous) => {
-                              const next = { ...previous };
-                              delete next[section.id];
-                              return next;
-                            }),
-                        );
-                    }}
+                    variant="outline"
+                    disabled={
+                      disabled ||
+                      networkDisabled ||
+                      Object.keys(passageDrafts).length > 0 ||
+                      !goal.trim() ||
+                      (notebook.coveragePlans ?? []).some(
+                        (plan) => plan.materialId === material.id && plan.sectionId === section.id,
+                      )
+                    }
+                    onClick={() => plan(material.id, section.id)}
                   >
-                    Save corrected passage
-                  </button>
-                )}
-                {hasProposals && (
-                  <p>
-                    This passage is preserved because cards cite it. Import corrected text as a new
-                    source.
-                  </p>
-                )}
-              </details>
+                    Suggest topics
+                  </Button>
+                  {(notebook.coveragePlans ?? [])
+                    .filter(
+                      (plan) => plan.materialId === material.id && plan.sectionId === section.id,
+                    )
+                    .map((plan) => (
+                      <div key={plan.id}>
+                        <h4 className="text-sm font-semibold">Choose topics</h4>
+                        {plan.claims.map((claim) => {
+                          const progress = claimCoverage.find((item) => item.claimId === claim.id);
+                          return (
+                            <article
+                              key={claim.id}
+                              tabIndex={-1}
+                              data-search-target={`claim:${claim.id}`}
+                              className="border-b py-3"
+                            >
+                              <strong>{claim.title}</strong>
+                              <p>{claim.description}</p>
+                              <p>
+                                {progress?.status ?? "pending"} · {progress?.pendingCards ?? 0}{" "}
+                                pending · {progress?.approvedCards ?? 0} approved
+                              </p>
+                              <Collapsible>
+                                <CollapsibleTrigger className="w-full text-left font-medium">
+                                  Source passages
+                                </CollapsibleTrigger>
+                                <CollapsibleContent>
+                                  {claim.sourceReferences.map((reference, index) => (
+                                    <blockquote key={index}>{reference.quote}</blockquote>
+                                  ))}
+                                </CollapsibleContent>
+                              </Collapsible>
+                              <Label>
+                                Include topic
+                                <NativeSelect
+                                  disabled={disabled}
+                                  value={claim.decision}
+                                  onChange={(event) => {
+                                    const decision = event.target.value;
+                                    if (
+                                      decision === "pending" ||
+                                      decision === "selected" ||
+                                      decision === "skipped"
+                                    )
+                                      run(
+                                        updateStudyCoverageClaim(notebook, {
+                                          planId: plan.id,
+                                          claimId: claim.id,
+                                          decision,
+                                          priority: claim.priority,
+                                        }).pipe(Effect.flatMap(save)),
+                                      );
+                                  }}
+                                >
+                                  <option value="pending">Review later</option>
+                                  <option value="selected">Include</option>
+                                  <option value="skipped">Skip</option>
+                                </NativeSelect>
+                              </Label>
+                              <Label>
+                                Priority
+                                <NativeSelect
+                                  disabled={disabled}
+                                  value={claim.priority}
+                                  onChange={(event) => {
+                                    const priority = event.target.value;
+                                    if (
+                                      priority === "high" ||
+                                      priority === "medium" ||
+                                      priority === "low"
+                                    )
+                                      run(
+                                        updateStudyCoverageClaim(notebook, {
+                                          planId: plan.id,
+                                          claimId: claim.id,
+                                          decision: claim.decision,
+                                          priority,
+                                        }).pipe(Effect.flatMap(save)),
+                                      );
+                                  }}
+                                >
+                                  <option value="high">High</option>
+                                  <option value="medium">Medium</option>
+                                  <option value="low">Low</option>
+                                </NativeSelect>
+                              </Label>
+                            </article>
+                          );
+                        })}
+                      </div>
+                    ))}
+                  {hasProposals && (
+                    <p>
+                      This passage is preserved because cards cite it. Import corrected text as a
+                      new source.
+                    </p>
+                  )}
+                </CollapsibleContent>
+              </Collapsible>
             );
           })}
         </article>
       ))}
       {materials.length > 0 && (
-        <>
-          <label>
+        <div className="border-b py-4">
+          <h4 className="text-sm font-semibold">4. Generate cards</h4>
+          <Label>
             Study goal
-            <textarea
+            <Textarea
               disabled={disabled}
               value={goal}
               maxLength={2000}
               onChange={(event) => setGoal(event.target.value)}
             />
-          </label>
-          <label>
+          </Label>
+          <Label>
             Depth
-            <select
+            <NativeSelect
               disabled={disabled}
               value={depth}
               onChange={(event) => {
@@ -420,11 +615,11 @@ export function StudyMaterialsPanel({
               <option value="overview">Overview · central ideas</option>
               <option value="standard">Standard · explanations and distinctions</option>
               <option value="detailed">Detailed · application and edge cases</option>
-            </select>
-          </label>
-          <label>
+            </NativeSelect>
+          </Label>
+          <Label>
             Link cards to concept
-            <select
+            <NativeSelect
               disabled={disabled}
               value={conceptId}
               onChange={(event) => setConceptId(event.target.value)}
@@ -434,11 +629,11 @@ export function StudyMaterialsPanel({
                   {concept.title}
                 </option>
               ))}
-            </select>
-          </label>
-          <label>
-            Card requests in this batch
-            <input
+            </NativeSelect>
+          </Label>
+          <Label>
+            Maximum cards
+            <Input
               type="number"
               min={1}
               max={100}
@@ -446,42 +641,62 @@ export function StudyMaterialsPanel({
               disabled={disabled}
               onChange={(event) => setCount(event.target.value)}
             />
-          </label>
+          </Label>
           <p>
-            {selected.length} sections selected. Each attempt uses one notebook AI request.
-            Completed proposals remain saved if you stop or a later request fails. Duplicate results
-            may produce fewer cards. Continue with another batch to expand coverage.
+            {selected.length} sections selected. Selected passages are sent to your AI provider.
           </p>
-          <button
+          <Collapsible>
+            <CollapsibleTrigger className="w-full text-left font-medium">
+              Generation and usage
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <p>
+                Each attempt uses one AI request. Suggestions are saved as they arrive. Selected
+                topics without cards are generated first, in priority order.
+              </p>
+            </CollapsibleContent>
+          </Collapsible>
+          <Button
             type="button"
-            className="primary-button"
+            variant="default"
             disabled={
               disabled ||
               networkDisabled ||
               !selected.length ||
               !goal.trim() ||
+              ((notebook.coveragePlans?.length ?? 0) > 0 &&
+                !claimCoverage.some(
+                  (claim) =>
+                    claim.decision === "selected" &&
+                    claim.status === "uncovered" &&
+                    selected.some(
+                      (source) =>
+                        source.material.id === claim.materialId &&
+                        source.section.id === claim.sectionId,
+                    ),
+                )) ||
               Object.keys(passageDrafts).length > 0
             }
             onClick={generate}
           >
-            Generate source-backed card proposals
-          </button>
-          <button
+            Generate cards
+          </Button>
+          <Button
             type="button"
-            className="text-button"
+            variant="outline"
             onClick={() => {
               stopRequested.current = true;
             }}
           >
             Stop after current request
-          </button>
+          </Button>
           {suggestions.map((suggestion) => (
             <article key={suggestion.title}>
               <strong>{suggestion.title}</strong>
               <p>{suggestion.description}</p>
-              <button
+              <Button
                 type="button"
-                className="text-button"
+                variant="outline"
                 disabled={
                   disabled ||
                   notebook.concepts.some(
@@ -503,13 +718,17 @@ export function StudyMaterialsPanel({
                   )
                 }
               >
-                Approve suggested concept
-              </button>
+                Add concept
+              </Button>
             </article>
           ))}
-        </>
+        </div>
       )}
-      {notice && <p role="alert">{notice}</p>}
+      {notice && (
+        <Alert variant="destructive">
+          <AlertDescription>{notice}</AlertDescription>
+        </Alert>
+      )}
     </section>
   );
 }

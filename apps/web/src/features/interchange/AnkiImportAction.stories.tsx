@@ -1,5 +1,10 @@
 import { Effect } from "effect";
-import { createAreaId, createCardId, createReviewEventId, type ReviewEvent } from "@recall/domain";
+import {
+  createAreaId,
+  createAssessmentId,
+  createReviewEventId,
+  type ReviewEvent,
+} from "@recall/domain";
 import { newSchedule, rebuildSchedule } from "@recall/scheduler";
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { mockWorkspace } from "@/features/workspace/mock-data";
@@ -9,7 +14,7 @@ const baseArea = mockWorkspace.areas[0]!;
 const importedAreaId = createAreaId("00000000-0000-4000-8000-000000000301");
 const importedCards = baseArea.cards.slice(0, 4).map((card, index) => ({
   ...card,
-  id: createCardId(`00000000-0000-4000-8000-${String(311 + index).padStart(12, "0")}`),
+  id: createAssessmentId(`00000000-0000-4000-8000-${String(311 + index).padStart(12, "0")}`),
   sourceId: `anki:sample-guid-${index + 1}:${index === 3 ? 1 : 0}`,
   origin: "imported" as const,
   tags: ["cell-biology", "foundations"],

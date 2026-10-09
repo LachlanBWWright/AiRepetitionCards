@@ -4,7 +4,7 @@ import fc from "fast-check";
 import { Effect, Either } from "effect";
 import {
   createAreaId,
-  createCardId,
+  createAssessmentId,
   createObjectiveId,
   decodeAndMigrateKnowledgeArea,
   parseKnowledgeAreaJson,
@@ -14,7 +14,7 @@ import { fromKnowledgeArea, toKnowledgeArea, renderCloze } from "@recall/applica
 
 const now = new Date("2026-10-03T00:00:00.000Z");
 const areaId = createAreaId("00000000-0000-4000-8000-000000000001");
-const cardId = createCardId("00000000-0000-4000-8000-000000000002");
+const cardId = createAssessmentId("00000000-0000-4000-8000-000000000002");
 const objectiveId = createObjectiveId("00000000-0000-4000-8000-000000000003");
 function document(front = "Question", back = "Answer"): KnowledgeArea {
   return {

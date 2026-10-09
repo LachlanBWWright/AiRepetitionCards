@@ -1,36 +1,7 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Recall Web
 
-## Getting Started
+The web app shell and navigation are available without an account. Reading, creating, or studying cards requires a signed-in Recall account and a reachable API. Study data is saved to the account service; the browser keeps only a temporary in-memory working copy and does not persist cards, reviews, or attachments in browser storage.
 
-First, run the development server:
+From the repository root, run `pnpm dev:api:next` to start the ASP.NET API, Next.js client, and local Supabase stack when needed. Web sign-in supports Apple and Google, with direct ChatGPT sign-in available when its SIWC configuration is enabled. Configure the OAuth provider credentials you use in Supabase. See the root [README](../../README.md#supabase-and-account-sign-in) for setup details.
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
-
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
-
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
-
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Mobile and Electron are the clients for local-only study. They keep their workspace in SQLite and can be used without an account.

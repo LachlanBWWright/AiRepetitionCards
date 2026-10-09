@@ -1,6 +1,23 @@
 import { Effect, Either, Schema } from "effect";
 import * as SQLite from "expo-sqlite";
-import * as Notifications from "expo-notifications";
+import type * as Notifications from "expo-notifications";
+import { getAllScheduledNotificationsAsync } from "expo-notifications/build/getAllScheduledNotificationsAsync";
+import { cancelScheduledNotificationAsync } from "expo-notifications/build/cancelScheduledNotificationAsync";
+import { setNotificationChannelAsync } from "expo-notifications/build/setNotificationChannelAsync";
+import { scheduleNotificationAsync } from "expo-notifications/build/scheduleNotificationAsync";
+import {
+  getPermissionsAsync,
+  requestPermissionsAsync,
+} from "expo-notifications/build/NotificationPermissions";
+import { setNotificationHandler } from "expo-notifications/build/NotificationsHandler";
+import {
+  addNotificationResponseReceivedListener,
+  clearLastNotificationResponse,
+  getLastNotificationResponse,
+} from "expo-notifications/build/NotificationsEmitter";
+import { AndroidImportance } from "expo-notifications/build/NotificationChannelManager.types";
+import { IosAuthorizationStatus } from "expo-notifications/build/NotificationPermissions.types";
+import { SchedulableTriggerInputTypes } from "expo-notifications/build/Notifications.types";
 import { Platform } from "react-native";
 
 import { DailyReminderSettingsSchema, defaultDailyReminderSettings } from "@recall/application";
@@ -70,31 +87,32 @@ export function isNativeDailyReminder(data: unknown): boolean {
   );
 }
 const cancelOwned = Effect.gen(function* () {
-  const requests = yield* vendor(() => Notifications.getAllScheduledNotificationsAsync());
+  const requests = yield* vendor(getAllScheduledNotificationsAsync);
   yield* Effect.forEach(
     requests.filter((request) => isNativeDailyReminder(request.content.data)),
-    (request) => vendor(() => Notifications.cancelScheduledNotificationAsync(request.identifier)),
+    (request) => vendor(() => cancelScheduledNotificationAsync(request.identifier)),
     { discard: true },
   );
 });
 const hasPermission = (permissions: Notifications.NotificationPermissionsStatus) =>
   Platform.OS === "ios"
-    ? permissions.ios?.status === Notifications.IosAuthorizationStatus.AUTHORIZED ||
-      permissions.ios?.status === Notifications.IosAuthorizationStatus.PROVISIONAL ||
-      permissions.ios?.status === Notifications.IosAuthorizationStatus.EPHEMERAL
+    ? permissions.ios?.status === IosAuthorizationStatus.AUTHORIZED ||
+      permissions.ios?.status === IosAuthorizationStatus.PROVISIONAL ||
+      permissions.ios?.status === IosAuthorizationStatus.EPHEMERAL
     : permissions.granted;
 const channel = Effect.gen(function* () {
-  if (Platform.OS === "android")
+  if (Platform.OS === "android") {
     yield* vendor(() =>
-      Notifications.setNotificationChannelAsync(channelId, {
+      setNotificationChannelAsync(channelId, {
         name: "Daily study reminders",
-        importance: Notifications.AndroidImportance.DEFAULT,
+        importance: AndroidImportance.DEFAULT,
       }),
     );
+  }
 });
 const schedule = (settings: NativeDailyReminderSettings) =>
   vendor(() =>
-    Notifications.scheduleNotificationAsync({
+    scheduleNotificationAsync({
       content: {
         title: "Time for a little study",
         body: "Open Today to review your cards and continue learning.",
@@ -102,7 +120,7 @@ const schedule = (settings: NativeDailyReminderSettings) =>
         sound: "default",
       },
       trigger: {
-        type: Notifications.SchedulableTriggerInputTypes.DAILY,
+        type: SchedulableTriggerInputTypes.DAILY,
         hour: settings.hour,
         minute: settings.minute,
         channelId,
@@ -112,11 +130,11 @@ const schedule = (settings: NativeDailyReminderSettings) =>
 /** The OS keeps daily schedules while the app is closed. Startup never requests permission. */
 export const restoreNativeDailyReminder = lane.withPermits(1)(
   Effect.gen(function* () {
-    yield* cancelOwned;
     const settings = yield* readNativeDailyReminderSettings;
+    yield* cancelOwned;
     if (!settings.enabled) return settings;
     yield* channel;
-    const permissions = yield* vendor(() => Notifications.getPermissionsAsync());
+    const permissions = yield* vendor(getPermissionsAsync);
     if (!hasPermission(permissions)) {
       yield* persist({ ...settings, enabled: false });
       return yield* Effect.fail(fail("permission-denied"));
@@ -142,11 +160,11 @@ export function saveNativeDailyReminder(
       yield* cancelOwned;
       if (!settings.enabled) return settings;
       yield* channel;
-      const existing = yield* vendor(() => Notifications.getPermissionsAsync());
+      const existing = yield* vendor(getPermissionsAsync);
       const permissions = hasPermission(existing)
         ? existing
         : yield* vendor(() =>
-            Notifications.requestPermissionsAsync({
+            requestPermissionsAsync({
               ios: { allowAlert: true, allowSound: true, allowBadge: false },
             }),
           );
@@ -176,34 +194,36 @@ export const clearNativeDailyReminders = lane.withPermits(1)(
 export function installNativeDailyReminderResponses(
   onOpenToday: () => void,
 ): Effect.Effect<() => void, NativeDailyReminderFailure> {
-  return Effect.try({
-    try: () => {
-      Notifications.setNotificationHandler({
-        handleNotification: async (notification) => ({
-          shouldShowBanner: isNativeDailyReminder(notification.request.content.data),
-          shouldShowList: isNativeDailyReminder(notification.request.content.data),
-          shouldPlaySound: false,
-          shouldSetBadge: false,
-        }),
-      });
-      const handle = (response: Notifications.NotificationResponse) => {
-        if (isNativeDailyReminder(response.notification.request.content.data)) {
-          onOpenToday();
-          Effect.runSync(
-            Effect.either(
-              Effect.try({
-                try: () => Notifications.clearLastNotificationResponse(),
-                catch: () => fail("unavailable"),
-              }),
-            ),
-          );
-        }
-      };
-      const subscription = Notifications.addNotificationResponseReceivedListener(handle);
-      const previous = Notifications.getLastNotificationResponse();
-      if (previous) handle(previous);
-      return () => subscription.remove();
-    },
-    catch: () => fail("unavailable"),
+  return Effect.gen(function* () {
+    return yield* Effect.try({
+      try: () => {
+        setNotificationHandler({
+          handleNotification: async (notification) => ({
+            shouldShowBanner: isNativeDailyReminder(notification.request.content.data),
+            shouldShowList: isNativeDailyReminder(notification.request.content.data),
+            shouldPlaySound: false,
+            shouldSetBadge: false,
+          }),
+        });
+        const handle = (response: Notifications.NotificationResponse) => {
+          if (isNativeDailyReminder(response.notification.request.content.data)) {
+            onOpenToday();
+            Effect.runSync(
+              Effect.either(
+                Effect.try({
+                  try: () => clearLastNotificationResponse(),
+                  catch: () => fail("unavailable"),
+                }),
+              ),
+            );
+          }
+        };
+        const subscription = addNotificationResponseReceivedListener(handle);
+        const previous = getLastNotificationResponse();
+        if (previous) handle(previous);
+        return () => subscription.remove();
+      },
+      catch: () => fail("unavailable"),
+    });
   });
 }

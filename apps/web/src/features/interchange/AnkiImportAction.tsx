@@ -1,12 +1,14 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { Button } from "@/components/ui/Button";
+import { Dialog, DialogContent, DialogTitle } from "@recall/ui-web/components/dialog";
+import { Alert } from "@recall/ui-web";
 import { Effect, Either } from "effect";
 import { importAnkiApkg, type AnkiImportError, type AnkiImportProposal } from "@recall/application";
 import { readAnkiSqliteInBrowser } from "./browser-anki-sqlite-reader";
 import { readAnkiSqliteOnDesktop } from "./desktop-anki-sqlite-reader";
 import { isDesktopRuntime } from "@/lib/desktop-api";
-import "./anki-import.css";
 
 type ImportFailure = AnkiImportError["reason"] | "read-failed" | "save-failed";
 export type AnkiImportState =
@@ -119,12 +121,12 @@ export function AnkiImportAction({ color, onAccept, initialState }: Props) {
 
   return (
     <>
-      <button className="text-button" type="button" onClick={() => setState({ _tag: "ready" })}>
+      <Button variant="outline" type="button" onClick={() => setState({ _tag: "ready" })}>
         Import Anki deck
-      </button>
+      </Button>
       <input
         ref={inputRef}
-        className="visually-hidden"
+        className="sr-only"
         type="file"
         accept=".apkg,application/zip"
         aria-label="Choose Anki deck package"
@@ -134,145 +136,182 @@ export function AnkiImportAction({ color, onAccept, initialState }: Props) {
           if (file) void readFile(file);
         }}
       />
-      {state._tag !== "closed" && (
-        <div
-          className="anki-import-backdrop"
-          onMouseDown={() => {
-            if (state._tag !== "reading" && state._tag !== "saving") close();
-          }}
-        >
-          <section
-            className="anki-import-dialog"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="anki-import-title"
-            onMouseDown={(event) => event.stopPropagation()}
+      <Dialog
+        open={state._tag !== "closed"}
+        onOpenChange={(open) => {
+          if (!open && state._tag !== "reading" && state._tag !== "saving") close();
+        }}
+      >
+        {state._tag !== "closed" && (
+          <DialogContent
+            className="relative max-h-[calc(100dvh-2rem)] w-[min(100%,620px)] max-w-none overflow-y-auto rounded-xl border-border bg-card p-6 text-card-foreground shadow-2xl sm:p-9"
+            showCloseButton={false}
           >
-            <button
-              className="anki-import-close"
+            <Button
+              className="absolute right-4 top-4 size-9 rounded-full border border-border bg-background text-xl text-muted-foreground hover:bg-accent hover:text-accent-foreground"
               type="button"
               aria-label="Close Anki import"
               disabled={state._tag === "reading" || state._tag === "saving"}
               onClick={close}
             >
               ×
-            </button>
-            <p className="eyebrow">BRING YOUR DECKS</p>
-            <h2 id="anki-import-title">Import an Anki deck</h2>
+            </Button>
+            <p className="text-sm font-medium text-muted-foreground">Bring your decks</p>
+            <DialogTitle
+              id="anki-import-title"
+              className="mt-2 max-w-[30rem] text-3xl font-medium tracking-tight sm:text-4xl"
+            >
+              Import an Anki deck
+            </DialogTitle>
             {state._tag === "ready" && (
               <>
-                <p className="anki-import-intro">
+                <p className="mb-5 mt-3 max-w-[31rem] text-sm leading-7 text-muted-foreground">
                   Basic and Cloze cards, tags, images, audio, and review history are imported into a
                   fresh Knowledge Area. Imported review history rebuilds schedules with FSRS; Anki
                   intervals and due dates are not carried over.
                 </p>
-                <div className="anki-import-supported">
-                  <span aria-hidden="true">↗</span>
+                <div className="mb-5 flex items-start gap-4 rounded-xl border border-border bg-muted/40 p-4">
+                  <span
+                    className="grid size-9 shrink-0 place-items-center rounded-full bg-primary/15 text-lg text-primary"
+                    aria-hidden="true"
+                  >
+                    ↗
+                  </span>
                   <div>
-                    <strong>Choose a deck package (.apkg)</strong>
-                    <p>
+                    <strong className="mb-1 block text-sm font-semibold">
+                      Choose a deck package (.apkg)
+                    </strong>
+                    <p className="text-sm leading-6 text-muted-foreground">
                       Up to 50 MB. Supports legacy, .anki21, and modern .anki21b deck packages;
                       collection backups are not supported.
                     </p>
                   </div>
                 </div>
-                <button
-                  className="primary-action"
-                  type="button"
-                  onClick={() => inputRef.current?.click()}
-                >
+                <Button variant="default" type="button" onClick={() => inputRef.current?.click()}>
                   Choose package
-                </button>
+                </Button>
               </>
             )}
             {state._tag === "reading" && (
-              <div className="anki-import-progress" role="status" aria-live="polite">
-                <span className="anki-import-spinner" aria-hidden="true" />
+              <div
+                className="mt-6 flex items-start gap-4 rounded-xl border border-border bg-muted/40 p-4"
+                role="status"
+                aria-live="polite"
+              >
+                <span
+                  className="mt-1 size-5 shrink-0 animate-spin rounded-full border-2 border-muted border-t-primary motion-reduce:animate-none"
+                  aria-hidden="true"
+                />
                 <div>
-                  <strong>Reading {state.fileName}</strong>
-                  <p>Checking the package, cards, and attachments…</p>
+                  <strong className="mb-1 block text-sm font-semibold">
+                    Reading {state.fileName}
+                  </strong>
+                  <p className="text-sm leading-6 text-muted-foreground">
+                    Checking the package, cards, and attachments…
+                  </p>
                 </div>
               </div>
             )}
             {state._tag === "saving" && (
-              <div className="anki-import-progress" role="status" aria-live="polite">
-                <span className="anki-import-spinner" aria-hidden="true" />
+              <div
+                className="mt-6 flex items-start gap-4 rounded-xl border border-border bg-muted/40 p-4"
+                role="status"
+                aria-live="polite"
+              >
+                <span
+                  className="mt-1 size-5 shrink-0 animate-spin rounded-full border-2 border-muted border-t-primary motion-reduce:animate-none"
+                  aria-hidden="true"
+                />
                 <div>
-                  <strong>Adding cards to your workspace</strong>
-                  <p>Saving verified attachments and rebuilding FSRS schedules…</p>
+                  <strong className="mb-1 block text-sm font-semibold">
+                    Adding cards to your workspace
+                  </strong>
+                  <p className="text-sm leading-6 text-muted-foreground">
+                    Saving verified attachments and rebuilding FSRS schedules…
+                  </p>
                 </div>
               </div>
             )}
             {state._tag === "review" && proposal && counts && (
               <>
-                <p className="anki-import-intro">
+                <p className="mb-5 mt-3 max-w-[31rem] text-sm leading-7 text-muted-foreground">
                   Review this preview before adding anything to your workspace. Imported review
                   history is retained and used to rebuild FSRS schedules; unsafe formatting is
                   removed.
                 </p>
-                <div className="anki-import-summary">
-                  <h3>{proposal.area.title}</h3>
-                  <p>
+                <div className="rounded-xl bg-muted/60 p-4 sm:px-5">
+                  <h3 className="mb-1 text-xl font-medium">{proposal.area.title}</h3>
+                  <p className="text-sm text-muted-foreground">
                     {counts.cards} cards · {counts.reviews} reviews · {counts.attachments} verified
                     attachments
                   </p>
                   {counts.excludedReviews > 0 && (
-                    <p className="anki-import-decks">
+                    <p className="mt-2 text-xs text-muted-foreground">
                       {counts.excludedReviews} cram or reschedule log entries were excluded from
                       review history.
                     </p>
                   )}
                   {proposal.provenance.deckNames.length > 0 && (
-                    <p className="anki-import-decks">
+                    <p className="mt-2 text-xs text-muted-foreground">
                       Decks: {proposal.provenance.deckNames.join(" · ")}
                     </p>
                   )}
                 </div>
-                <div className="anki-import-card-preview">
-                  <span>QUESTION</span>
-                  <p>{proposal.area.cards[0]?.front ?? "No cards to preview"}</p>
-                  <span>ANSWER</span>
-                  <p>{proposal.area.cards[0]?.back ?? ""}</p>
+                <div className="my-4 rounded-xl border border-border bg-background p-4 sm:px-5">
+                  <span className="text-xs font-semibold tracking-wider text-muted-foreground">
+                    Question
+                  </span>
+                  <p className="my-1 whitespace-pre-wrap leading-6">
+                    {proposal.area.cards[0]?.front ?? "No cards to preview"}
+                  </p>
+                  <span className="text-xs font-semibold tracking-wider text-muted-foreground">
+                    Answer
+                  </span>
+                  <p className="mb-0 mt-1 whitespace-pre-wrap leading-6">
+                    {proposal.area.cards[0]?.back ?? ""}
+                  </p>
                 </div>
-                <div className="anki-import-actions">
-                  <button
-                    className="secondary-action"
+                <div className="flex flex-wrap justify-end gap-2 max-sm:[&>button]:flex-1">
+                  <Button
+                    variant="outline"
                     type="button"
                     onClick={() => setState({ _tag: "ready" })}
                   >
                     Choose another
-                  </button>
-                  <button
-                    className="primary-action"
-                    type="button"
-                    onClick={() => void accept(proposal)}
-                  >
+                  </Button>
+                  <Button variant="default" type="button" onClick={() => void accept(proposal)}>
                     Add {counts.cards} cards
-                  </button>
+                  </Button>
                 </div>
               </>
             )}
             {state._tag === "error" && (
-              <div className="anki-import-error" role="alert">
-                <span aria-hidden="true">!</span>
+              <Alert
+                className="my-5 flex items-start gap-4 border-destructive/30 bg-destructive/10"
+                variant="destructive"
+              >
+                <span
+                  className="grid size-9 shrink-0 place-items-center rounded-full bg-destructive/15 font-bold text-destructive"
+                  aria-hidden="true"
+                >
+                  !
+                </span>
                 <div>
-                  <strong>Import couldn’t continue</strong>
-                  <p>{failureCopy[state.reason]}</p>
+                  <strong className="mb-1 block text-sm font-semibold">
+                    Import couldn’t continue
+                  </strong>
+                  <p className="text-sm leading-6">{failureCopy[state.reason]}</p>
                 </div>
-              </div>
+              </Alert>
             )}
             {state._tag === "error" && (
-              <button
-                className="secondary-action"
-                type="button"
-                onClick={() => setState({ _tag: "ready" })}
-              >
+              <Button variant="outline" type="button" onClick={() => setState({ _tag: "ready" })}>
                 Try another package
-              </button>
+              </Button>
             )}
-          </section>
-        </div>
-      )}
+          </DialogContent>
+        )}
+      </Dialog>
     </>
   );
 }

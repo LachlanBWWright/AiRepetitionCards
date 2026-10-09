@@ -13,9 +13,9 @@ import {
   ReviewEventSchema,
   AccountIdSchema,
   createAreaId,
-  createCardId,
+  createAssessmentId,
   type AreaId,
-  type CardId,
+  type AssessmentId,
   type LearningArea,
   type ReviewEvent,
   type Workspace,
@@ -76,7 +76,7 @@ export type WorkspaceSyncChanges = {
   readonly uploadDeferred: boolean;
   readonly pulledEvents: readonly ReviewEvent[];
   readonly pulledAreas: readonly LearningArea[];
-  readonly deletedCardIds: readonly CardId[];
+  readonly deletedCardIds: readonly AssessmentId[];
   readonly syncedAreaTombstoneIds: readonly AreaId[];
   readonly pulledDeletedAreaIds: readonly AreaId[];
   readonly contentHashes: Readonly<Record<string, string>>;
@@ -354,7 +354,7 @@ export function syncWorkspace(
     let acceptedIds: SyncPushResponse["acceptedIds"] = [];
     let conflicts: SyncPushResponse["conflicts"] = [];
     const syncedAreaTombstoneIds: AreaId[] = [];
-    const confirmedCardIds: CardId[] = [];
+    const confirmedCardIds: AssessmentId[] = [];
     const canonicalAcceptedEvents: ReviewEvent[] = [];
     if (!resumingPull) {
       if ((prepared.syncContentConflictAreaIds ?? []).length > 0) {
@@ -397,7 +397,7 @@ export function syncWorkspace(
         return yield* Effect.fail(failure("account-changed"));
       const requestedCards = new Set(reviewBatch.map((event) => event.cardId));
       if (
-        knownCards.some((card) => !requestedCards.has(createCardId(card.id))) ||
+        knownCards.some((card) => !requestedCards.has(createAssessmentId(card.id))) ||
         new Set(knownCards.map((card) => card.id)).size !== knownCards.length
       )
         return yield* Effect.fail(failure("reviews"));
@@ -619,7 +619,7 @@ export function syncWorkspace(
     }
     let cursor = prepared.syncCursor ?? "0";
     const pulledEvents: ReviewEvent[] = [...canonicalAcceptedEvents];
-    const deletedCardIds: CardId[] = [...confirmedCardIds];
+    const deletedCardIds: AssessmentId[] = [...confirmedCardIds];
     const pulledDeletedAreaIds: AreaId[] = [];
     let completed = false;
     for (let page = 0; page < 100; page += 1) {
@@ -631,7 +631,7 @@ export function syncWorkspace(
       if (!successful(response) || Either.isLeft(pull) || !isValidSyncPullPage(pull.right, cursor))
         return yield* Effect.fail(failure("reviews"));
       for (const change of pull.right.changes) {
-        if (change.entityType === "card") deletedCardIds.push(createCardId(change.entityId));
+        if (change.entityType === "card") deletedCardIds.push(createAssessmentId(change.entityId));
         if (change.entityType === "area") pulledDeletedAreaIds.push(createAreaId(change.entityId));
         if (change.entityType !== "review_event") continue;
         const event = Schema.decodeUnknownEither(ReviewEventSchema)(change.payload);

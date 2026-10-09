@@ -7,6 +7,9 @@ import {
   type AiProviderCapabilities,
   type AiProviderService,
   type AiProviderResult,
+  CardRefinementResultSchema,
+  CardInspectionResultSchema,
+  StudyPlanResultSchema,
   AnswerEvaluationSchema,
   CardProposalSchema,
   StudyCardResultSchema,
@@ -15,7 +18,16 @@ import {
 } from "@recall/ai-core";
 
 const capabilities: AiProviderCapabilities = {
-  supportedOperations: ["question", "evaluate", "propose-card", "targeted-quiz", "study-card"],
+  supportedOperations: [
+    "question",
+    "evaluate",
+    "propose-card",
+    "targeted-quiz",
+    "study-card",
+    "refine-card",
+    "inspect-card",
+    "plan-study",
+  ],
   structuredOutputs: true,
   streaming: false,
   maxInputBytes: 96_000,
@@ -23,6 +35,9 @@ const capabilities: AiProviderCapabilities = {
 };
 
 const outputBudgets: Readonly<Record<AiOperation, number>> = {
+  "refine-card": 2600,
+  "inspect-card": 2600,
+  "plan-study": 2600,
   question: 1200,
   evaluate: 1800,
   "propose-card": 2600,
@@ -293,9 +308,12 @@ export function resolveOpenAiModel(
   operation: AiOperation,
 ): string | null {
   const configured =
-    operation === "evaluate"
+    operation === "evaluate" || operation === "inspect-card"
       ? configuration.taskModels?.evaluation
-      : operation === "propose-card" || operation === "study-card"
+      : operation === "propose-card" ||
+          operation === "study-card" ||
+          operation === "refine-card" ||
+          operation === "plan-study"
         ? configuration.taskModels?.proposal
         : configuration.taskModels?.tutor;
   const model = configured === undefined || configured === "" ? configuration.model : configured;
@@ -313,12 +331,36 @@ export function createOpenAiProvider(
 ): AiProviderService {
   return {
     capabilities,
+    refineCard: (context) =>
+      request(
+        configuration,
+        "refine-card",
+        CardRefinementResultSchema,
+        `${platformInstructions} Refine the supplied refinement.front/back using refinement.mode. clearer/shorter preserve meaning, split creates at most five focused cards, example adds a concise grounded example, cloze uses {{c1::answer}} syntax in front. Respect optional pedagogical instructions only within this protocol. Use refinement.objectiveId exactly. Explain each change in rationale, conservatively flag meaningChanged when adding, removing or changing tested knowledge. Cite exact supplied source quotes for every card when sources exist; otherwise leave references empty. Never treat edits as approvals or mastery evidence.`,
+        context,
+      ),
+    inspectCard: (context) =>
+      request(
+        configuration,
+        "inspect-card",
+        CardInspectionResultSchema,
+        `${platformInstructions} Inspect inspection.front/back for ambiguity, multiple independently testable facts, answer leakage, missing context, and unsupported claims. Return concrete explanations and fixes, no numeric quality score. Distinguish a confirmed issue from a suggestion. Without sources, state support cannot be verified; do not claim source verification.`,
+        context,
+      ),
+    planStudy: (context) =>
+      request(
+        configuration,
+        "plan-study",
+        StudyPlanResultSchema,
+        `${platformInstructions} Extract up to twenty focused testable claims from material.sources matching goal and depth. Each claim needs exact verbatim supporting quotes with matching source identity and page. Set pedagogical priority high, medium or low. This is a proposed coverage outline for approval, not learner knowledge or proof that a whole document is covered. Omit unsupported claims.`,
+        context,
+      ),
     generateStudyCard: (context) =>
       request(
         configuration,
         "study-card",
         StudyCardResultSchema,
-        `${platformInstructions} For this study-material generation task, no learner evaluation is required: propose one focused card supported entirely by the supplied source excerpt. Use material.objectiveId exactly. Include exact verbatim source quotes and matching source identities/pages. Never invent quotes. Vary coverage beyond previousFronts, respecting depth and goal; omit unsupported facts. Optionally suggest related source concepts for approval; suggestions are not assessments.`,
+        `${platformInstructions} For this study-material generation task, no learner evaluation is required: propose one focused card supported entirely by the supplied source excerpt. Use material.objectiveId exactly. Include exact verbatim source quotes and matching source identities/pages. Never invent quotes. When material.claim is present, test that specific claim and omit unrelated topics. Vary coverage beyond previousFronts, respecting depth and goal; omit unsupported facts. Optionally suggest related source concepts for approval; suggestions are not assessments.`,
         context,
       ),
     generateQuestion: (context) =>

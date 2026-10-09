@@ -9,6 +9,7 @@ import {
 import type { WorkspaceStore } from "@recall/local-store";
 import { createStudyCard } from "./card-management";
 import { saveWorkspace } from "./workspace-persistence";
+import { refinementCardContent } from "./workspace-authoring";
 
 const ApprovalSchema = Schema.Struct({
   areaId: AreaIdSchema,
@@ -57,7 +58,7 @@ export function prepareTutorCardApproval(workspaceInput: unknown, input: unknown
         );
       const proposal = yield* Schema.decodeUnknown(CardProposalSchema)({
         ...command.proposal,
-        front: match.card.front,
+        front: match.card.cloze?.text ?? match.card.front,
         back: match.card.back,
         objectiveId: match.card.objectiveIds?.[0] ?? null,
       }).pipe(
@@ -69,19 +70,17 @@ export function prepareTutorCardApproval(workspaceInput: unknown, input: unknown
       );
       return { workspace, cardId, proposal };
     }
+    const content = yield* refinementCardContent(command.proposal, {
+      tags: [],
+      media: [],
+      objectiveIds: [],
+    }).pipe(Effect.mapError((error) => failure(error.message)));
     const authored = yield* createStudyCard(
       workspace,
       {
         areaId: command.areaId,
         cardId,
-        content: {
-          kind: "basic",
-          front: command.proposal.front,
-          back: command.proposal.back,
-          objectiveIds: command.proposal.objectiveId ? [command.proposal.objectiveId] : [],
-          tags: [],
-          media: [],
-        },
+        content,
       },
       now,
     ).pipe(Effect.mapError((error) => failure(error.message)));

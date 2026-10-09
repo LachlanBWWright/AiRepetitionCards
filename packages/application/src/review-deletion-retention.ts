@@ -1,6 +1,6 @@
 import {
   type AreaId,
-  type CardId,
+  type AssessmentId,
   type LearningArea,
   type Workspace,
   WorkspaceSchema,
@@ -9,7 +9,7 @@ import { Effect, Schema } from "effect";
 
 export type ReviewDeletionRetentionFailure = { readonly _tag: "ReviewDeletionRetentionFailure" };
 
-function pendingCards(workspace: Workspace, areaId: AreaId): ReadonlySet<CardId> {
+function pendingCards(workspace: Workspace, areaId: AreaId): ReadonlySet<AssessmentId> {
   const pending = new Set(
     workspace.pendingReviewEventIds ?? workspace.reviewEvents?.map((event) => event.id) ?? [],
   );
@@ -69,7 +69,7 @@ export function validateRetainedReviewContent(
 export function retainReviewDeletionContent(
   workspace: Workspace,
   source: LearningArea,
-  removedCardIds: readonly CardId[],
+  removedCardIds: readonly AssessmentId[],
 ): Effect.Effect<Workspace, ReviewDeletionRetentionFailure> {
   const previous = retainedReviewContent(workspace).find((area) => area.id === source.id);
   const pending = pendingCards(workspace, source.id);
@@ -128,7 +128,7 @@ export function releaseRetainedReviewContent(
   workspace: Workspace,
   receipts: {
     readonly deletedAreaIds: readonly AreaId[];
-    readonly deletedCardIds: readonly CardId[];
+    readonly deletedCardIds: readonly AssessmentId[];
   },
 ): Workspace {
   const deletedAreas = new Set(receipts.deletedAreaIds);

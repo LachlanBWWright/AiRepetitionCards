@@ -1,4 +1,4 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
@@ -9,6 +9,47 @@ const outputDir = path.resolve(appRoot, "../../artifacts/storybook-screenshots")
 const port = Number(process.env.STORYBOOK_PORT ?? 6006);
 const baseUrl = `http://127.0.0.1:${port}`;
 const requested = [
+  {
+    title: "Workspace/Search",
+    name: "Across Everything",
+    file: "workspace-search.png",
+    viewport: { width: 1440, height: 1100 },
+  },
+  {
+    title: "Cards/Duplicate review",
+    name: "Conflicting Answer",
+    file: "card-duplicate-review.png",
+    viewport: { width: 1440, height: 1000 },
+  },
+  {
+    title: "Cards/Version history",
+    name: "Compare And Restore",
+    file: "card-version-history.png",
+    viewport: { width: 1440, height: 1000 },
+  },
+  {
+    title: "Screens/Native Workspace Search",
+    name: "Card Matches",
+    file: "native-workspace-search.png",
+    viewport: { width: 390, height: 1000 },
+  },
+  {
+    title: "Screens/Native Card History",
+    name: "Version Preview",
+    file: "native-card-version-history.png",
+    viewport: { width: 390, height: 1100 },
+  },
+  ...[
+    ["Local Quality", "card-assistance-local.png"],
+    ["Split Preview", "card-assistance-split.png"],
+    ["Ai Quality", "card-assistance-ai.png"],
+    ["Offline", "card-assistance-offline.png"],
+  ].map(([name, file]) => ({
+    title: "Screens/Card Assistance",
+    name,
+    file,
+    viewport: { width: 1440, height: 1200 },
+  })),
   ...[
     ["Usage", "ai-budget-usage.png"],
     ["Unlimited", "ai-budget-unlimited.png"],
@@ -38,6 +79,7 @@ const requested = [
     ["Materials · interrupted batch retained", "study-materials-resume.png"],
     ["Materials · budget exhausted", "study-materials-budget.png"],
     ["Materials · local OCR correction", "study-materials-ocr.png"],
+    ["Materials · review coverage outline", "study-materials-coverage.png"],
   ].map(([name, file]) => ({
     title: "Screens/Study Materials",
     name,
@@ -1124,6 +1166,11 @@ const requested = [
 ];
 
 const screenRoots = {
+  "Workspace/Search": "main",
+  "Cards/Duplicate review": "main",
+  "Cards/Version history": "main",
+  "Screens/Native Workspace Search": '[data-testid="native-workspace-search"]',
+  "Screens/Native Card History": '[data-testid="native-card-history"]',
   "Screens/Recall Dashboard": ".app-shell",
   "Screens/Sign In": ".auth-page .auth-panel",
   "Screens/ChatGPT Account Connection": ".auth-page .auth-panel",
@@ -1132,30 +1179,26 @@ const screenRoots = {
   "Screens/Native Publishing": '[data-testid="native-publishing-panel"]',
   "Screens/Native Account": '[data-testid="native-account-panel"]',
   "Screens/Native Workspace Authoring": '[data-testid="native-workspace-authoring"]',
-  "Screens/Native Practice Insights": 'main:has-text("Your practice")',
+  "Screens/Native Practice Insights": 'main:has-text("Recent reviews")',
   "Screens/Mobile Client": '[data-testid="mobile-screen"]',
   "Screens/Knowledge Area Sharing": ".publication-panel",
   "Screens/Anki Import": ".anki-import-dialog",
   "Screens/AI Tutor": ".component-catalog .tutor-panel",
   "Screens/Tutor Privacy": ".component-catalog .tutor-panel",
   "Screens/Desktop ChatGPT Plan": ".component-catalog",
-  "Screens/Desktop ChatGPT Research": ".component-catalog .tutor-panel",
+  "Screens/Desktop ChatGPT Research":
+    '.component-catalog section[aria-labelledby="chatgpt-research-title"]',
   "Screens/Knowledge Notebook": ".component-catalog .tutor-panel",
-  "Screens/AI Budget Settings": ".component-catalog .tutor-panel",
-  "Screens/Daily Study Reminders": ".component-catalog .tutor-panel",
+  "Screens/AI Budget Settings": '.component-catalog section[aria-label="AI budget settings"]',
+  "Screens/Daily Study Reminders":
+    '.component-catalog section[aria-label="Daily reminder settings"]',
+  "Screens/Card Assistance": '.component-catalog section[aria-label="Card assistance"]',
   "Screens/Study Materials": ".component-catalog .tutor-panel",
   "Screens/Account": ".component-catalog .account-action",
   "Screens/Card Library": '.component-catalog section:has-text("Your cards")',
-  "Knowledge/Area settings": 'main:has-text("Knowledge area settings")',
+  "Knowledge/Area settings": "main:has(.knowledge-area-settings)",
   "Knowledge/Review settings": 'main:has-text("Review settings")',
   "Native UI/Primitives": '#storybook-root > div:has-text("Your study space")',
-  "Design System/Button": ".component-catalog",
-  "Design System/Feedback": ".component-catalog",
-  "Design System/Review Card": ".component-catalog",
-  "Shared UI/Button": ".component-catalog",
-  "Shared UI/Dialog": ".component-catalog",
-  "Shared UI/Empty State": ".component-catalog",
-  "Shared UI/Status Badge": ".component-catalog",
 };
 
 function screenRoot(shot) {
@@ -1230,6 +1273,7 @@ async function waitForStorybook() {
 let runError;
 
 try {
+  await rm(outputDir, { recursive: true, force: true });
   await mkdir(outputDir, { recursive: true });
   server = spawn(
     process.execPath,
@@ -1238,6 +1282,8 @@ try {
       "dev",
       "--ci",
       "--no-open",
+      "--host",
+      "127.0.0.1",
       "--port",
       String(port),
     ],
@@ -1253,14 +1299,32 @@ try {
   } else {
     const entries = Object.values(startup.index?.entries ?? {});
     browser = await chromium.launch({ headless: true });
+    const requestedKeys = new Set(requested.map((shot) => `${shot.title}\0${shot.name}`));
+    const additionalStories = entries
+      .filter((entry) => entry.type === "story")
+      .filter((entry) => !requestedKeys.has(`${entry.title}\0${entry.name}`))
+      .sort(
+        (left, right) =>
+          left.title.localeCompare(right.title) || left.name.localeCompare(right.name),
+      )
+      .map((entry) => ({
+        title: entry.title,
+        name: entry.name,
+        file: `${entry.id}.png`,
+        viewport: /native|mobile/i.test(entry.title)
+          ? { width: 390, height: 1000 }
+          : { width: 1440, height: 1000 },
+      }));
+    const screenshots = [...requested, ...additionalStories];
+    const failedStories = [];
 
-    for (const shot of requested) {
+    for (const shot of screenshots) {
       const story = entries.find(
         (entry) => entry.type === "story" && entry.title === shot.title && entry.name === shot.name,
       );
       if (!story) {
-        runError = `Story not found: ${shot.name}`;
-        break;
+        failedStories.push(`${shot.title} · ${shot.name}: story not found in Storybook index`);
+        continue;
       }
 
       const page = await browser.newPage({
@@ -1269,23 +1333,41 @@ try {
         reducedMotion: "reduce",
         colorScheme: "light",
       });
-      await page.goto(`${baseUrl}/iframe.html?id=${story.id}&viewMode=story`, {
-        waitUntil: "networkidle",
+      const renderErrors = [];
+      page.on("pageerror", (error) => renderErrors.push(error.message));
+      page.on("console", (message) => {
+        if (message.type() === "error") renderErrors.push(message.text());
       });
-      const screenSelector = screenRoot(shot);
-      if (!screenSelector) {
-        runError = `No screen readiness mapping for ${shot.title}`;
-        await page.close();
-        break;
-      }
-      await page.locator(screenSelector).waitFor({ state: "visible", timeout: 20_000 });
-      await waitForScreenState(page, shot);
-      if (shot.title === "Screens/Recall Dashboard" && shot.viewport.width < 720) {
-        await page.addStyleTag({
-          content: ".mobile-footer { position: static !important; inset: auto !important; }",
+      let captureError;
+      try {
+        await page.goto(`${baseUrl}/iframe.html?id=${story.id}&viewMode=story`, {
+          waitUntil: "networkidle",
         });
+        const screenSelector = screenRoot(shot) ?? "#storybook-root";
+        try {
+          await page.locator(screenSelector).waitFor({ state: "visible", timeout: 1_500 });
+        } catch {
+          await page.locator("#storybook-root").waitFor({ state: "visible", timeout: 5_000 });
+        }
+        await waitForScreenState(page, shot);
+        if (shot.title === "Screens/Recall Dashboard" && shot.viewport.width < 720) {
+          await page.addStyleTag({
+            content: ".mobile-footer { position: static !important; inset: auto !important; }",
+          });
+        }
+        await page.waitForTimeout(200);
+      } catch (error) {
+        captureError = error instanceof Error ? error.message : String(error);
       }
-      await page.waitForTimeout(250);
+      const criticalRenderErrors = renderErrors.filter((message) =>
+        /SyntaxError|TypeError|ReferenceError|Failed to fetch|Failed to load/i.test(message),
+      );
+      if (captureError || criticalRenderErrors.length > 0) {
+        const details = [...new Set(criticalRenderErrors)].slice(0, 3).join(" | ");
+        failedStories.push(
+          `${shot.title} · ${shot.name}: ${captureError ?? "browser reported a render error"}${details ? ` · ${details}` : ""}`,
+        );
+      }
       await page.screenshot({
         path: path.join(outputDir, shot.file),
         fullPage: true,
@@ -1297,12 +1379,20 @@ try {
       );
     }
 
-    if (!runError) {
-      const screenshotList = requested.map((shot) => `- [${shot.name}](./${shot.file})`).join("\n");
+    {
+      const screenshotList = screenshots
+        .map((shot) => `- [${shot.title} · ${shot.name}](./${shot.file})`)
+        .join("\n");
+      const failureList = failedStories.length
+        ? `\n## Stories with render errors\n\n${failedStories.map((failure) => `- ${failure}`).join("\n")}\n`
+        : "\nAll stories rendered without browser errors.\n";
       await writeFile(
         path.join(outputDir, "README.md"),
-        `# Storybook screenshots\n\nGenerated from full-screen Storybook stories with deterministic mock data. Rebuild them with \`pnpm screenshots\` from the repository root.\n\n${screenshotList}\n`,
+        `# Storybook screenshots\n\nGenerated ${screenshots.length} screenshots from all indexed Storybook stories with deterministic mock data. Rebuild them with \`pnpm screenshots\` from the repository root.\n\n${screenshotList}\n${failureList}`,
       );
+      if (failedStories.length > 0) {
+        runError = `${failedStories.length} of ${screenshots.length} Storybook stories reported render errors. See artifacts/storybook-screenshots/README.md.`;
+      }
     }
   }
 } catch (error) {

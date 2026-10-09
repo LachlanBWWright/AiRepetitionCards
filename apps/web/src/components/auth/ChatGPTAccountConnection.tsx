@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Alert } from "@recall/ui-web";
 import { Effect, Fiber, Schema } from "effect";
 import { ContinueWithChatGPT } from "./ContinueWithChatGPT";
 
@@ -61,19 +62,19 @@ export function ChatGPTAccountConnection({
   if (!available && !demo) return null;
   if (compact) {
     return (
-      <a className="text-button" href={demo ? undefined : "/auth/openai?mode=link&next=%2F"}>
+      <a className="inline-flex min-h-9 items-center rounded-md border px-3 text-sm hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" href={demo ? undefined : "/auth/openai?mode=link&next=%2F"}>
         Link ChatGPT
       </a>
     );
   }
   return (
-    <section className="chatgpt-account-connection" aria-label="ChatGPT account connection">
-      <p className="auth-copy">Link ChatGPT as another way to sign in to this Recall account.</p>
+    <section className="w-full max-w-[410px]" aria-label="ChatGPT account connection">
+      <p className="text-sm leading-relaxed text-muted-foreground">Link ChatGPT as another way to sign in to this Recall account.</p>
       <ContinueWithChatGPT enabled={available} mode="link" demo={demo} />
       {demoMessage && (
-        <p className="auth-message" role="status">
+        <Alert role="status">
           {demoMessage}
-        </p>
+        </Alert>
       )}
     </section>
   );

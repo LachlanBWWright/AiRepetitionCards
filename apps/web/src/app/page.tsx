@@ -1,11 +1,6 @@
-import { OfflineAvailability } from "../../pwa/offline-availability";
-import RecallDashboard from "@/features/dashboard/RecallDashboard";
+import { redirect } from "next/navigation";
+import type { Route } from "next";
 
 export default function Home() {
-  return (
-    <>
-      <OfflineAvailability />
-      <RecallDashboard />
-    </>
-  );
+  redirect("/today" as Route);
 }

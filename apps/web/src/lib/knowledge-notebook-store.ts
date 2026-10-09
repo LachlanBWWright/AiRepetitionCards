@@ -1,6 +1,7 @@
 import { KnowledgeNotebookSchema, type KnowledgeNotebook } from "@recall/application";
 import { Effect, Schema } from "effect";
 import { coordinateLocalWrite } from "@/features/workspace/local-write-coordinator";
+import { volatileStorage } from "@/lib/volatile-storage";
 
 export type KnowledgeNotebookStorageFailure = {
   readonly _tag: "KnowledgeNotebookStorageFailure";
@@ -28,7 +29,7 @@ export function createBrowserKnowledgeNotebookStore(namespace: string, areaId: s
     coordinateLocalWrite(
       Effect.gen(function* () {
         const raw = yield* Effect.try({
-          try: () => window.localStorage.getItem(key),
+          try: () => volatileStorage.getItem(key),
           catch: () => failure("unavailable"),
         });
         if (raw === null) {
@@ -57,13 +58,13 @@ export function createBrowserKnowledgeNotebookStore(namespace: string, areaId: s
         if (notebook.areaId !== areaId) return yield* Effect.fail(failure("invalid"));
         if (observed === undefined) return yield* Effect.fail(failure("unavailable"));
         const current = yield* Effect.try({
-          try: () => window.localStorage.getItem(key),
+          try: () => volatileStorage.getItem(key),
           catch: () => failure("unavailable"),
         });
         if (current !== observed) return yield* Effect.fail(failure("stale"));
         const serialized = JSON.stringify(notebook);
         yield* Effect.try({
-          try: () => window.localStorage.setItem(key, serialized),
+          try: () => volatileStorage.setItem(key, serialized),
           catch: () => failure("unavailable"),
         });
         observed = serialized;
@@ -75,12 +76,12 @@ export function createBrowserKnowledgeNotebookStore(namespace: string, areaId: s
       Effect.gen(function* () {
         if (observed === undefined) return yield* Effect.fail(failure("unavailable"));
         const current = yield* Effect.try({
-          try: () => window.localStorage.getItem(key),
+          try: () => volatileStorage.getItem(key),
           catch: () => failure("unavailable"),
         });
         if (current !== observed) return yield* Effect.fail(failure("stale"));
         yield* Effect.try({
-          try: () => window.localStorage.removeItem(key),
+          try: () => volatileStorage.removeItem(key),
           catch: () => failure("unavailable"),
         });
         observed = null;

@@ -2,7 +2,12 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import fc from "fast-check";
 import { Effect, Either } from "effect";
-import { createAreaId, createCardId, createObjectiveId, type Workspace } from "@recall/domain";
+import {
+  createAreaId,
+  createAssessmentId,
+  createObjectiveId,
+  type Workspace,
+} from "@recall/domain";
 import { newSchedule } from "@recall/scheduler";
 import {
   applyWorkspaceAuthoringCommand,
@@ -18,7 +23,7 @@ import {
 
 const now = new Date("2026-10-04T00:00:00.000Z");
 const areaId = createAreaId("00000000-0000-4000-8000-000000000701");
-const cardId = createCardId("00000000-0000-4000-8000-000000000702");
+const cardId = createAssessmentId("00000000-0000-4000-8000-000000000702");
 const objectiveId = createObjectiveId("00000000-0000-4000-8000-000000000703");
 const edgeTags = [
   "",

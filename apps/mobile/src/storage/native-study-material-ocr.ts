@@ -4,8 +4,15 @@ import { File, Paths } from "expo-file-system";
 import { extractPastedStudyText } from "@recall/infra-study-materials";
 import { extractNativeStudyPaste } from "./native-study-material-extraction";
 
+export const NativeOcrKind = { Pdf: "pdf", Image: "image" } as const;
+type NativeOcrKind = (typeof NativeOcrKind)[keyof typeof NativeOcrKind];
 type NativeOcrModule = {
-  readonly recognize: (uri: string, kind: string, first: number, last: number) => Promise<unknown>;
+  readonly recognize: (
+    uri: string,
+    kind: NativeOcrKind,
+    first: number,
+    last: number,
+  ) => Promise<unknown>;
 };
 export type NativeOcrFailure = {
   readonly _tag: "NativeOcrFailure";
@@ -40,9 +47,9 @@ export function extractNativeOcr(
     const extension = name.toLowerCase().split(".").pop();
     const kind =
       extension === "pdf"
-        ? "pdf"
+        ? NativeOcrKind.Pdf
         : ["png", "jpg", "jpeg"].includes(extension ?? "")
-          ? "image"
+          ? NativeOcrKind.Image
           : null;
     if (!kind) return yield* Effect.fail(fail("OCR supports PDF, PNG and JPEG files."));
     if (bytes.length === 0 || bytes.length > 16 * 1024 * 1024)
@@ -68,7 +75,7 @@ export function extractNativeOcr(
       try: () => {
         const file = new File(
           Paths.cache,
-          `study-ocr-${String(Date.now())}-${Math.random().toString(36).slice(2)}.${kind === "pdf" ? "pdf" : extension}`,
+          `study-ocr-${String(Date.now())}-${Math.random().toString(36).slice(2)}.${kind === NativeOcrKind.Pdf ? "pdf" : extension}`,
         );
         file.create();
         return file;
@@ -101,8 +108,8 @@ export function extractNativeOcr(
           native.recognize(
             temporary.uri,
             kind,
-            kind === "image" ? 1 : firstPage,
-            kind === "image" ? 1 : lastPage,
+            kind === NativeOcrKind.Image ? 1 : firstPage,
+            kind === NativeOcrKind.Image ? 1 : lastPage,
           ),
         catch: () =>
           fail(
@@ -138,7 +145,7 @@ export function extractNativeOcr(
           ...prepared.sections.map((section) => ({
             ...section,
             title: `OCR · page ${String(page.pageNumber)}`,
-            pageNumber: kind === "pdf" ? page.pageNumber : null,
+            pageNumber: kind === NativeOcrKind.Pdf ? page.pageNumber : null,
           })),
         );
       }
@@ -149,11 +156,11 @@ export function extractNativeOcr(
       if (sections.length > 500)
         return yield* Effect.fail(fail("OCR produced too many excerpts. Import fewer pages."));
       return {
-        format: kind === "pdf" ? ("pdf" as const) : ("image" as const),
+        format: kind === NativeOcrKind.Pdf ? ("pdf" as const) : ("image" as const),
         sections,
         warnings: [
           "On-device OCR targets English and Latin script. Check spelling, reading order, formulas and code before generating cards.",
-          ...(kind === "pdf"
+          ...(kind === NativeOcrKind.Pdf
             ? [
                 `OCR includes pages ${String(firstPage)}–${String(lastPage)} of ${String(result.pageCount)}. Other pages were not imported.`,
               ]

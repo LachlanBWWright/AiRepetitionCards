@@ -126,6 +126,7 @@ export function removeNotebookMaterial(
     const notebook = yield* read(notebookInput);
     const id = yield* decode(Uuid, materialIdInput);
     if (
+      (notebook.coveragePlans ?? []).some((plan) => plan.materialId === id) ||
       notebook.proposals.some((proposal) =>
         proposal.sourceReferences?.some((reference) => reference.materialId === id),
       )
@@ -151,6 +152,7 @@ export const MaterialCardProposalInputSchema = Schema.Struct({
     Schema.minItems(1),
     Schema.maxItems(20),
   ),
+  claimId: Schema.optional(Uuid),
   createdAt: Time,
   providerSessionId: Schema.optional(Uuid),
   providerResolutionRequired: Schema.optional(Schema.Boolean),

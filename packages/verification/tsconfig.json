@@ -1,5 +1,13 @@
 {
   "extends": "../tsconfig.json",
-  "compilerOptions": { "types": ["node"] },
-  "include": ["tests/**/*.ts", "integration/**/*.ts"]
+  "compilerOptions": {
+    "types": ["node"],
+    "paths": { "@/*": ["../../apps/web/src/*"] }
+  },
+  "include": [
+    "tests/**/*.ts",
+    "integration/**/*.ts",
+    "local-integration/**/*.ts",
+    "../../apps/web/src/lib/desktop-api.ts"
+  ]
 }

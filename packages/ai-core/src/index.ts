@@ -1,6 +1,6 @@
 import { Context, Effect, Either, Schema } from "effect";
 import {
-  CardIdSchema,
+  AssessmentIdSchema,
   KnowledgeAreaSchema,
   type LearningArea,
   type ReviewEvent,
@@ -190,7 +190,94 @@ export const CardProposalSchema = Schema.Struct({
   rationale: Schema.String.pipe(Schema.minLength(1), Schema.maxLength(1000)),
 });
 
+export const StudySourcePassageSchema = Schema.Struct({
+  materialId: UuidSchema,
+  sectionId: UuidSchema,
+  text: Schema.String.pipe(Schema.minLength(1), Schema.maxLength(12000)),
+  pageNumber: Schema.NullOr(Schema.Number.pipe(Schema.int(), Schema.positive())),
+});
+export const StudySourceReferenceSchema = Schema.Struct({
+  materialId: UuidSchema,
+  sectionId: UuidSchema,
+  quote: Schema.String.pipe(Schema.minLength(1), Schema.maxLength(2000)),
+  pageNumber: Schema.NullOr(Schema.Number.pipe(Schema.int(), Schema.positive())),
+});
+const AssistanceSourcesSchema = Schema.Array(StudySourcePassageSchema).pipe(Schema.maxItems(1));
+export const CardRefinementInputSchema = Schema.Struct({
+  front: CardProposalSchema.fields.front,
+  back: CardProposalSchema.fields.back,
+  objectiveId: ObjectiveIdSchema,
+  mode: Schema.Literal("clearer", "shorter", "split", "example", "cloze"),
+  instructions: Schema.String.pipe(Schema.maxLength(1000)),
+  sources: AssistanceSourcesSchema,
+});
+export const CardRefinementResultSchema = Schema.Struct({
+  cards: Schema.Array(
+    Schema.Struct({
+      ...CardProposalSchema.fields,
+      meaningChanged: Schema.Boolean,
+      sourceReferences: Schema.Array(StudySourceReferenceSchema).pipe(Schema.maxItems(4)),
+    }),
+  ).pipe(Schema.minItems(1), Schema.maxItems(5)),
+});
+export const CardInspectionInputSchema = Schema.Struct({
+  front: CardProposalSchema.fields.front,
+  back: CardProposalSchema.fields.back,
+  objectiveId: ObjectiveIdSchema,
+  sources: AssistanceSourcesSchema,
+});
+export const CardInspectionResultSchema = Schema.Struct({
+  findings: Schema.Array(
+    Schema.Struct({
+      kind: Schema.Literal(
+        "ambiguity",
+        "multiple-facts",
+        "answer-leakage",
+        "missing-context",
+        "unsupported-claim",
+        "other",
+      ),
+      severity: Schema.Literal("warning", "suggestion"),
+      explanation: Schema.String.pipe(Schema.minLength(1), Schema.maxLength(1000)),
+      suggestion: Schema.String.pipe(Schema.minLength(1), Schema.maxLength(1000)),
+    }),
+  ).pipe(Schema.maxItems(12)),
+  summary: Schema.String.pipe(Schema.minLength(1), Schema.maxLength(2000)),
+});
+export const StudyPlanInputSchema = Schema.Struct({
+  goal: Schema.String.pipe(Schema.minLength(1), Schema.maxLength(2000)),
+  depth: Schema.Literal("overview", "standard", "detailed"),
+  sources: Schema.Array(StudySourcePassageSchema).pipe(Schema.minItems(1), Schema.maxItems(1)),
+});
+export const StudyPlanResultSchema = Schema.Struct({
+  claims: Schema.Array(
+    Schema.Struct({
+      title: Schema.String.pipe(Schema.minLength(1), Schema.maxLength(200)),
+      description: Schema.String.pipe(Schema.minLength(1), Schema.maxLength(2000)),
+      priority: Schema.Literal("high", "medium", "low"),
+      sourceReferences: Schema.Array(StudySourceReferenceSchema).pipe(
+        Schema.minItems(1),
+        Schema.maxItems(4),
+      ),
+    }),
+  ).pipe(Schema.minItems(1), Schema.maxItems(20)),
+});
+export type CardRefinementInput = typeof CardRefinementInputSchema.Type;
+export type CardRefinementResult = typeof CardRefinementResultSchema.Type;
+export type CardInspectionInput = typeof CardInspectionInputSchema.Type;
+export type CardInspectionResult = typeof CardInspectionResultSchema.Type;
+export type StudyPlanInput = typeof StudyPlanInputSchema.Type;
+export type StudyPlanResult = typeof StudyPlanResultSchema.Type;
+export type StudySourcePassage = typeof StudySourcePassageSchema.Type;
+export type StudySourceReference = typeof StudySourceReferenceSchema.Type;
+
 export const StudyCardInputSchema = Schema.Struct({
+  claim: Schema.optional(
+    Schema.Struct({
+      title: Schema.String.pipe(Schema.minLength(1), Schema.maxLength(200)),
+      description: Schema.String.pipe(Schema.minLength(1), Schema.maxLength(2000)),
+    }),
+  ),
   goal: Schema.String.pipe(Schema.minLength(1), Schema.maxLength(2000)),
   depth: Schema.Literal("overview", "standard", "detailed"),
   objectiveId: ObjectiveIdSchema,
@@ -267,6 +354,35 @@ export const TargetedQuizSessionSchema = Schema.Struct({
 });
 
 export const TutorActionRequestSchema = Schema.Union(
+  ...([
+    Schema.Struct({
+      action: Schema.Literal("refine-card"),
+      context: TutorContextSchema,
+      refinement: CardRefinementInputSchema,
+      sessionId: Schema.optional(UuidSchema),
+      canonicalAreaFingerprint: Schema.optional(
+        Schema.String.pipe(Schema.pattern(/^[a-f0-9]{64}$/)),
+      ),
+    }),
+    Schema.Struct({
+      action: Schema.Literal("inspect-card"),
+      context: TutorContextSchema,
+      inspection: CardInspectionInputSchema,
+      sessionId: Schema.optional(UuidSchema),
+      canonicalAreaFingerprint: Schema.optional(
+        Schema.String.pipe(Schema.pattern(/^[a-f0-9]{64}$/)),
+      ),
+    }),
+    Schema.Struct({
+      action: Schema.Literal("plan-study"),
+      context: TutorContextSchema,
+      material: StudyPlanInputSchema,
+      sessionId: Schema.optional(UuidSchema),
+      canonicalAreaFingerprint: Schema.optional(
+        Schema.String.pipe(Schema.pattern(/^[a-f0-9]{64}$/)),
+      ),
+    }),
+  ] as const),
   Schema.Struct({
     action: Schema.Literal("study-card"),
     context: TutorContextSchema,
@@ -306,6 +422,21 @@ export const TutorActionRequestSchema = Schema.Union(
 
 export const TutorActionResponseSchema = Schema.Union(
   Schema.Struct({
+    action: Schema.Literal("refine-card"),
+    sessionId: UuidSchema,
+    result: CardRefinementResultSchema,
+  }),
+  Schema.Struct({
+    action: Schema.Literal("inspect-card"),
+    sessionId: UuidSchema,
+    result: CardInspectionResultSchema,
+  }),
+  Schema.Struct({
+    action: Schema.Literal("plan-study"),
+    sessionId: UuidSchema,
+    result: StudyPlanResultSchema,
+  }),
+  Schema.Struct({
     action: Schema.Literal("study-card"),
     sessionId: UuidSchema,
     proposalId: UuidSchema,
@@ -342,9 +473,12 @@ export const TutorActionResponseSchema = Schema.Union(
   }),
 );
 
+export const TutorProposalResolution = { Approved: "approved", Rejected: "rejected" } as const;
+export type TutorProposalResolution =
+  (typeof TutorProposalResolution)[keyof typeof TutorProposalResolution];
 export const ResolveProposalRequestSchema = Schema.Struct({
   proposalId: UuidSchema,
-  state: Schema.Union(Schema.Literal("approved"), Schema.Literal("rejected")),
+  state: Schema.Literal(TutorProposalResolution.Approved, TutorProposalResolution.Rejected),
   content: Schema.optional(CardProposalSchema),
   cardId: Schema.optional(UuidSchema),
 });
@@ -353,7 +487,7 @@ export const ResolveProposalRequestSchema = Schema.Struct({
 export function cardIdForTutorProposal(proposalId: unknown) {
   const decodedProposalId = Schema.decodeUnknownEither(UuidSchema)(proposalId);
   if (Either.isLeft(decodedProposalId)) return null;
-  const decodedCardId = Schema.decodeUnknownEither(CardIdSchema)(decodedProposalId.right);
+  const decodedCardId = Schema.decodeUnknownEither(AssessmentIdSchema)(decodedProposalId.right);
   return Either.isRight(decodedCardId) ? decodedCardId.right : null;
 }
 
@@ -423,6 +557,9 @@ export type AiProviderResult<A> = {
 };
 
 export const AiOperationSchema = Schema.Literal(
+  "refine-card",
+  "inspect-card",
+  "plan-study",
   "question",
   "evaluate",
   "propose-card",
@@ -433,7 +570,7 @@ export type AiOperation = typeof AiOperationSchema.Type;
 
 /** Runtime adapter guarantees; these are separate from model identity and funding. */
 export const AiProviderCapabilitiesSchema = Schema.Struct({
-  supportedOperations: Schema.Array(AiOperationSchema).pipe(Schema.minItems(1), Schema.maxItems(5)),
+  supportedOperations: Schema.Array(AiOperationSchema).pipe(Schema.minItems(1), Schema.maxItems(8)),
   structuredOutputs: Schema.Boolean,
   streaming: Schema.Boolean,
   maxInputBytes: Schema.Number.pipe(Schema.int(), Schema.positive()),
@@ -443,6 +580,15 @@ export const AiProviderCapabilitiesSchema = Schema.Struct({
 export type AiProviderCapabilities = typeof AiProviderCapabilitiesSchema.Type;
 
 export interface AiProviderService {
+  readonly refineCard?: (
+    context: TutorContext & { readonly refinement: CardRefinementInput },
+  ) => Effect.Effect<AiProviderResult<CardRefinementResult>, AiProviderError>;
+  readonly inspectCard?: (
+    context: TutorContext & { readonly inspection: CardInspectionInput },
+  ) => Effect.Effect<AiProviderResult<CardInspectionResult>, AiProviderError>;
+  readonly planStudy?: (
+    context: TutorContext & { readonly material: StudyPlanInput },
+  ) => Effect.Effect<AiProviderResult<StudyPlanResult>, AiProviderError>;
   readonly generateStudyCard?: (
     context: TutorContext & { readonly material: StudyCardInput },
   ) => Effect.Effect<AiProviderResult<StudyCardResult>, AiProviderError>;
@@ -596,8 +742,7 @@ export function decodeTutorActionRequest(
       return Effect.succeed({ ...operation, context: result.right });
     });
   }
-  if (decoded.right.action !== "question" && decoded.right.action !== "study-card")
-    return Effect.succeed(decoded.right);
+  if (!("context" in decoded.right)) return Effect.succeed(decoded.right);
   const context = Effect.either(decodeTutorContext(decoded.right.context));
   return Effect.flatMap(context, (result) => {
     if (Either.isLeft(result)) return Effect.fail(result.left);

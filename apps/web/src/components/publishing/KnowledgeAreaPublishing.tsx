@@ -24,6 +24,17 @@ import { publishingApi } from "@/lib/publishing-api";
 import { isDesktopRuntime } from "@/lib/desktop-api";
 import { KnowledgeAreaDiffView } from "./KnowledgeAreaDiffView";
 import { browserForkOperationStore } from "@/lib/publishing/fork-operation-store";
+import { Button } from "@/components/ui/Button";
+import { Checkbox } from "@recall/ui-web/components/checkbox";
+import {
+  Input,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@recall/ui-web";
+import { Alert, toast } from "@recall/ui-web";
 
 import {
   browserPublicationOperationStore,
@@ -36,6 +47,7 @@ type UpstreamUpdateState =
 
 type Props = {
   readonly area?: KnowledgeArea | null;
+  readonly embedded?: boolean;
   readonly initialUpstreamUpdate?: UpstreamUpdateState;
   readonly initialRequest?: { readonly versionId: string; readonly token?: string };
   readonly lineageArea?: KnowledgeArea;
@@ -69,6 +81,7 @@ type Props = {
 
 export function KnowledgeAreaPublishing({
   area,
+  embedded = false,
   lineageArea,
   onFork,
   transport = publishingApi,
@@ -256,11 +269,10 @@ export function KnowledgeAreaPublishing({
         }),
       ),
     );
-    setNotice(
-      Either.isRight(copied)
-        ? "Share link copied."
-        : "Could not copy the link. Select and copy the link below.",
-    );
+    if (Either.isRight(copied)) {
+      setNotice(null);
+      toast.success("Share link copied.");
+    } else setNotice("Could not copy the link. Select and copy the link below.");
   }
 
   async function checkUpstreamUpdates(): Promise<void> {
@@ -503,47 +515,64 @@ export function KnowledgeAreaPublishing({
   }
 
   return (
-    <section className="publication-panel" aria-labelledby="publication-title">
-      <div className="publication-heading">
+    <section
+      className={
+        embedded
+          ? "w-full"
+          : "mx-auto mt-12 w-full max-w-5xl rounded-xl border bg-card p-5 shadow-sm sm:p-8"
+      }
+      aria-labelledby="publication-title"
+    >
+      {!embedded && (
         <div>
-          <p className="eyebrow">SHARE KNOWLEDGE</p>
-          <h2 id="publication-title">Publish or receive an area</h2>
+          <p className="mb-1 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+            SHARE KNOWLEDGE
+          </p>
+          <h2 className="text-xl font-semibold tracking-tight" id="publication-title">
+            Publish or receive an area
+          </h2>
           <p>Shared content has no personal schedules or review history.</p>
         </div>
-        <span className="publication-mark" aria-hidden="true">
-          ↗
-        </span>
-      </div>
-      <div className="publication-columns">
+      )}
+      <div
+        className={
+          embedded ? "grid grid-cols-1 gap-6" : "mt-6 grid grid-cols-1 gap-4 lg:grid-cols-2"
+        }
+      >
         {area && (
           <form
-            className="publication-form"
+            className={`${embedded ? "" : "rounded-xl border p-5 "}flex flex-col items-stretch gap-3 [&>label]:grid [&>label]:gap-2 [&>label]:text-sm [&>label]:font-semibold`}
             onSubmit={(event) => {
               event.preventDefault();
               void publish();
             }}
           >
-            <h3>Publish “{area.title}”</h3>
+            <h3 className="text-base font-semibold">Publish “{area.title}”</h3>
             <label>
               Visibility
-              <select
+              <Select
                 value={visibility}
-                onChange={(event) =>
+                onValueChange={(value) =>
                   setVisibility(
-                    Schema.decodeUnknownEither(PublicationVisibilitySchema)(
-                      event.currentTarget.value,
-                    ).pipe(Either.getOrElse(() => "unlisted" as const)),
+                    Schema.decodeUnknownEither(PublicationVisibilitySchema)(value).pipe(
+                      Either.getOrElse(() => "unlisted" as const),
+                    ),
                   )
                 }
               >
-                <option value="unlisted">Unlisted · link access</option>
-                <option value="private">Private · account only</option>
-                <option value="public">Public access</option>
-              </select>
+                <SelectTrigger aria-label="Visibility">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="unlisted">Unlisted · link access</SelectItem>
+                  <SelectItem value="private">Private · account only</SelectItem>
+                  <SelectItem value="public">Public access</SelectItem>
+                </SelectContent>
+              </Select>
             </label>
             <label>
               Attribution
-              <input
+              <Input
                 value={attribution}
                 onChange={(event) => setAttribution(event.currentTarget.value)}
                 placeholder="Your name or source"
@@ -552,36 +581,41 @@ export function KnowledgeAreaPublishing({
             </label>
             <label>
               License
-              <select
-                value={license}
-                onChange={(event) => {
-                  setLicense(event.currentTarget.value);
+              <Select
+                value={license || "none"}
+                onValueChange={(value) => {
+                  setLicense(value === "none" ? "" : value);
                   setReuseConfirmed(false);
                 }}
               >
-                <option value="">Choose a license</option>
-                {license &&
-                  !["CC BY 4.0", "CC BY-SA 4.0", "CC0 1.0", "All rights reserved"].includes(
-                    license,
-                  ) && <option value={license}>{license}</option>}
-                <option>CC BY 4.0</option>
-                <option>CC BY-SA 4.0</option>
-                <option>CC0 1.0</option>
-                <option>All rights reserved</option>
-              </select>
+                <SelectTrigger aria-label="License">
+                  <SelectValue placeholder="Choose a license" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Choose a license</SelectItem>
+                  {license &&
+                    !["CC BY 4.0", "CC BY-SA 4.0", "CC0 1.0", "All rights reserved"].includes(
+                      license,
+                    ) && <SelectItem value={license}>{license}</SelectItem>}
+                  <SelectItem value="CC BY 4.0">CC BY 4.0</SelectItem>
+                  <SelectItem value="CC BY-SA 4.0">CC BY-SA 4.0</SelectItem>
+                  <SelectItem value="CC0 1.0">CC0 1.0</SelectItem>
+                  <SelectItem value="All rights reserved">All rights reserved</SelectItem>
+                </SelectContent>
+              </Select>
             </label>
             {visibility !== "private" && needsReuseConfirmation && (
-              <label>
-                <input
-                  type="checkbox"
+              <label htmlFor="publication-reuse-confirmed">
+                <Checkbox
+                  id="publication-reuse-confirmed"
                   checked={reuseConfirmed}
-                  onChange={(event) => setReuseConfirmed(event.currentTarget.checked)}
+                  onCheckedChange={(checked) => setReuseConfirmed(checked === true)}
                 />{" "}
                 I own this content or have permission to share it under the selected license.
               </label>
             )}
-            <button
-              className="primary-action"
+            <Button
+              className="self-start"
               type="submit"
               disabled={
                 busy ||
@@ -590,82 +624,108 @@ export function KnowledgeAreaPublishing({
               }
             >
               Publish area
-            </button>
+            </Button>
             {shareUrl && (
-              <div className="publication-share-token">
+              <div
+                className={
+                  embedded
+                    ? "grid gap-2 border-t pt-4"
+                    : "grid gap-2 rounded-xl border bg-muted/40 p-4"
+                }
+              >
                 <p>{publishedVisibility === "public" ? "Public access" : "Share link"}</p>
-                <a href={shareUrl} style={{ overflowWrap: "anywhere" }}>
+                <a
+                  className="[overflow-wrap:anywhere] text-primary underline underline-offset-4 hover:text-primary/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                  href={shareUrl}
+                >
                   {shareUrl}
                 </a>
-                <button className="text-button" type="button" onClick={() => void copyShareLink()}>
+                <Button type="button" onClick={() => void copyShareLink()}>
                   Copy link
-                </button>
+                </Button>
               </div>
             )}
             {sharePath && !shareOrigin && (
               <p>Configure the web server URL to create a share link.</p>
             )}
             {ownsPublication && publishedVersionId && publishedVisibility === "unlisted" && (
-              <div className="publication-share-token" aria-live="polite">
-                <p className="eyebrow">UNLISTED LINK ACCESS</p>
+              <div
+                className={
+                  embedded
+                    ? "grid gap-2 border-t pt-4"
+                    : "grid gap-2 rounded-xl border bg-muted/40 p-4"
+                }
+                aria-live="polite"
+              >
+                <p className="mb-0 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                  UNLISTED LINK ACCESS
+                </p>
                 {shareToken ? (
                   <>
                     <p>Anyone with the share link can open this area.</p>
-                    <div className="publication-token-actions">
-                      <button
-                        className="text-button"
+                    <div className="flex flex-wrap gap-3">
+                      <Button
                         type="button"
                         disabled={busy}
                         onClick={() => void manageShareToken("rotate")}
                       >
                         Rotate link
-                      </button>
-                      <button
-                        className="text-button"
+                      </Button>
+                      <Button
                         type="button"
                         disabled={busy}
                         onClick={() => void manageShareToken("revoke")}
                       >
                         Revoke link
-                      </button>
+                      </Button>
                     </div>
                   </>
                 ) : (
                   <>
                     <p>This unlisted area has no active share link.</p>
-                    <button
-                      className="text-button"
+                    <Button
                       type="button"
                       disabled={busy}
                       onClick={() => void manageShareToken("rotate")}
                     >
                       Create share link
-                    </button>
+                    </Button>
                   </>
                 )}
               </div>
             )}
           </form>
         )}
-        <div className="publication-form">
-          <h3>Receive a shared area</h3>
+        <div
+          className={`${embedded ? "border-t pt-5" : "rounded-xl border p-5 "}flex flex-col items-stretch gap-3 [&>label]:grid [&>label]:gap-2 [&>label]:text-sm [&>label]:font-semibold`}
+        >
+          <h3 className="text-base font-semibold">Receive a shared area</h3>
           {upstreamArea && (
-            <div className="publication-review" aria-label="Upstream updates">
-              <p className="eyebrow">YOUR FORK · UPSTREAM UPDATES</p>
+            <div
+              className={embedded ? "mt-2 border-t pt-4" : "mt-2 rounded-xl bg-muted/50 p-4"}
+              aria-label="Upstream updates"
+            >
+              <p className="mb-0 text-sm font-semibold">Upstream updates</p>
               <p>
                 Check for newer public versions of the original area. Your copy and review history
                 stay unchanged until you choose a separate copy.
               </p>
-              <button
-                className="text-button"
-                type="button"
-                disabled={busy}
-                onClick={() => void checkUpstreamUpdates()}
-              >
+              <Button type="button" disabled={busy} onClick={() => void checkUpstreamUpdates()}>
                 {busy ? "Checking…" : "Check upstream updates"}
-              </button>
+              </Button>
               {upstreamUpdate && (
-                <p role="status">
+                <Alert
+                  role={
+                    upstreamUpdate.status === "failed" || upstreamUpdate.status === "unavailable"
+                      ? "alert"
+                      : "status"
+                  }
+                  variant={
+                    upstreamUpdate.status === "failed" || upstreamUpdate.status === "unavailable"
+                      ? "destructive"
+                      : "default"
+                  }
+                >
                   {upstreamUpdate.status === "available"
                     ? "A newer public version is available. Review its differences before adding a separate copy."
                     : upstreamUpdate.status === "no-public-update"
@@ -673,11 +733,10 @@ export function KnowledgeAreaPublishing({
                       : upstreamUpdate.status === "unavailable"
                         ? "No accessible public source is available. Ask the author for a share link to review another version."
                         : "Updates could not be checked. Try again when connected."}
-                </p>
+                </Alert>
               )}
               {upstreamUpdate?.status === "available" && (
-                <button
-                  className="text-button"
+                <Button
                   type="button"
                   disabled={busy}
                   onClick={() => {
@@ -687,56 +746,59 @@ export function KnowledgeAreaPublishing({
                   }}
                 >
                   Review available version
-                </button>
+                </Button>
               )}
             </div>
           )}
 
           <label>
             Version ID
-            <input
+            <Input
               value={versionId}
               onChange={(event) => setVersionId(event.currentTarget.value)}
               placeholder="Paste a shared version ID"
             />
           </label>
           <label>
-            Access token <span className="optional-label">if required</span>
-            <input
+            Access token <span className="font-normal text-muted-foreground">if required</span>
+            <Input
               value={token}
               onChange={(event) => setToken(event.currentTarget.value)}
               placeholder="Paste link token"
             />
           </label>
-          <button
-            className="text-button"
-            type="button"
-            disabled={busy || !versionId.trim()}
-            onClick={() => void receive()}
-          >
+          <Button type="button" disabled={busy || !versionId.trim()} onClick={() => void receive()}>
             Preview shared area
-          </button>
+          </Button>
           {publication && (
-            <div className="publication-review">
-              <p className="eyebrow">SOURCE AND LICENSE</p>
-              <h4>{publication.document.title}</h4>
-              <p>{publication.document.description || "No description provided."}</p>
-              <dl>
-                <div>
-                  <dt>Attribution</dt>
-                  <dd>{publication.attribution || "Not provided"}</dd>
+            <div className={embedded ? "mt-2 border-t pt-4" : "mt-2 rounded-xl bg-muted/50 p-4"}>
+              <p className="mb-0 text-sm font-semibold">Shared area details</p>
+              <h4 className="text-base font-semibold">{publication.document.title}</h4>
+              <p className="text-sm text-muted-foreground">
+                {publication.document.description || "No description provided."}
+              </p>
+              <dl className="my-4 grid gap-2">
+                <div className="flex justify-between gap-4 text-sm">
+                  <dt className="text-muted-foreground">Attribution</dt>
+                  <dd className="m-0 text-right font-semibold">
+                    {publication.attribution || "Not provided"}
+                  </dd>
                 </div>
-                <div>
-                  <dt>License</dt>
-                  <dd>{publication.license || "Not provided"}</dd>
+                <div className="flex justify-between gap-4 text-sm">
+                  <dt className="text-muted-foreground">License</dt>
+                  <dd className="m-0 text-right font-semibold">
+                    {publication.license || "Not provided"}
+                  </dd>
                 </div>
-                <div>
-                  <dt>Cards</dt>
-                  <dd>{publication.document.cards.length}</dd>
+                <div className="flex justify-between gap-4 text-sm">
+                  <dt className="text-muted-foreground">Cards</dt>
+                  <dd className="m-0 text-right font-semibold">
+                    {publication.document.cards.length}
+                  </dd>
                 </div>
-                <div>
-                  <dt>Attachments</dt>
-                  <dd>
+                <div className="flex justify-between gap-4 text-sm">
+                  <dt className="text-muted-foreground">Attachments</dt>
+                  <dd className="m-0 text-right font-semibold">
                     {
                       new Set(
                         publication.document.cards.flatMap((card) =>
@@ -755,26 +817,25 @@ export function KnowledgeAreaPublishing({
                 />
               )}
               {comparisonFailed && (
-                <p role="status">
+                <Alert variant="destructive">
                   The shared version loaded, but its differences could not be compared.
-                </p>
+                </Alert>
               )}
-              <button
-                className="primary-action"
+              <Button
+                className="self-start"
                 type="button"
                 disabled={busy}
                 onClick={() => void fork()}
               >
                 Add a personal copy
-              </button>
+              </Button>
             </div>
           )}
         </div>
       </div>
       {forkConflict && publication && (
-        <button
+        <Button
           type="button"
-          className="text-button"
           disabled={busy}
           onClick={() => {
             Effect.runFork(
@@ -796,10 +857,10 @@ export function KnowledgeAreaPublishing({
           }}
         >
           Start a new copy attempt
-        </button>
+        </Button>
       )}
       {publicationConflict && area ? (
-        <button
+        <Button
           type="button"
           disabled={busy}
           onClick={() => {
@@ -819,12 +880,28 @@ export function KnowledgeAreaPublishing({
           }}
         >
           Start a new publication attempt
-        </button>
+        </Button>
       ) : null}
       {notice && (
-        <p className="publication-notice" role="status">
+        <Alert
+          className="mt-4"
+          role={
+            /could not|couldn't|failed|failure|unavailable|not added|not published|not saved|choose/i.test(
+              notice,
+            )
+              ? "alert"
+              : "status"
+          }
+          variant={
+            /could not|couldn't|failed|failure|unavailable|not added|not published|not saved|choose/i.test(
+              notice,
+            )
+              ? "destructive"
+              : "default"
+          }
+        >
           {notice}
-        </p>
+        </Alert>
       )}
     </section>
   );

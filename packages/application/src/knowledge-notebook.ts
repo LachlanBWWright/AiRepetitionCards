@@ -4,7 +4,7 @@ import {
   KnowledgeAreaSchema,
   ObjectiveIdSchema,
   AreaIdSchema,
-  CardIdSchema,
+  AssessmentIdSchema,
   ReviewEventSchema,
 } from "@recall/domain";
 import { AnswerEvaluationSchema, CardProposalSchema, TutorQuestionSchema } from "@recall/ai-core";
@@ -48,6 +48,26 @@ export const StudySourceReferenceSchema = Schema.Struct({
   quote: Schema.String.pipe(Schema.minLength(1), Schema.maxLength(2000)),
   pageNumber: Schema.NullOr(Schema.Number.pipe(Schema.int(), Schema.between(1, 100_000))),
 });
+export const StudyCoverageClaimSchema = Schema.Struct({
+  id: Uuid,
+  title: Schema.String.pipe(Schema.minLength(1), Schema.maxLength(200)),
+  description: Schema.String.pipe(Schema.minLength(1), Schema.maxLength(2000)),
+  priority: Schema.Literal("high", "medium", "low"),
+  decision: Schema.Literal("pending", "selected", "skipped"),
+  sourceReferences: Schema.Array(StudySourceReferenceSchema).pipe(
+    Schema.minItems(1),
+    Schema.maxItems(20),
+  ),
+});
+export const StudyCoveragePlanSchema = Schema.Struct({
+  id: Uuid,
+  materialId: Uuid,
+  sectionId: Uuid,
+  createdAt: Time,
+  claims: Schema.Array(StudyCoverageClaimSchema).pipe(Schema.minItems(1), Schema.maxItems(20)),
+});
+export type StudyCoveragePlan = typeof StudyCoveragePlanSchema.Type;
+export type StudyCoverageClaim = typeof StudyCoverageClaimSchema.Type;
 export type StudyMaterial = typeof StudyMaterialSchema.Type;
 export type StudyMaterialSection = typeof StudyMaterialSectionSchema.Type;
 export type StudySourceReference = typeof StudySourceReferenceSchema.Type;
@@ -81,7 +101,7 @@ export const NotebookEvidenceSchema = Schema.Union(
     evaluation: AnswerEvaluationSchema,
     at: Time,
     providerSessionId: Schema.optional(Uuid),
-    linkedCardIds: Schema.Array(CardIdSchema),
+    linkedCardIds: Schema.Array(AssessmentIdSchema),
   }),
   Schema.Struct({
     kind: Schema.Literal("review"),
@@ -89,7 +109,7 @@ export const NotebookEvidenceSchema = Schema.Union(
     conceptId: ObjectiveIdSchema,
     reviewEvent: ReviewEventSchema,
     at: Time,
-    linkedCardIds: Schema.Array(CardIdSchema),
+    linkedCardIds: Schema.Array(AssessmentIdSchema),
   }),
 );
 export type NotebookEvidence = typeof NotebookEvidenceSchema.Type;
@@ -100,13 +120,15 @@ export const NotebookProposalSchema = Schema.Struct({
   sourceReferences: Schema.optional(
     Schema.Array(StudySourceReferenceSchema).pipe(Schema.minItems(1), Schema.maxItems(20)),
   ),
+  aiRefinementOf: Schema.optional(Uuid),
+  claimId: Schema.optional(Uuid),
   proposal: CardProposalSchema,
   createdAt: Time,
   providerSessionId: Schema.optional(Uuid),
   providerAcknowledged: Schema.optional(Schema.Boolean),
   providerResolutionRequired: Schema.optional(Schema.Boolean),
   status: Schema.Literal("pending", "accepted", "discarded"),
-  cardId: Schema.NullOr(CardIdSchema),
+  cardId: Schema.NullOr(AssessmentIdSchema),
 });
 export const NotebookSessionSchema = Schema.Struct({
   phase: Schema.Literal("idle", "active", "finished"),
@@ -132,6 +154,7 @@ const NotebookShape = Schema.Struct({
   evidence: Schema.Array(NotebookEvidenceSchema),
   proposals: Schema.Array(NotebookProposalSchema),
   session: NotebookSessionSchema,
+  coveragePlans: Schema.optional(Schema.Array(StudyCoveragePlanSchema).pipe(Schema.maxItems(200))),
   materials: Schema.optional(Schema.Array(StudyMaterialSchema).pipe(Schema.maxItems(50))),
 });
 function hasConceptCycle(concepts: readonly (typeof NotebookConceptSchema.Type)[]): boolean {
@@ -164,6 +187,28 @@ export const KnowledgeNotebookSchema = NotebookShape.pipe(
       (notebook.materials ?? [])
         .flatMap((material) => material.sections)
         .reduce((sum, section) => sum + section.text.length, 0) <= 2_000_000 &&
+      new Set((notebook.coveragePlans ?? []).map((plan) => plan.id)).size ===
+        (notebook.coveragePlans ?? []).length &&
+      new Set(
+        (notebook.coveragePlans ?? []).flatMap((plan) => plan.claims.map((claim) => claim.id)),
+      ).size ===
+        (notebook.coveragePlans ?? []).reduce((count, plan) => count + plan.claims.length, 0) &&
+      (notebook.coveragePlans ?? []).every((plan) =>
+        plan.claims.every((claim) =>
+          claim.sourceReferences.every((reference) => {
+            const section = notebook.materials
+              ?.find((material) => material.id === plan.materialId)
+              ?.sections.find((item) => item.id === plan.sectionId);
+            return (
+              reference.materialId === plan.materialId &&
+              reference.sectionId === plan.sectionId &&
+              section !== undefined &&
+              section.pageNumber === reference.pageNumber &&
+              section.text.includes(reference.quote)
+            );
+          }),
+        ),
+      ) &&
       ids.size === notebook.concepts.length &&
       !hasConceptCycle(notebook.concepts) &&
       evidenceIds.size === notebook.evidence.length &&
@@ -187,7 +232,16 @@ export const KnowledgeNotebookSchema = NotebookShape.pipe(
       notebook.proposals.every(
         (proposal) =>
           (proposal.providerResolutionRequired !== false ||
-            (proposal.sourceReferences?.length ?? 0) > 0) &&
+            (proposal.sourceReferences?.length ?? 0) > 0 ||
+            (proposal.aiRefinementOf !== undefined &&
+              notebook.proposals.some(
+                (original) =>
+                  original.id === proposal.aiRefinementOf &&
+                  original.status === "discarded" &&
+                  original.conceptId === proposal.conceptId &&
+                  original.evidenceIds.length > 0 &&
+                  JSON.stringify(original.evidenceIds) === JSON.stringify(proposal.evidenceIds),
+              ))) &&
           (proposal.evidenceIds.length > 0 || (proposal.sourceReferences?.length ?? 0) > 0) &&
           (proposal.sourceReferences ?? []).every((reference) => {
             const material = notebook.materials?.find((item) => item.id === reference.materialId);
@@ -198,6 +252,16 @@ export const KnowledgeNotebookSchema = NotebookShape.pipe(
               section.text.includes(reference.quote)
             );
           }) &&
+          (proposal.claimId === undefined ||
+            (notebook.coveragePlans ?? []).some(
+              (plan) =>
+                plan.claims.some((claim) => claim.id === proposal.claimId) &&
+                proposal.sourceReferences?.some(
+                  (reference) =>
+                    reference.materialId === plan.materialId &&
+                    reference.sectionId === plan.sectionId,
+                ),
+            )) &&
           ids.has(proposal.conceptId) &&
           proposal.proposal.objectiveId ===
             (notebook.concepts.find((concept) => concept.id === proposal.conceptId)?.objectiveId ??
@@ -777,6 +841,8 @@ export function addNotebookProposal(
         sourceReferences: Schema.optional(
           Schema.Array(StudySourceReferenceSchema).pipe(Schema.minItems(1), Schema.maxItems(20)),
         ),
+        aiRefinementOf: Schema.optional(Uuid),
+        claimId: Schema.optional(Uuid),
         proposal: CardProposalSchema,
         createdAt: Time,
         providerSessionId: Schema.optional(Uuid),
@@ -837,7 +903,7 @@ export function resolveNotebookProposal(
       Schema.Struct({
         id: Uuid,
         status: Schema.Literal("accepted", "discarded"),
-        cardId: Schema.optional(CardIdSchema),
+        cardId: Schema.optional(AssessmentIdSchema),
         proposal: Schema.optional(CardProposalSchema),
       }),
       input,

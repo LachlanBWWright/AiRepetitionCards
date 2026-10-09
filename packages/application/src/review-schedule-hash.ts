@@ -1,6 +1,6 @@
 import { sha256 } from "@noble/hashes/sha2.js";
 import { Effect, Schema } from "effect";
-import { StudyCardSchema } from "@recall/domain";
+import { AssessmentSchema } from "@recall/domain";
 
 export const REVIEW_SCHEDULE_HASH_VERSION = "recall-fsrs-schedule-v1";
 export type ReviewScheduleHashInvalid = { readonly _tag: "ReviewScheduleHashInvalid" };
@@ -17,7 +17,7 @@ export function reviewScheduleHash(
   input: unknown,
 ): Effect.Effect<string, ReviewScheduleHashInvalid> {
   return Effect.gen(function* () {
-    const schedule = yield* Schema.decodeUnknown(StudyCardSchema.fields.schedule)(input).pipe(
+    const schedule = yield* Schema.decodeUnknown(AssessmentSchema.fields.schedule)(input).pipe(
       Effect.mapError(() => ({ _tag: "ReviewScheduleHashInvalid" }) as const),
     );
     const due = utcTimestamp(schedule.due);

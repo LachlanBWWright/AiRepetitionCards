@@ -38,7 +38,7 @@ The Linux job checks the imported private key against the configured full finger
 
 ## Configuration and artifact integrity
 
-Signed builds read public environment variables `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` and `RECALL_API_URL` from the protected environment's variables. Leave them unset to disable cloud features. Local builds can use the web app's environment file. Never bundle Supabase service-role keys, OpenAI secrets or signing credentials as public client configuration.
+Signed builds read public environment variables `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` and `RECALL_API_URL` from the protected environment's variables. Set `RECALL_API_URL` to the client-reachable HTTPS ASP.NET API origin or gateway; do not bundle an internal-only service address. Leave the client values unset to disable cloud features. Local builds can use the web app's environment file. Never bundle Supabase service-role keys, OpenAI secrets or signing credentials as public client configuration. ASP.NET's service-role, AI-provider, OAuth, Redis and trusted-proxy settings belong only in the API's server environment; see [backend configuration](../backend/README.md).
 
 Both workflows include `checksums.json` with SHA-256 hashes and sizes for every installer/archive. Compare every downloaded file to that manifest. Checksums establish byte integrity; they do not replace OS signature validation or authenticate unsigned Linux distribution.
 

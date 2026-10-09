@@ -1,4 +1,5 @@
 import { Effect, Either, Schema } from "effect";
+import { volatileStorage } from "@/lib/volatile-storage";
 import {
   DailyReminderSettingsSchema,
   defaultDailyReminderSettings,
@@ -42,7 +43,7 @@ const permissionError = () =>
 function readBrowser() {
   return Effect.try({
     try: () => {
-      const raw = localStorage.getItem(storageKey);
+      const raw = volatileStorage.getItem(storageKey);
       const parsed =
         raw === null
           ? Either.right({ settings: defaultDailyReminderSettings, lastDeliveredDay: null })
@@ -112,7 +113,7 @@ export const dailyReminderApi: DailyReminderApi = {
           );
           yield* Effect.try({
             try: () =>
-              localStorage.setItem(
+              volatileStorage.setItem(
                 storageKey,
                 JSON.stringify({
                   settings: validated,
@@ -169,7 +170,7 @@ function deliverBrowser(onOpen: () => void) {
     const current = yield* readBrowser();
     yield* Effect.try({
       try: () =>
-        localStorage.setItem(
+        volatileStorage.setItem(
           storageKey,
           JSON.stringify({ settings: current.settings, lastDeliveredDay: day }),
         ),

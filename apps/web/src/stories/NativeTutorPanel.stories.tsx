@@ -8,7 +8,7 @@ import {
   TutorSessionStateResponseSchema,
 } from "@recall/ai-core";
 import type { TutorSessionState } from "@recall/ai-core";
-import { createCardId, createObjectiveId } from "@recall/domain";
+import { createAssessmentId, createObjectiveId } from "@recall/domain";
 import { mockWorkspace } from "../features/workspace/mock-data";
 import { NativeTutorPanel } from "../../../mobile/src/components/NativeTutorPanel";
 
@@ -204,7 +204,7 @@ const secondObjectiveArea = area
           card.objectiveIds.every((id) => id === area.objectives[0]?.id),
         ),
         {
-          id: createCardId("story-gene-expression-card"),
+          id: createAssessmentId("story-gene-expression-card"),
           kind: "basic" as const,
           front: "How is a gene used to make a protein?",
           back: "Transcription makes RNA; translation uses that RNA to make protein.",

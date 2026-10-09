@@ -1,6 +1,11 @@
 import type { ReactNode } from "react";
 import type { KnowledgeAreaDiff, KnowledgeAreaMetadataChange } from "@recall/application";
 import type { KnowledgeArea } from "@recall/domain";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@recall/ui-web/components/collapsible";
 
 type Card = KnowledgeArea["cards"][number];
 type Objective = KnowledgeArea["objectives"][number];
@@ -115,44 +120,28 @@ function ChangeSection({
 }) {
   if (count === 0) return null;
   return (
-    <details style={{ marginBlock: "0.75rem" }}>
-      <summary style={{ cursor: "pointer", fontWeight: 650 }}>
+    <Collapsible className="my-3">
+      <CollapsibleTrigger className="cursor-pointer font-semibold underline underline-offset-4 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
         {title} ({count})
-      </summary>
-      {children}
-    </details>
+      </CollapsibleTrigger>
+      <CollapsibleContent>{children}</CollapsibleContent>
+    </Collapsible>
   );
 }
 
 function ComparisonItem({ children }: { readonly children: ReactNode }) {
-  return (
-    <div
-      style={{
-        borderTop: "1px solid #d6dacd",
-        marginTop: "0.75rem",
-        paddingTop: "0.75rem",
-      }}
-    >
-      {children}
-    </div>
-  );
+  return <div className="mt-3 border-t pt-3">{children}</div>;
 }
 
 function BeforeAfter({ before, after }: { readonly before: ReactNode; readonly after: ReactNode }) {
   return (
-    <div
-      style={{
-        display: "grid",
-        gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-        gap: "1rem",
-      }}
-    >
-      <div style={{ minWidth: 0 }}>
-        <h5>Your copy</h5>
+    <div className="grid grid-cols-[repeat(auto-fit,minmax(180px,1fr))] gap-4">
+      <div className="min-w-0">
+        <h5 className="mb-2 text-sm font-semibold">Your copy</h5>
         {before}
       </div>
-      <div style={{ minWidth: 0 }}>
-        <h5>Shared version</h5>
+      <div className="min-w-0">
+        <h5 className="mb-2 text-sm font-semibold">Shared version</h5>
         {after}
       </div>
     </div>
@@ -190,8 +179,10 @@ export function KnowledgeAreaDiffView({
     comparison.objectives.removed.length;
 
   return (
-    <section className="publication-diff" aria-label="Upstream version comparison">
-      <p className="eyebrow">COMPARE WITH YOUR COPY</p>
+    <section className="mt-4 border-t pt-4" aria-label="Upstream version comparison">
+      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+        COMPARE WITH YOUR COPY
+      </p>
       <p>
         Cards: {comparison.cards.added.length} added · {comparison.cards.changed.length} changed ·{" "}
         {comparison.cards.removed.length} removed
@@ -201,7 +192,7 @@ export function KnowledgeAreaDiffView({
         {comparison.objectives.changed.length} changed · {comparison.objectives.removed.length}{" "}
         removed
       </p>
-      <p className="optional-label">
+      <p className="text-muted-foreground">
         Review only. Differences include edits made to your copy. Your content and review history
         stay unchanged; adding a personal copy creates a separate area.
       </p>
@@ -209,7 +200,7 @@ export function KnowledgeAreaDiffView({
       <ChangeSection title="Changed area details" count={comparison.metadata.length}>
         {comparison.metadata.map((change) => (
           <ComparisonItem key={change.field}>
-            <h4>{metadataLabels[change.field]}</h4>
+            <h4 className="mb-2 text-base font-semibold">{metadataLabels[change.field]}</h4>
             <BeforeAfter
               before={<ContentText>{metadataText(change.before)}</ContentText>}
               after={<ContentText>{metadataText(change.after)}</ContentText>}

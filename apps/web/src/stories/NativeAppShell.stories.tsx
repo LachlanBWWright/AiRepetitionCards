@@ -11,7 +11,11 @@ import {
   toKnowledgeArea,
   type PublicationForkOperationStore,
 } from "@recall/application";
-import { NativeAppShell, type NativeAppTab } from "../../../mobile/src/components/NativeAppShell";
+import { NativeAppShell } from "../../../mobile/src/components/NativeAppShell";
+import {
+  NativeAppTab,
+  type NativeAppTab as NativeAppTabValue,
+} from "../../../mobile/src/navigation";
 import { NativeTodayScreen } from "../../../mobile/src/components/NativeTodayScreen";
 import {
   NativeWorkspaceAuthoringPanel,
@@ -50,15 +54,16 @@ const tutorApi = createTutorApi(() =>
 );
 
 function ShellStory({
-  initialTab = "Today",
+  initialTab = NativeAppTab.Today,
   initialEditor,
   localOnly = false,
 }: {
-  readonly initialTab?: NativeAppTab;
+  readonly initialTab?: NativeAppTabValue;
   readonly initialEditor?: NativeWorkspaceAuthoringPanelProps["initialEditor"];
   readonly localOnly?: boolean;
 }) {
   const [workspace, setWorkspace] = useState(mockWorkspace);
+  const [activeTab, setActiveTab] = useState<NativeAppTabValue>(initialTab);
   const [activeAreaId, setActiveAreaId] = useState<string>("area-biology");
   const [showAnswer, setShowAnswer] = useState(false);
   const operationStore = useMemo<PublicationForkOperationStore>(() => {
@@ -83,6 +88,8 @@ function ShellStory({
   return (
     <div style={{ height: "100vh", display: "flex", background: "#faf9f6" }}>
       <NativeAppShell
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
         initialTab={initialTab}
         areas={workspace.areas}
         activeAreaId={activeAreaId}
@@ -92,6 +99,7 @@ function ShellStory({
         }}
         today={
           <NativeTodayScreen
+            onOpenLibrary={() => setActiveTab(NativeAppTab.Library)}
             ready
             workspace={workspace}
             activeAreaId={activeAreaId}
@@ -181,33 +189,39 @@ const meta = {
 } satisfies Meta<typeof ShellStory>;
 export default meta;
 type Story = StoryObj<typeof meta>;
-export const Today: Story = { name: "Navigation · Today (native)", args: { initialTab: "Today" } };
+export const Today: Story = {
+  name: "Navigation · Today (native)",
+  args: { initialTab: NativeAppTab.Today },
+};
 export const Library: Story = {
   name: "Navigation · Library (native)",
-  args: { initialTab: "Library" },
+  args: { initialTab: NativeAppTab.Library },
 };
 export const CardAttachments: Story = {
   name: "Navigation · Card attachments (native)",
-  args: { initialTab: "Library", initialEditor: "edit-card" },
+  args: { initialTab: NativeAppTab.Library, initialEditor: "edit-card" },
 };
-export const Tutor: Story = { name: "Navigation · Tutor (native)", args: { initialTab: "Tutor" } };
+export const Tutor: Story = {
+  name: "Navigation · Tutor (native)",
+  args: { initialTab: NativeAppTab.Tutor },
+};
 export const Sharing: Story = {
   name: "Navigation · Sharing (native)",
-  args: { initialTab: "Sharing" },
+  args: { initialTab: NativeAppTab.Sharing },
 };
 export const Account: Story = {
   name: "Navigation · Account (native)",
-  args: { initialTab: "Account" },
+  args: { initialTab: NativeAppTab.Account },
 };
 export const LocalAccount: Story = {
   name: "Navigation · Local account (native)",
-  args: { initialTab: "Account", localOnly: true },
+  args: { initialTab: NativeAppTab.Account, localOnly: true },
 };
 export const LocalTutor: Story = {
   name: "Navigation · Local tutor unavailable (native)",
-  args: { initialTab: "Tutor", localOnly: true },
+  args: { initialTab: NativeAppTab.Tutor, localOnly: true },
 };
 export const LocalSharing: Story = {
   name: "Navigation · Local sharing (native)",
-  args: { initialTab: "Sharing", localOnly: true },
+  args: { initialTab: NativeAppTab.Sharing, localOnly: true },
 };

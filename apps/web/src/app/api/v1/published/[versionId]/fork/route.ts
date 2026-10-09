@@ -18,7 +18,11 @@ import {
   readExistingPublishedFork,
   savePublishedFork,
 } from "@recall/infra-supabase/published-fork";
-import { publicationForkIdentity, createPublicationFork } from "@recall/application";
+import {
+  publicationForkIdentity,
+  createPublicationFork,
+  PublicationForkIdKind,
+} from "@recall/application";
 import { readJsonBody } from "@/lib/http/read-json";
 import {
   contentHash,
@@ -183,7 +187,7 @@ async function handlePOST(request: NextRequest, context: RouteContext): Promise<
     objectives: document.objectives,
     cards: document.cards.map((card) => ({
       ...card,
-      revisionId: generated.right.id("card-revision", card.id),
+      revisionId: generated.right.id(PublicationForkIdKind.CardRevision, card.id),
     })),
     document,
     versionId: generated.right.initialVersionId,

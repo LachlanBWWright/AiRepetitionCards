@@ -7,7 +7,7 @@ import {
   type CardInput,
   type Grade,
 } from "ts-fsrs";
-import type { CardSchedule } from "@recall/domain";
+import type { AssessmentSchedule } from "@recall/domain";
 import type { ReviewEvent } from "@recall/domain";
 import { orderReviewEvents } from "@recall/sync-core";
 import { Effect } from "effect";
@@ -61,15 +61,15 @@ const ratingValue: Record<ReviewRating, Grade> = {
   easy: Rating.Easy,
 };
 
-const stateValue: Record<CardSchedule["state"], State> = {
+const stateValue: Record<AssessmentSchedule["state"], State> = {
   0: State.New,
   1: State.Learning,
   2: State.Review,
   3: State.Relearning,
 };
 
-export function storeSchedule(card: Card): CardSchedule {
-  let state: CardSchedule["state"];
+export function storeSchedule(card: Card): AssessmentSchedule {
+  let state: AssessmentSchedule["state"];
   switch (card.state) {
     case State.New:
       state = 0;
@@ -98,7 +98,7 @@ export function storeSchedule(card: Card): CardSchedule {
   };
 }
 
-export function schedulerInput(schedule: CardSchedule): CardInput {
+export function schedulerInput(schedule: AssessmentSchedule): CardInput {
   const lastReview = schedule.last_review;
   return {
     due: new Date(schedule.due),
@@ -115,16 +115,16 @@ export function schedulerInput(schedule: CardSchedule): CardInput {
 }
 
 /** The caller supplies time so identical inputs produce identical schedules. */
-export function newSchedule(now: Date): CardSchedule {
+export function newSchedule(now: Date): AssessmentSchedule {
   return storeSchedule(createEmptyCard(now));
 }
 
 export function scheduleReview(
-  schedule: CardSchedule,
+  schedule: AssessmentSchedule,
   rating: ReviewRating,
   now: Date,
   parameters: SchedulerParameters = DEFAULT_SCHEDULER_PARAMETERS,
-): CardSchedule {
+): AssessmentSchedule {
   const scheduler = fsrs({
     request_retention: Math.round(parameters.requestRetention * 10_000) / 10_000,
     enable_fuzz: false,
@@ -136,7 +136,7 @@ export function scheduleReview(
 export function rebuildScheduleEffect(
   events: readonly ReviewEvent[],
   initialReviewAt?: Date,
-): Effect.Effect<CardSchedule, SchedulerReplayFailure> {
+): Effect.Effect<AssessmentSchedule, SchedulerReplayFailure> {
   return Effect.gen(function* () {
     if (initialReviewAt && !Number.isFinite(initialReviewAt.getTime())) {
       return yield* Effect.fail({

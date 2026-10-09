@@ -1,6 +1,7 @@
 import { Effect } from "effect";
 import { encodePublicationShareToken, type PublicationOperationStore } from "@recall/application";
 import { coordinateLocalWrite } from "@/features/workspace/local-write-coordinator";
+import { volatileStorage } from "@/lib/volatile-storage";
 const key = (id: string) => `recall-pending-publication:${id.toLowerCase()}`;
 const failure = () => ({ _tag: "PublicationForkOperationFailure" }) as const;
 export const browserPublicationOperationStore: PublicationOperationStore = {
@@ -16,17 +17,17 @@ export const browserPublicationOperationStore: PublicationOperationStore = {
     }).pipe(Effect.flatMap((result) => result)),
   read: (id) =>
     coordinateLocalWrite(
-      Effect.try({ try: () => localStorage.getItem(key(id)), catch: failure }),
+      Effect.try({ try: () => volatileStorage.getItem(key(id)), catch: failure }),
       failure,
     ),
   write: (id, value) =>
     coordinateLocalWrite(
-      Effect.try({ try: () => localStorage.setItem(key(id), value), catch: failure }),
+      Effect.try({ try: () => volatileStorage.setItem(key(id), value), catch: failure }),
       failure,
     ),
   clear: (id) =>
     coordinateLocalWrite(
-      Effect.try({ try: () => localStorage.removeItem(key(id)), catch: failure }),
+      Effect.try({ try: () => volatileStorage.removeItem(key(id)), catch: failure }),
       failure,
     ),
 };

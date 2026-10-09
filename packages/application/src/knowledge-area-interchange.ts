@@ -3,9 +3,14 @@ import type {
   KnowledgeArea,
   KnowledgeAreaDecodeError,
   LearningArea,
-  StudyCard,
+  Assessment,
 } from "@recall/domain";
-import { createAreaId, createCardId, createObjectiveId, KnowledgeAreaSchema } from "@recall/domain";
+import {
+  createAreaId,
+  createAssessmentId,
+  createObjectiveId,
+  KnowledgeAreaSchema,
+} from "@recall/domain";
 import { newSchedule } from "@recall/scheduler";
 import { stableSyncId } from "@recall/sync-core";
 import { expandCloze, renderClozeCard, type ClozeFailure } from "./cloze";
@@ -161,7 +166,7 @@ export function fromKnowledgeArea(
     ),
   }));
   return Effect.gen(function* () {
-    const cards: StudyCard[] = [];
+    const cards: Assessment[] = [];
     const outputIds = new Set<string>();
     for (const card of document.cards) {
       const content =
@@ -182,9 +187,9 @@ export function fromKnowledgeArea(
           : (card.sourceId ?? card.id);
         const id = preserveIds
           ? expanded && variantIndex > 0
-            ? createCardId(stableSyncId(`cloze:${card.id}:${String(deletionIndex)}`))
+            ? createAssessmentId(stableSyncId(`cloze:${card.id}:${String(deletionIndex)}`))
             : card.id
-          : createCardId(createId());
+          : createAssessmentId(createId());
         if (outputIds.has(id)) {
           return yield* Effect.fail({
             _tag: "KnowledgeAreaImportError",

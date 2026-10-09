@@ -13,11 +13,12 @@ export type NativeKnowledgeNotebookStoreFailure = {
 const failure = (): NativeKnowledgeNotebookStoreFailure => ({
   _tag: "NativeKnowledgeNotebookStoreFailure",
 });
-const areaKey = (areaId: AreaId) => `${notebookNamespace}:${areaId}`;
+const areaKey = (areaId: AreaId, namespace = notebookNamespace) => `${namespace}:${areaId}`;
 
 /** Read one local notebook record as untrusted JSON for application schema validation. */
 export function readNativeKnowledgeNotebook(
   areaId: AreaId,
+  namespace = notebookNamespace,
 ): Effect.Effect<KnowledgeNotebook | null, NativeKnowledgeNotebookStoreFailure> {
   const operation = Effect.tryPromise({
     try: async () => {
@@ -31,7 +32,7 @@ export function readNativeKnowledgeNotebook(
       `);
       const row = await database.getFirstAsync<{ readonly value: string }>(
         "SELECT value FROM local_key_value WHERE key = ?",
-        areaKey(areaId),
+        areaKey(areaId, namespace),
       );
       if (!row) return { _tag: "Missing" } as const;
       const decoded = Schema.decodeUnknownEither(Schema.parseJson(KnowledgeNotebookSchema))(
@@ -57,6 +58,7 @@ export function writeNativeKnowledgeNotebook(
   areaId: AreaId,
   notebook: unknown,
   mayWrite: () => boolean,
+  namespace = notebookNamespace,
 ): Effect.Effect<void, NativeKnowledgeNotebookStoreFailure> {
   const decoded = Schema.decodeUnknownEither(KnowledgeNotebookSchema)(notebook);
   if (Either.isLeft(decoded) || decoded.right.areaId !== areaId) return Effect.fail(failure());
@@ -82,7 +84,7 @@ export function writeNativeKnowledgeNotebook(
                   `INSERT INTO local_key_value (key, value, updated_at)
                    VALUES (?, ?, ?)
                    ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
-                  areaKey(areaId),
+                  areaKey(areaId, namespace),
                   value,
                   new Date().toISOString(),
                 );
@@ -122,8 +124,12 @@ export function clearNativeKnowledgeNotebooks(
               `${notebookNamespace}:%`,
             );
           else
-            for (const key of new Set(areaIds.map(areaKey)))
-              await transaction.runAsync("DELETE FROM local_key_value WHERE key = ?", key);
+            for (const areaId of new Set(areaIds))
+              await transaction.runAsync(
+                "DELETE FROM local_key_value WHERE key = ? OR key LIKE ?",
+                areaKey(areaId),
+                `${notebookNamespace}:%:${areaId}`,
+              );
           cleared = true;
         });
         return cleared;

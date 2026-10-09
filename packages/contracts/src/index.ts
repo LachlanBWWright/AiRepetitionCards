@@ -82,7 +82,7 @@ const UuidSchema = Schema.String.pipe(
   Schema.pattern(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i),
 );
 export const ReviewEventIdSchema = UuidSchema.pipe(Schema.brand("ReviewEventId"));
-export const CardIdSchema = UuidSchema.pipe(Schema.brand("CardId"));
+export const AssessmentIdSchema = UuidSchema.pipe(Schema.brand("AssessmentId"));
 export const AreaIdSchema = UuidSchema.pipe(Schema.brand("AreaId"));
 export const DeviceIdSchema = UuidSchema.pipe(Schema.brand("DeviceId"));
 export const AreaTombstonesSchema = Schema.Array(
@@ -102,7 +102,7 @@ const ReviewRatingSchema = Schema.Union(
 
 export const SyncReviewOperationSchema = Schema.Struct({
   id: ReviewEventIdSchema,
-  cardId: CardIdSchema,
+  cardId: AssessmentIdSchema,
   deviceSequence: Schema.Number.pipe(Schema.int(), Schema.positive()),
   baseReviewEventId: Schema.NullOr(ReviewEventIdSchema),
   reviewedAtDevice: TimestampSchema,
@@ -124,7 +124,7 @@ export const SyncPushRequestSchema = Schema.Struct({
 const SyncReviewPayloadSchema = Schema.Struct({
   id: ReviewEventIdSchema,
   areaId: AreaIdSchema,
-  cardId: CardIdSchema,
+  cardId: AssessmentIdSchema,
   ratedAt: TimestampSchema,
   rating: Schema.Union(
     Schema.Literal("again"),
@@ -193,10 +193,10 @@ export const SyncChangeSchema = Schema.Union(
   Schema.Struct({
     ...SyncChangeBaseSchema,
     entityType: Schema.Literal("card"),
-    entityId: CardIdSchema,
+    entityId: AssessmentIdSchema,
     operation: Schema.Literal("tombstone"),
     payload: Schema.Struct({
-      id: CardIdSchema,
+      id: AssessmentIdSchema,
       areaId: AreaIdSchema,
       deletedAt: TimestampSchema,
     }),

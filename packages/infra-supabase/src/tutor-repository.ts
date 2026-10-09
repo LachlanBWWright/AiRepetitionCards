@@ -2,6 +2,7 @@ import { Effect, Either, Schema } from "effect";
 import {
   MAX_TUTOR_SESSION_OBSERVATIONS,
   MAX_TUTOR_CONTEXT_MESSAGES,
+  TutorProposalResolution,
   selectTutorContextHistory,
   TutorContextSchema,
   TutorObservationHistorySchema,
@@ -9,6 +10,13 @@ import {
 } from "@recall/ai-core";
 import type { RecallSupabaseClient } from "./client";
 
+export const TutorMessageRole = { Tutor: "tutor", Learner: "learner" } as const;
+export const TutorMessageKind = {
+  Question: "question",
+  Answer: "answer",
+  Feedback: "feedback",
+  Proposal: "proposal",
+} as const;
 const StoredSessionSchema = Schema.Struct({
   id: Schema.String,
   area_id: Schema.String,
@@ -18,8 +26,13 @@ const StoredSessionSchema = Schema.Struct({
   last_proposal_id: Schema.NullOr(Schema.String),
 });
 const StoredMessageSchema = Schema.Struct({
-  role: Schema.String,
-  kind: Schema.String,
+  role: Schema.Literal(TutorMessageRole.Tutor, TutorMessageRole.Learner),
+  kind: Schema.Literal(
+    TutorMessageKind.Question,
+    TutorMessageKind.Answer,
+    TutorMessageKind.Feedback,
+    TutorMessageKind.Proposal,
+  ),
   content: Schema.Unknown,
 });
 const ObservationPayloadRowSchema = Schema.Struct({ payload: Schema.Unknown });
@@ -27,7 +40,11 @@ const ObservationIdRowSchema = Schema.Struct({ id: Schema.String });
 const ProposalRowSchema = Schema.Struct({
   id: Schema.String,
   content: Schema.Unknown,
-  state: Schema.String,
+  state: Schema.Literal(
+    "pending",
+    TutorProposalResolution.Approved,
+    TutorProposalResolution.Rejected,
+  ),
   approved_card_id: Schema.NullOr(Schema.String),
 });
 
@@ -232,8 +249,8 @@ export function loadTutorSession(
         .select("role, kind, content")
         .eq("session_id", sessionId)
         .eq("user_id", userId)
-        .in("kind", ["question", "answer", "feedback"])
-        .in("role", ["tutor", "learner"])
+        .in("kind", [TutorMessageKind.Question, TutorMessageKind.Answer, TutorMessageKind.Feedback])
+        .in("role", [TutorMessageRole.Tutor, TutorMessageRole.Learner])
         .order("sequence", { ascending: false })
         .order("id", { ascending: false })
         .limit(MAX_TUTOR_CONTEXT_MESSAGES);
@@ -246,11 +263,11 @@ export function loadTutorSession(
       const history: Array<{ role: "assistant" | "learner"; content: string }> = [];
       for (const message of [...messages.right].reverse()) {
         if (typeof message.content !== "string") continue;
-        if (message.role === "learner" && message.kind === "answer") {
+        if (message.role === TutorMessageRole.Learner && message.kind === TutorMessageKind.Answer) {
           history.push({ role: "learner", content: message.content });
         } else if (
-          message.role === "tutor" &&
-          (message.kind === "question" || message.kind === "feedback")
+          message.role === TutorMessageRole.Tutor &&
+          (message.kind === TutorMessageKind.Question || message.kind === TutorMessageKind.Feedback)
         ) {
           history.push({ role: "assistant", content: message.content });
         }

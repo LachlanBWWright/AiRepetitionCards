@@ -12,6 +12,7 @@ import {
 const meta = {
   title: "Screens/Mobile Client",
   component: NativeTodayScreen,
+  args: { onOpenLibrary: () => undefined },
   parameters: {
     layout: "fullscreen",
     docs: {

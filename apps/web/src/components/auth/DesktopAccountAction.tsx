@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Button } from "@/components/ui/Button";
+import { Alert, Input, toast } from "@recall/ui-web";
 import { Effect, Either, Schema } from "effect";
 
 const AuthStatusSchema = Schema.Struct({
@@ -43,11 +45,11 @@ export function DesktopAccountAction() {
     const callbackSubscription = desktop.auth.onSignInResult((input) => {
       const decoded = Schema.decodeUnknownEither(AuthCallbackSchema)(input);
       if (!active || Either.isLeft(decoded)) return;
-      setNotice(
-        decoded.right.confirmed
-          ? "Signed in. Cloud sync and tutor sessions are ready."
-          : "That sign-in link could not be verified. Request a new link and try again.",
-      );
+      if (decoded.right.confirmed) {
+        setNotice(null);
+        toast.success("Signed in. Cloud sync and tutor sessions are ready.");
+      } else
+        setNotice("That sign-in link could not be verified. Request a new link and try again.");
     });
     void Effect.runPromise(
       Effect.either(
@@ -83,11 +85,13 @@ export function DesktopAccountAction() {
     const decoded = Either.isRight(result)
       ? Schema.decodeUnknownEither(BooleanReplySchema)(result.right)
       : null;
-    setNotice(
-      decoded && Either.isRight(decoded) && decoded.right.value
-        ? "Check your email for a sign-in link. Return here to finish signing in."
-        : "A sign-in link could not be sent. Check the desktop Supabase settings and try again.",
-    );
+    if (decoded && Either.isRight(decoded) && decoded.right.value) {
+      setNotice(null);
+      toast.success("Check your email for a sign-in link. Return here to finish signing in.");
+    } else
+      setNotice(
+        "A sign-in link could not be sent. Check the desktop Supabase settings and try again.",
+      );
     setSending(false);
   }
 
@@ -108,7 +112,8 @@ export function DesktopAccountAction() {
       : null;
     if (decoded && Either.isRight(decoded) && decoded.right.value) {
       setEmail(null);
-      setNotice("Signed out on this device.");
+      setNotice(null);
+      toast.success("Signed out on this device.");
     } else {
       setNotice("Sign-out failed. The encrypted session may still be stored on this device.");
     }
@@ -116,25 +121,23 @@ export function DesktopAccountAction() {
   }
 
   return (
-    <div className="account-action">
+    <div data-slot="account-action" className="flex flex-wrap items-center gap-2">
       {email ? (
         <>
-          <span className="account-email">{email}</span>
-          <button
-            className="text-button"
-            type="button"
-            disabled={busy}
-            onClick={() => void signOut()}
-          >
+          <span className="mr-auto text-sm text-muted-foreground">{email}</span>
+          <Button variant="secondary" type="button" disabled={busy} onClick={() => void signOut()}>
             {busy ? "Signing out…" : "Sign out"}
-          </button>
+          </Button>
         </>
       ) : configured && secureStorageAvailable ? (
-        <form className="account-action" onSubmit={(event) => void requestMagicLink(event)}>
-          <label className="visually-hidden" htmlFor="desktop-account-email">
+        <form
+          className="flex flex-wrap items-center gap-2"
+          onSubmit={(event) => void requestMagicLink(event)}
+        >
+          <label className="sr-only" htmlFor="desktop-account-email">
             Email address
           </label>
-          <input
+          <Input
             id="desktop-account-email"
             type="email"
             autoComplete="email"
@@ -143,22 +146,18 @@ export function DesktopAccountAction() {
             placeholder="you@example.com"
             required
           />
-          <button className="text-button" type="submit" disabled={sending}>
+          <Button variant="secondary" type="submit" disabled={sending}>
             {sending ? "Sending…" : "Email sign-in link"}
-          </button>
+          </Button>
         </form>
       ) : (
-        <span className="saved-state">
+        <p className="text-sm text-muted-foreground">
           {!configured
-            ? "Learning on this device. Cloud sign-in and sync are optional."
+            ? "Cards and review history are saved on this device. No account is needed to study."
             : "Set up an OS keyring to store your encrypted sign-in session."}
-        </span>
+        </p>
       )}
-      {notice ? (
-        <span className="saved-state" role="status">
-          {notice}
-        </span>
-      ) : null}
+      {notice ? <Alert variant="destructive">{notice}</Alert> : null}
     </div>
   );
 }

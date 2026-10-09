@@ -1,5 +1,8 @@
 import { Effect, Either, JSONSchema, Schema } from "effect";
 import {
+  CardRefinementResultSchema,
+  CardInspectionResultSchema,
+  StudyPlanResultSchema,
   AnswerEvaluationSchema,
   type AiProviderCapabilities,
   CardProposalSchema,
@@ -24,9 +27,19 @@ import type { tutorApi } from "./tutor-api";
 import "./desktop-api";
 import { chatGptPlanFailureMessage, type ChatGptPlanFailure } from "./chatgpt-plan-errors";
 import { localWritesBlocked } from "@/features/workspace/local-write-coordinator";
+import { volatileStorage } from "@/lib/volatile-storage";
 
 const localTutorCapabilities: AiProviderCapabilities = {
-  supportedOperations: ["question", "evaluate", "propose-card", "targeted-quiz", "study-card"],
+  supportedOperations: [
+    "question",
+    "evaluate",
+    "propose-card",
+    "targeted-quiz",
+    "study-card",
+    "refine-card",
+    "inspect-card",
+    "plan-study",
+  ],
   // This adapter exposes schema-validated JSON, not a native constrained decoder.
   structuredOutputs: true,
   streaming: false,
@@ -67,7 +80,7 @@ export function createLocalChatGptTutor(
   const read = (id: string) =>
     Effect.try({
       try: () => {
-        const value = localStorage.getItem(key(id));
+        const value = volatileStorage.getItem(key(id));
         return value ? (JSON.parse(value) as unknown) : null;
       },
       catch: () => failure("local-session-storage-unavailable"),
@@ -89,7 +102,7 @@ export function createLocalChatGptTutor(
       const valid = Schema.decodeUnknownEither(StoredSession)(session);
       if (Either.isLeft(valid)) return yield* Effect.fail(failure("invalid-local-session"));
       yield* Effect.try({
-        try: () => localStorage.setItem(key(session.state.sessionId), JSON.stringify(session)),
+        try: () => volatileStorage.setItem(key(session.state.sessionId), JSON.stringify(session)),
         catch: () => failure("local-session-storage-unavailable"),
       });
     });
@@ -160,11 +173,35 @@ export function createLocalChatGptTutor(
     );
   const provider: TutorWorkflowProvider<TutorApiFailure> = {
     capabilities: localTutorCapabilities,
+    refineCard: (context) =>
+      metered(
+        infer(
+          CardRefinementResultSchema,
+          "Refine refinement.front/back using its mode and optional pedagogical instructions. Preserve meaning for clearer/shorter; split into at most five focused cards; example adds grounded example; cloze front uses {{c1::answer}}. Use objectiveId exactly, explain changes and conservatively flag meaningChanged. Cite exact supplied source quotes per card when sources exist; leave references empty otherwise. No approvals or learner assessments.",
+          context,
+        ),
+      ),
+    inspectCard: (context) =>
+      metered(
+        infer(
+          CardInspectionResultSchema,
+          "Inspect inspection.front/back for ambiguity, multiple facts, answer leakage, missing context and unsupported claims. Give concrete explanations/fixes, no quality score. Without supplied sources explicitly state that source support cannot be verified. Distinguish warnings from suggestions.",
+          context,
+        ),
+      ),
+    planStudy: (context) =>
+      metered(
+        infer(
+          StudyPlanResultSchema,
+          "Extract up to twenty focused testable claims from material.sources respecting goal/depth; include exact verbatim supporting quotes with matching materialId, sectionId, pageNumber. Set pedagogical priority. Outline is a proposal, not learner evidence or proof of complete document coverage.",
+          context,
+        ),
+      ),
     generateStudyCard: (context) =>
       metered(
         infer(
           StudyCardResultSchema,
-          "For this source-based task no learner evaluation is required. Generate one focused card grounded entirely in material.sources. Use material.objectiveId exactly; include exact verbatim supporting quotes with source materialId, sectionId and pageNumber. Do not invent quotes or unsupported facts. Respect goal/depth, avoid previousFronts, and optionally suggest source concepts for approval without assessing mastery.",
+          "For this source-based task no learner evaluation is required. Generate one focused card grounded entirely in material.sources. Use material.objectiveId exactly; include exact verbatim supporting quotes with source materialId, sectionId and pageNumber. Do not invent quotes or unsupported facts. When material.claim is present target precisely that claim. Respect goal/depth, avoid previousFronts, and optionally suggest source concepts for approval without assessing mastery.",
           context,
         ),
       ),
@@ -241,7 +278,7 @@ export function createLocalChatGptTutor(
             return yield* Effect.fail(failure("local-session-storage-unavailable"));
           yield* Effect.try({
             try: () =>
-              localStorage.setItem(
+              volatileStorage.setItem(
                 `recall-chatgpt-proposal-session:${profile}:${state.proposal?.proposalId}`,
                 state.sessionId,
               ),
@@ -257,7 +294,7 @@ export function createLocalChatGptTutor(
         );
         const id = yield* Effect.try({
           try: () =>
-            localStorage.getItem(
+            volatileStorage.getItem(
               `recall-chatgpt-proposal-session:${profile}:${request.proposalId}`,
             ),
           catch: () => failure("local-session-storage-unavailable"),

@@ -11,6 +11,10 @@
       "bundleIdentifier": "com.recall.study"
     },
     "android": {
+      "blockedPermissions": [
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE"
+      ],
       "adaptiveIcon": {
         "backgroundColor": "#c4ed68"
       },
@@ -18,6 +22,7 @@
     },
     "plugins": [
       "expo-sqlite",
+      "expo-status-bar",
       [
         "expo-secure-store",
         {

@@ -1,4 +1,3 @@
-import "./catalog.css";
 import type { Meta, StoryObj } from "@storybook/react";
 import { Button } from "./Button";
 import { EmptyState } from "./EmptyState";
@@ -9,7 +8,7 @@ const meta = {
   parameters: { layout: "fullscreen" },
   decorators: [
     (Story) => (
-      <main className="component-catalog">
+      <main className="mx-auto min-h-screen max-w-5xl space-y-6 bg-background px-5 py-8 text-foreground sm:px-8 sm:py-16">
         <Story />
       </main>
     ),
@@ -51,11 +50,11 @@ export const FullScreenStates: Story = {
   name: "Full-screen · empty and recovery states",
   render: () => (
     <>
-      <p className="eyebrow">RECALL · SHARED UI</p>
+      <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">RECALL · SHARED UI</p>
       <h1>
         Make the next step <em>clear.</em>
       </h1>
-      <div className="component-catalog-grid">
+      <div className="mt-8 grid grid-cols-1 gap-3 sm:grid-cols-2 [&>section]:min-h-[150px] [&>section]:rounded-xl [&>section]:border [&>section]:bg-card [&>section]:p-5 [&>section>h2]:m-0 [&>section>h2]:text-sm [&>section>p]:my-2 [&>section>p]:text-xs [&>section>p]:text-muted-foreground">
         <section>
           <EmptyState {...meta.args} />
         </section>

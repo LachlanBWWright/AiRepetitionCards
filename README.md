@@ -1,10 +1,10 @@
 # Recall
 
-Recall is an offline-capable spaced-repetition learning app with web, Expo mobile and Electron desktop clients. All three share learning areas, card authoring, FSRS reviews, sync, AI tutoring with approved proposals, interchange and publishing.
+Recall is a spaced-repetition learning app with web, Expo mobile and Electron desktop clients. All three share learning areas, card authoring, FSRS reviews, sync, AI tutoring with approved proposals, interchange and publishing; mobile and Electron also support local-only offline study.
 
 ## Run locally
 
-Requirements: Node.js 22 and pnpm 10. No account, environment file, Supabase service or OpenAI credential is required for local study.
+Requirements: Node.js 22 and pnpm 10. Mobile and Electron local study do not require an account, environment file, Supabase service or OpenAI credential. The web app shell is available without an account; reading, creating, and studying cards requires configured account and API services.
 
 ```bash
 pnpm install
@@ -13,20 +13,59 @@ pnpm dev:mobile
 pnpm dev:desktop
 ```
 
-Run each client command in its own terminal. Local card authoring, FSRS reviews, attachments, imports and private backups use IndexedDB on web and SQLite on desktop/mobile. Cloud sign-in, sync, publishing and hosted AI tutoring require optional service configuration; they do not block the local workspace. Without configuration, sign-in offers a direct local-study action and the native Account, Tutor and Sharing screens explain local options instead of offering unavailable network actions.
+Run each client command in its own terminal. The web app shell is available without an account; card and study features require sign-in and save data through the server. The browser keeps only a temporary working copy in tab memory. Mobile and Electron support local-only study with SQLite, with optional account sync.
 
-| Local application | Command            | Storage                |
-| ----------------- | ------------------ | ---------------------- |
-| Web               | `pnpm dev`         | IndexedDB              |
-| Desktop           | `pnpm dev:desktop` | SQLite                 |
-| Mobile            | `pnpm dev:mobile`  | SQLite                 |
-| Mock screens      | `pnpm storybook`   | Deterministic fixtures |
+To run a client together with the ASP.NET backend, use one of these combined launchers instead of starting the client separately:
+
+```bash
+pnpm dev:api:next
+pnpm dev:api:desktop
+pnpm dev:api:mobile
+```
+
+Each launcher starts the .NET 10 API, waits for `/health`, and then starts its client. `pnpm dev:api:next` also starts local Supabase when web account credentials are absent and Docker is available; it stops that Supabase stack on exit if it started it. If local Supabase was already running, the launcher leaves it running. Press Ctrl+C or close the terminal to stop the API, client and any Supabase stack started by the launcher. Optional backend-only settings go in the ignored root `.env.backend.local`; hosted Supabase settings can go in `apps/web/.env.local`. For a physical phone, set `EXPO_PUBLIC_RECALL_API_URL` to the development computer's LAN address, for example `http://192.168.1.20:5000`; the mobile launcher binds the API to all interfaces by default.
+
+| Local application | Command                | Storage                |
+| ----------------- | ---------------------- | ---------------------- |
+| Web               | `pnpm dev`             | Account server         |
+| Desktop           | `pnpm dev:desktop`     | SQLite                 |
+| Mobile            | `pnpm dev:mobile`      | SQLite                 |
+| Web + ASP.NET API | `pnpm dev:api:next`    | Account server         |
+| Desktop + API     | `pnpm dev:api:desktop` | SQLite + API           |
+| Mobile + API      | `pnpm dev:api:mobile`  | SQLite + API           |
+| Mock screens      | `pnpm storybook`       | Deterministic fixtures |
+
+The web workspace has separate Next.js routes at `/today`, `/library`, `/tutor` and
+`/insights`; `/` redirects to `/today`. Electron uses matching local hash routes
+(`#/today`, `#/library`, `#/tutor` and `#/insights`) because its packaged renderer loads
+from a local file rather than a web server.
 
 ## Offline use and optional services
 
-Each platform has one application build. Local authoring, study, attachments, imports, exports, backups and insights use device storage regardless of whether server features are configured. Authentication, sync, cloud publishing and hosted AI are optional; connecting them does not replace the local workspace or require a different application.
+Today opens directly to your review queue. Library contains area and card management;
+Tutor separates practice, study materials and suggestion review. AI editing tools
+open through **Improve**, while sources, history and advanced settings are expandable.
+Switching tutor activities preserves drafts and pending work.
+Card editors keep objectives, tags and attachments under **Card details**; area settings
+keep AI instructions and objective prerequisites expandable.
 
-The normal web build (`pnpm build`) includes its install manifest and cached application shell. After an initial online visit reports **Ready for offline study on this device**, the same installed application can reopen without a network connection. Normal online navigation supports the configured server features; failed navigation uses the cached shell and the same IndexedDB workspace. Only build-owned static assets are cached, never authenticated page responses or API results. The same build also produces a static entry at `apps/web/public/index.html`; serving the generated `public/` directory provides the same local application without running the Next.js server. Optional server routes can be added by hosting the full application. Serve over HTTPS or localhost and keep the origin stable. Export a private backup before changing origins or clearing browser storage.
+**Search** finds local cards, areas, objectives, concepts, study materials and passages,
+study topics, saved tutor answers and pending suggestions. On mobile, open **Search everything**
+in Library. Remote conversations that have not been stored locally are not searchable offline.
+
+Card editors and AI approvals flag exact matches, similar wording and conflicting answers;
+review the matches before choosing **Keep both**. Library also offers a duplicate scan.
+These checks use local text comparisons and do not guarantee semantic equivalence.
+
+Card history records edits, replacements and deletions from this version onward. Compare
+earlier content and restore it from Library; **Deleted cards** also recovers cards from deleted
+areas. Restoring an active card preserves its schedule and reviews. Recovering a previously
+connected deletion creates a fresh copy to preserve sync deletion records. History and its
+attachments are included in private workspace backups, and are excluded from shared area files.
+
+Mobile and Electron support local authoring, study, attachments, imports, exports, backups and insights with device storage. The web app shell is available without authentication; card and study features require a reachable signed-in account and sync changes to the account service. It keeps a tab-memory working copy. Cloud publishing and hosted AI also require server configuration.
+
+The normal web build (`pnpm build`) includes its install manifest and cached application shell. The shell contains build-owned static assets only; reading or changing cards requires a reachable account server and workspace data is not cached for offline use. The same build also produces a static entry at `apps/web/public/index.html`; serving it requires an API proxy for account and study features. Hosted API and auth requests are served by the .NET 10 backend and can be routed through the Next.js same-origin proxy with `RECALL_API_URL`; see the [backend setup](backend/README.md).
 
 Desktop and mobile package their application code and SQLite storage, so local startup and learning operations need neither a Recall server nor a development server. Optional authentication and sync run independently from local startup. Being signed in does not make local study depend on the network.
 
@@ -34,39 +73,39 @@ AI inference requires a network connection. Direct ChatGPT plan tutoring is impl
 
 With a ChatGPT account and model selected and plan tutoring enabled, the desktop Tutor also offers **Research a topic**. Enter a question to request OpenAI web search using that account's ChatGPT plan, without a Recall server or API key. Completed answers include clickable provider citations. Search availability depends on the selected model and account/workspace policy; unsupported requests show an explanation instead of switching to hosted billing. Research results are separate from the deck and quiz context and do not automatically create cards or change your learning material. See [documented plan capabilities](https://developers.openai.com/siwc/token-sharing-open-source/preview-limitations).
 
-Local AI budget and usage foundations now enforce optional daily/weekly request caps and a separate daily research cap in the desktop ChatGPT adapter. Usage is saved locally before each request; failures and interrupted requests remain counted. Provider token counts are recorded when available, without storing prompts or answers. Budget settings are available in the desktop ChatGPT panel and signed-in web/mobile account controls; limits default to unlimited. This tracks this installation, not remaining ChatGPT allowance. See [local budget details](apps/desktop/README.md#local-budgets-and-usage-framework).
+Local AI budget and usage foundations now enforce optional daily/weekly request caps and a separate daily research cap in the desktop ChatGPT adapter. Usage is saved locally before each request; failures and interrupted requests remain counted. Provider token counts are recorded when available, without storing prompts or answers. Budget settings are available in the desktop ChatGPT panel and signed-in account controls; browser settings last only for the open tab. Limits default to unlimited. This tracks this installation, not remaining ChatGPT allowance. See [local budget details](apps/desktop/README.md#local-budgets-and-usage-framework).
 
 Storybook includes full-screen mock screens for all three clients. Screenshot targets are registered; running the screenshot command launches a browser, so it is separate from local development.
 
 Turborepo coordinates workspace checks and builds. `pnpm typecheck` checks every shared package and app independently; `pnpm lint` checks all authored source. `pnpm build`, `pnpm build:desktop`, and `pnpm build:mobile` compile one client, while `pnpm build:all` compiles all three. See the [task graph decision](docs/adr/0004-workspace-task-graph.md) for cache boundaries and source dependencies.
 
-Open <http://localhost:3000> for web, or use the Expo QR code from `pnpm dev:mobile` on a device. `pnpm dev:desktop` starts the Electron client with the shared study UI and main-process SQLite workspace storage. Desktop email-link sessions are encrypted with Electron `safeStorage`; bearer tokens stay in the main process, which proxies authenticated sync and tutor/account requests through a fixed endpoint allow-list. Desktop cloud features are disabled when Supabase is unconfigured or the OS does not provide encrypted storage. Web, Electron, and mobile sync hash-verified private media referenced by shared Knowledge Areas alongside content; browser media uses IndexedDB and native clients use SQLite. Mobile saves its workspace, review history, and media in SQLite, supports email-link sign-in and bearer-token sync, and requires approval before loading a conflicting server version. Native JSON/ZIP import remaps portable Knowledge Areas; ZIP packages preserve verified media while excluding private schedules and review history. The native account panel supports cloud account export, confirmed account deletion, sign-out that preserves offline data, and private backup export and restore. Deletion clears the device workspace, attachment store, and associated tutor-session links after the cloud deletion succeeds. See [`apps/mobile/README.md`](apps/mobile/README.md) for setup. Device-level validation remains in progress.
+Open <http://localhost:3000> for web (with configured account and API services), or use the Expo QR code from `pnpm dev:mobile` on a device. `pnpm dev:desktop` starts the Electron client with the shared study UI and main-process SQLite workspace storage. Desktop email-link sessions are encrypted with Electron `safeStorage`; bearer tokens stay in the main process, which proxies authenticated sync and tutor/account requests through a fixed endpoint allow-list. Desktop cloud features are disabled when Supabase is unconfigured or the OS does not provide encrypted storage. Electron and mobile sync hash-verified private media referenced by shared Knowledge Areas alongside content; native clients use SQLite. Web keeps media only in tab memory until the account service confirms sync. Mobile saves its workspace, review history, and media in SQLite, supports email-link sign-in and bearer-token sync, and requires approval before loading a conflicting server version. Native JSON/ZIP import remaps portable Knowledge Areas; ZIP packages preserve verified media while excluding private schedules and review history. The native account panel supports cloud account export, confirmed account deletion, sign-out that preserves offline data, and private backup export and restore. Deletion clears the device workspace, attachment store, and associated tutor-session links after the cloud deletion succeeds. See [`apps/mobile/README.md`](apps/mobile/README.md) for setup. Device-level validation remains in progress.
 
 For mobile sign-in and sync, copy [`apps/mobile/.env.example`](apps/mobile/.env.example) to `apps/mobile/.env`. On a physical device, set both service URLs to hosts reachable over the local network; `localhost` points to the device itself. See [`apps/mobile/README.md`](apps/mobile/README.md) for redirect and email-template setup.
 
 Build a local unpacked desktop bundle with `pnpm package:desktop`. Native release artifacts can be built on their target operating systems with `pnpm --filter desktop dist:linux`, `dist:mac`, or `dist:windows`. These commands do not sign or notarize installers; production distribution still needs platform signing credentials and release configuration.
 
-## Optional Supabase and account sign-in
+## Supabase and account sign-in
 
-Skip this section for local-only development. When account-backed features are needed later, install Docker Desktop or another Docker-compatible runtime, then start the local Supabase services:
+Browser study requires this account setup. Mobile and Electron can remain local-only. Install Docker Desktop or another Docker-compatible runtime, then start local Supabase services:
 
 ```bash
 pnpm supabase:start
 ```
 
-Copy the local API URL and publishable key printed by the CLI into `apps/web/.env.local`, using `apps/web/.env.example` as the template. Restart the web or desktop app after changing environment variables. Local Supabase includes the email template and callback configuration for passwordless sign-in. Emails are captured by the local mail inbox rather than delivered externally. Desktop uses `RECALL_API_URL` to reach the authenticated web API; its development default is `http://localhost:3000`.
+Web account sign-in supports Apple and Google through Supabase OAuth, plus direct ChatGPT sign-in when its SIWC configuration is enabled. Configure Apple and Google OAuth credentials in Supabase and register Supabase Auth's callback URL with each provider. ChatGPT sign-in needs the SIWC client and durable identity store described in [ChatGPT sign-in setup](docs/sign-in-with-chatgpt.md). Password sign-in is not offered. See the [Google provider setup](https://supabase.com/docs/guides/auth/social-login/auth-google) and [Apple provider setup](https://supabase.com/docs/guides/auth/social-login/auth-apple).
+
+For local development, `pnpm dev:api:next` starts local Supabase automatically when no Supabase credentials are configured and Docker is available. Google OAuth is configured locally in `supabase/config.toml`; keep its client secret in the ignored root `.env` as `SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_SECRET`. Register `http://127.0.0.1:54321/auth/v1/callback` as an authorized redirect URI for the Google OAuth client, and `http://localhost:3000` as an authorized JavaScript origin. To manage Supabase separately, run `pnpm supabase:start`, copy its API URL and publishable key into `apps/web/.env.local` using [`apps/web/.env.example`](apps/web/.env.example) as a template, and then start the API with `dotnet run --project backend/Recall.Api --urls http://localhost:5000`. The ASP.NET process needs `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` in its own environment; `.env.backend.local` is the optional server-only configuration file.
 
 For account deletion, also set `SUPABASE_SERVICE_ROLE_KEY` to the project's server-only service-role key. Never use this key in a `NEXT_PUBLIC_` variable or expose it to browser code. Deletion is disabled when this key is missing; the owner-scoped erasure function removes account records before the Supabase Auth Admin API removes the identity. Users must type `DELETE` to confirm. Web and Electron account controls support export and deletion. Device cleanup drains active storage writes, blocks further writes and stale workspace updates, and clears the local workspace, attachments, and tutor-session links. If cloud deletion succeeds but device cleanup fails, the device stays read-only and offers a cleanup retry. Clearing saved data reloads a fresh workspace only after all local cleanup succeeds.
 
-Web storage uses one exclusive Web Lock and a persistent erasure epoch across tabs. Clearing data fences existing tabs before cleanup; they cannot save old content afterward. Failed cleanup keeps the fence active until a retry succeeds. Reloading after successful cleanup starts a fresh storage session. Browsers without Web Locks, or with unavailable epoch storage, keep local persistence read-only rather than allow an unsafe erase/write race. Electron uses its single-instance storage write lane.
+Web workspaces are loaded from and synced to the authenticated server. An open tab keeps a temporary working copy while changes sync; keep the tab open until the sync status confirms completion. Use account export or a downloaded backup for a durable copy.
 
-Each browser tab also compares its last successfully loaded or saved workspace with the persisted snapshot inside the IndexedDB transaction before saving. If another tab committed changes, the stale tab becomes read-only and keeps its unsaved workspace in memory; it cannot overwrite newer cards or reviews. The recovery banner offers a private ZIP backup, a JSON snapshot that preserves reviews and schedules without attachment bytes, and reloading the latest saved workspace. Reloading discards that tab's unsaved changes, so export them first.
+Web and Electron keep a rated answer visible until its review event and resulting schedule have been saved. Rating controls lock immediately to prevent duplicate taps or keyboard input. On web, the review syncs to the account server; on Electron, it saves to SQLite and then syncs. A failed save offers an explicit retry of the same immutable review attempt; other workspace writes pause until it commits. The retry remains available when changing views.
 
-Web and Electron keep a rated answer visible until its review event and resulting schedule have been saved on the device. Rating controls lock immediately to prevent duplicate taps or keyboard input. A failed save offers an explicit retry of the same immutable review attempt; other workspace writes pause until it commits. The retry remains available when changing views. A private recovery JSON snapshot also includes any unconfirmed review attempt, while the visible review count advances only after a successful save.
+Deleting a card or area retains the minimum content needed for pending reviews until the server confirms deletion. Deleted items remain absent from the library and study queue. If content conflicts with another device, review the server version before resolving the conflict. Reviews and other content are never discarded automatically.
 
-Deleting a card or area offline keeps the minimum private content needed for its pending reviews. Deleted items remain absent from the library and study queue. Sync sends the required content, preserves the reviews, confirms deletion, and then releases the retained snapshot. Insights and native sync notices explain this pending state. If older saved data lost a deleted card's content, export the current private backup or review snapshot before replacing it with an older backup containing that card; backups are not automatically merged. If combined cloud and retained content exceed the area's card or objective limits, sync preserves local content and review evidence and asks you to export a backup before changing cloud content to free capacity. Conflict acceptance alone does not increase those limits. Reviews and other content are never discarded automatically.
-
-AI tutoring is optional. To enable it, set a server-side `OPENAI_API_KEY` and `OPENAI_MODEL` in `apps/web/.env.local`; neither value is exposed to the browser. Tutor requests require a signed-in account. Area instructions and imported learning content are sent as untrusted prompt data. AI proposals enter the study deck only after the learner approves them.
+AI tutoring is optional. To enable it with ASP.NET, set server-side `OPENAI_API_KEY` and optional model settings in the API process environment; neither value is exposed to the browser. Tutor requests require a signed-in account. Area instructions and imported learning content are sent as untrusted prompt data. AI proposals enter the study deck only after the learner approves them.
 
 Web and desktop review shortcuts leave focused media controls, form fields and text composition alone, so listening to an attachment cannot accidentally reveal or rate a card.
 
@@ -92,13 +131,13 @@ Production API request limits use shared Redis counters; local development uses 
 
 Tutor request throttling shows a retry delay separately from daily AI budgets. Web, desktop and native tutor failures keep learner drafts, history and proposals; successful responses also preserve any newer text entered while the request was pending.
 
-Creating, renaming and deleting library content also waits for a durable local save. Failed area saves retain their draft, and failed deletions retain a retry/cancel request without removing visible content. If content changes before deletion, retry requires reviewing and confirming the current version.
+Creating, renaming and deleting web library content syncs to the account server automatically. Until the server confirms, the current tab holds the working copy; keep it open and retry if sync reports an error. Electron continues to save changes locally before sync.
 
 Web and desktop JSON/CSV/TSV imports retain the parsed content for retry when saving fails and report success after persistence. Mobile also imports/exports CSV and TSV through its file picker and share sheet. Mobile navigation separates Today, Library, Tutor, Sharing and Account while preserving open drafts. Desktop published links open in the default browser, and its trusted dashboard can copy share links.
 
 Hosted AI can enforce optional daily admission budgets through durable Redis, with atomic in-flight reservations and verified usage settlement. See [daily budget configuration](docs/task-model-routing.md#daily-hosted-budgets). These conservative admission units do not promise an exact provider billing cap.
 
-Website sign-in keeps first-party session credentials in HttpOnly, SameSite=Lax cookies, with Secure cookies in production. Account controls read verified status from the server; sign-out clears the current application session while preserving offline study data. [Sign in with ChatGPT setup](docs/sign-in-with-chatgpt.md) includes the OpenAI client request and activation steps; eligible desktop distributions also support local ChatGPT plan tutoring.
+Website sign-in keeps first-party session credentials in HttpOnly, SameSite=Lax cookies, with Secure cookies in production. Account controls read verified status from the server; signing out closes web study access, while mobile and Electron preserve offline study data. [Sign in with ChatGPT setup](docs/sign-in-with-chatgpt.md) includes the OpenAI client request and activation steps; eligible desktop distributions also support local ChatGPT plan tutoring.
 
 Set the issued token-endpoint authentication method explicitly; temporary sign-in outages offer retry or email recovery. Desktop ChatGPT credentials remain in the main process, and plan tutoring requires explicit consent.
 
@@ -108,7 +147,7 @@ Native tutor proposal review supports editing the Basic question, answer, learni
 
 Tutor approval saves the local card before acknowledging the server proposal. If its immutable revision already synchronized, the server verifies ownership, approved content and session/proposal provenance before linking that revision; this repair requires the server-only `SUPABASE_SERVICE_ROLE_KEY`. Later revisions use the existing insert trigger. A failed repair leaves the proposal available to retry and preserves the durable local card. Session restore also retries unlinked approved proposals, up to 100 per request; failures or excess backlog return unavailable instead of hiding incomplete recovery.
 
-For a hosted Supabase project, configure the site URL and redirect allow-list with both the web `/auth/confirm` URL and `recall://auth/confirm`, then set the Magic Link email template to link to `{{ .RedirectTo }}?token_hash={{ .TokenHash }}&type=email`. Set `RECALL_API_URL` to the hosted web API origin for desktop, and configure SMTP before sending production email.
+For a hosted Supabase project, configure the site URL and redirect allow-list with both the web `/auth/confirm` URL and `recall://auth/confirm`, then set the Magic Link email template to link to `{{ .RedirectTo }}?token_hash={{ .TokenHash }}&type=email`. Configure the Next.js server's `RECALL_API_URL` as the ASP.NET upstream when using its browser proxy. Set the Electron release's `RECALL_API_URL` and Expo's `EXPO_PUBLIC_RECALL_API_URL` to the reachable HTTPS API origin or gateway. Configure SMTP before sending production email.
 
 See the [deployment runbook](docs/deployment-runbook.md) for staging and production setup, release gates, deletion operations, and incident steps. The [threat model](docs/threat-model.md) summarizes sensitive data, trust boundaries, current controls, and security gaps.
 
@@ -117,6 +156,25 @@ The database migrations create owner-scoped learning content and private, append
 Publishing preserves inherited attribution, license and fork lineage. Public/unlisted sharing requires a deliberate license and permission acknowledgment for imported or forked material, unknown rights and changed licensing. Pending copy operations persist across failed responses or downloads; retrying receives the same cloud copy and preserves any existing local edits. Publication attempts also persist their draft fingerprint and operation identifier: a lost response recovers the same immutable version. Changed drafts require explicitly starting a new attempt because the original may already exist. Unlisted retries never restore rotated or revoked access tokens. A deleted or conflicting copy requires explicitly starting a new attempt. See [publishing contracts](docs/publishing-http.md).
 
 Forked areas can check for newer accessible public versions. Discovery excludes private and unlisted versions; an unavailable source needs an explicit author-provided share link. Review the structured differences before creating a separate copy; existing edits and review history remain intact.
+
+## Internal assessment model
+
+The shared domain names repeatable learning exercises `Assessment`, with
+`AssessmentId` identities and `AssessmentSchedule` scheduling state. Portable
+`AssessmentContent` is a discriminated union of the current flashcard (`basic`)
+and cloze formats. The UI still calls these formats cards, and Anki terminology
+remains specific to Anki imports and exports.
+
+Existing serialized `cards` and `cardId` fields, API commands and database names
+retain their current format so saved workspaces, backups and review history remain
+compatible. The internal rename does not require a data migration.
+
+Other assessment formats and plugin checkers are future work. New formats should
+extend the validated content union; checking should run through application
+adapters that return validated evidence, independently of spaced repetition
+scheduling. A checker result should not silently replace a learner's review
+rating. `NotebookAssessment` remains the separate summary of evidence about a
+concept, rather than a scheduled exercise.
 
 ## Adaptive assessment and the knowledge notebook
 
@@ -176,6 +234,35 @@ accuracy: review and edit each proposal before approving it into spaced repetiti
 Suggested concepts also require approval. Coverage shows where cards were proposed
 or approved; it does not claim mastery or complete coverage of a document.
 
+## Card quality, refinement and coverage planning
+
+Card editors and notebook proposals include deterministic quality hints that work
+offline: ambiguous wording, missing context, multiple retrieval targets and answer
+leakage. Optional AI inspection adds explanations and suggested fixes. Neither
+check certifies factual accuracy.
+
+Ask AI to clarify, shorten, split, add an example, convert to cloze, or follow custom
+refinement instructions. Compare the original with proposed cards before applying
+changes. Notebook refinements remain pending proposals until separately approved.
+Library wording updates first enter the editor draft and keep the existing schedule
+when saved. Approving replacements creates fresh cards and schedules, retires the
+original card, and preserves its review history. Stale edits and failed saves retain
+the existing content. Cloze proposals become actual cloze cards on approval.
+
+In study materials, request a coverage outline for each selected passage. Review
+the suggested claims and cited quotes, select or skip claims, and set their
+priorities. With a plan present, generation targets selected claims without pending
+or approved cards, in priority order. Plan further passages to include them; a plan
+is a bounded proposal, not an exhaustive document analysis. Coverage records linked
+card activity, not mastery or factual verification. Meaning-changing refinements
+and splits clear inherited claim links. Plans are stored locally with the notebook
+and included in notebook JSON exports.
+
+AI refinement, inspection, planning and generation use the configured hosted or
+eligible desktop ChatGPT provider and existing request budgets. Local quality
+checks, saved plans, card editing and studying remain available offline. No Recall
+server is required for eligible desktop ChatGPT plan operations.
+
 ## OCR, budgets and daily reminders
 
 **Local OCR:** the study import screen recognizes English scanned PDFs and PNG/JPEG
@@ -216,7 +303,15 @@ pnpm screenshots
 
 Storybook contains full-screen dashboard stories for desktop and mobile, native mobile client stories rendered through React Native Web, a revealed answer, card media preview and attachment editor, caught-up state, Explore, area editing, Insights, a review-sync conflict, an empty library, AI tutor states, native account deletion confirmation, and publish/review-attribution flows. The component catalog includes package-owned buttons, dialogs, empty states, and status badges with disabled, pending, keyboard focus, error, and recovery mock states, plus study-card states. Stories use deterministic mock data. `pnpm screenshots` opens Storybook headlessly and writes full-page PNGs to [`artifacts/storybook-screenshots/`](artifacts/storybook-screenshots/).
 
-`pnpm test` runs the pure regression and seeded property suite without an app, browser or database. `pnpm check:pure` adds the static gates. `pnpm test:integration` requires explicit local Supabase test credentials; `pnpm check` includes that suite and fails if it is unconfigured. See [verification setup and scope](docs/verification.md); browser/device and release acceptance remain separate.
+`pnpm test` runs unit regression and seeded property checks. `pnpm test:local-integration`
+exercises persisted application journeys and real storage adapters with controlled local ports;
+neither starts a browser, app server or database service. `pnpm check:pure` includes both and
+the static gates. `pnpm test:e2e` builds and serves the offline web application and mock
+Storybook screens, then runs Chromium workflows. Install its browser with
+`pnpm --filter web exec playwright install chromium`; CI installs it automatically and saves
+results and failure diagnostics. `pnpm --filter web test:e2e --check` only checks test syntax,
+without builds, servers or browsers. `pnpm test:integration` remains the separate Supabase suite
+requiring explicit disposable local credentials. See [verification setup and scope](docs/verification.md).
 
 `pnpm check:static` composes source policy, types, zero-warning lint, formatting, all application builds and the Storybook build. It does not run browsers, database commands or runtime tests. Full release acceptance still requires the report’s test and deployment gates.
 
@@ -225,17 +320,17 @@ See the [implementation completion audit](docs/implementation-audit.md) for sour
 ## Current scope
 
 - Next.js App Router and strict TypeScript workspace
-- IndexedDB browser workspace persistence, with validated adoption of legacy localStorage snapshots, so the study loop works without an account or network after the app loads
+- Authenticated server-backed web workspaces with tab-memory drafts; no browser database or localStorage persistence for web study data
 - FSRS review scheduling through `ts-fsrs`
 - Versioned Knowledge Area JSON and bounded ZIP package import/export with verified image/audio media, CSV/TSV card interchange, and private ZIP workspace backup/restore including review history, schedules, and attachments. Imports migrate the [documented Knowledge Area 0.9.0 shape](docs/knowledge-area-schema.md) to 1.0.0; unknown schema versions are rejected.
 - CSV/TSV imports accept up to 500 card rows and 200 distinct objectives per area. Titles must fit 80 characters; output passes both local and portable Knowledge Area validation before acceptance.
-- Authenticated account JSON export combining paged owner-scoped cloud records with the browser-local workspace
+- Authenticated account JSON export combining paged owner-scoped cloud records
 - Shared Effect account operations validate exports and deletion acknowledgments across clients; local cleanup follows a validated server deletion response.
 - Portable Knowledge Area exports omit personal review history and schedules; private workspace backups include local review history and schedules
 - Effect Schema validation for saved workspace and imported content
-- Effect application use cases for review transitions and workspace persistence, backed by a typed local-store port and browser adapter
+- Effect application use cases for review transitions and workspace persistence, backed by a typed local-store port and volatile web adapter
 - Shared Effect area/card create, edit, and delete operations validate commands and retain private schedules, review history, provenance, and sync tombstones. Card content is checked before storing a new attachment.
-- Versioned local workspace snapshots with migration from existing unversioned data
+- Versioned local workspace snapshots for native clients
 - Shared versioned Effect contracts validate workspace snapshots and content synchronization across web, Electron, and mobile
 - Optional Supabase Auth email-link sign-in and cookie-based server sessions
 - Credential-ready website Sign in with ChatGPT and explicit account linking; eligible desktop distributions can use local ChatGPT plan inference. See [configuration and supported flows](docs/sign-in-with-chatgpt.md).
@@ -266,7 +361,7 @@ See the [implementation completion audit](docs/implementation-audit.md) for sour
 - Web and Electron share framework-independent buttons, dialogs, empty states, status badges, and their styles through `@recall/ui-web`. The source-owned [shadcn/Radix foundation](docs/adr/0006-web-ui-foundation.md) supports composed links and a semantic Tailwind theme.
 - Native clients share React Native buttons, status badges, and empty states through `@recall/ui-native`; Storybook includes full-screen action, caught-up, and offline mock states.
 
-The repository's deep research report describes the wider target architecture. Tutor sessions, typed observations, and card proposals persist privately in Supabase and can be resumed on the current device. AI token usage and a 30-request daily account quota are implemented; all 13 local database migrations and generated database types are in place, while runtime RLS checks, authenticated usage validation, and broader cross-device conflict validation remain. Desktop supports local study, encrypted sign-in, authenticated API access, and a main-process SQLite media store; signed packaging and device-level runtime validation remain. Web and mobile support local image/audio attachments, hash-verified media ZIP packages, and private workspace backups that preserve local review history, schedules, and media. Full-screen media editing, review, publishing, token lifecycle, and Anki import states are captured in Storybook, with screenshots captured by the explicit local screenshot command. Browser SQL.js, Electron `node:sqlite`, and Expo SQLite adapters now read Anki Basic/Cloze cards and bounded revlog history from legacy `collection.anki2`, uncompressed `collection.anki21`, and normalized v18 `.anki21b` collections; modern field/deck/notetype rows are normalized through a shared decoder. The importer decompresses and validates `.anki21b` media with bounded Zstandard and protobuf decoding. Imported review logs append as review events and rebuild FSRS schedules; Anki intervals/due dates and broader template variants remain unsupported. Web sharing publishes verified image/audio media and creates persisted independent forks; shared Electron/mobile publication transports and a native mobile publishing panel use the shared client, with server-backed token rotation/revocation. Runtime native validation remains.
+The repository's deep research report describes the wider target architecture. Tutor sessions, typed observations, and card proposals persist privately in Supabase and can be resumed on the current device. AI token usage and a 30-request daily account quota are implemented; all 13 local database migrations and generated database types are in place, while runtime RLS checks, authenticated usage validation, and broader cross-device conflict validation remain. Desktop supports local study, encrypted sign-in, authenticated API access, and a main-process SQLite media store; signed packaging and device-level runtime validation remain. Web uses account-backed study data with only tab-memory drafts; mobile supports local image/audio attachments, hash-verified media ZIP packages, and private workspace backups that preserve local review history, schedules, and media. Full-screen media editing, review, publishing, token lifecycle, and Anki import states are captured in Storybook, with screenshots captured by the explicit local screenshot command. Browser SQL.js, Electron `node:sqlite`, and Expo SQLite adapters now read Anki Basic/Cloze cards and bounded revlog history from legacy `collection.anki2`, uncompressed `collection.anki21`, and normalized v18 `.anki21b` collections; modern field/deck/notetype rows are normalized through a shared decoder. The importer decompresses and validates `.anki21b` media with bounded Zstandard and protobuf decoding. Imported review logs append as review events and rebuild FSRS schedules; Anki intervals/due dates and broader template variants remain unsupported. Web sharing publishes verified image/audio media and creates persisted independent forks; shared Electron/mobile publication transports and a native mobile publishing panel use the shared client, with server-backed token rotation/revocation. Runtime native validation remains.
 
 ## Useful commands
 
@@ -286,7 +381,7 @@ Pull requests and pushes to `main` validate workflow syntax, run local regressio
 
 | Platform                    | Artifact                                                  | Configuration needed |
 | --------------------------- | --------------------------------------------------------- | -------------------- |
-| Web                         | Web server archive with installable offline support       | None for local study |
+| Web                         | Web server archive with installable static shell          | Account/API settings |
 | Android                     | Standalone APK signed with a development key; JS embedded | None                 |
 | iOS                         | Apple Silicon simulator `.app` archive; JS embedded       | None                 |
 | Linux x64                   | Unsigned AppImage                                         | None                 |
@@ -295,7 +390,7 @@ Pull requests and pushes to `main` validate workflow syntax, run local regressio
 
 Each `main` commit has its own desktop/mobile packaging run; newer commits do not cancel an earlier artifact build. Upload gates verify the expected desktop installer formats/architectures and embedded mobile JavaScript/native binaries before uploading. Artifacts are retained for 14 days in the matching GitHub Actions run.
 
-The client build workflows do not start Supabase or require service credentials. Optional repository variables supply public endpoint configuration (`NEXT_PUBLIC_*` for web/desktop, `RECALL_API_URL` for desktop, and `EXPO_PUBLIC_*` for mobile). Unset values disable those services; configured values do not disable offline use. CI always builds the complete web application and uploads one standalone server archive containing its browser assets and offline support. Start the archive with `node apps/web/server.js` after extraction. Server features are enabled by configuration; they are not a separate online application build. **Optional local Supabase integration** is a separate manual workflow. Storybook screenshots remain an explicit local command rather than a browser job on every push.
+The client build workflows do not start Supabase or require service credentials. Optional repository variables supply public endpoint configuration (`NEXT_PUBLIC_*` for web/desktop, `RECALL_API_URL` for desktop, and `EXPO_PUBLIC_*` for mobile). The web archive requires account and API services; mobile and Electron retain local study when those settings are unset. CI builds the web application and uploads one standalone server archive containing its browser assets and static app shell. Start the archive with `node apps/web/server.js` after extraction and configure its API services before signing in. **Optional local Supabase integration** is a separate manual workflow. Storybook screenshots remain an explicit local command rather than a browser job on every push.
 
 The manual desktop workflow can enable direct ChatGPT authorization for an eligible distribution. Signed desktop and EAS mobile release workflows remain opt-in and require their platform credentials. The default Android APK is for local installation, and the iOS archive is for a simulator; App Store/TestFlight and physical iOS installation require signed releases. Cross-platform workflows must run on GitHub before their resulting installers can be accepted; local source compilation alone does not establish native runtime behavior.
 
@@ -305,4 +400,4 @@ Shared layer ownership and allowed imports are documented in [architecture](docs
 
 Web and native synchronization now use a shared Effect coordinator and reconciliation operations; platform adapters provide authentication, HTTP, media storage and explicit time/ID generation.
 
-Cloud synchronization saves the verified canonical account identity before uploading content, media or reviews. A workspace bound to a different account stays available for offline study and export; starting a separate workspace requires explicitly clearing local data. Older synchronized workspaces without an account binding require an ownership confirmation. Sync requests carry the expected account identity so a sign-in change cannot redirect an upload to another account.
+Cloud synchronization saves the verified canonical account identity before uploading content, media or reviews. Native workspaces bound to a different account stay available for offline study and export; starting a separate workspace requires explicitly clearing local data. Web workspaces require an account and start from the server snapshot. Sync requests carry the expected account identity so a sign-in change cannot redirect an upload to another account.

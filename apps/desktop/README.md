@@ -15,7 +15,7 @@ No credentials, Supabase setup or running web server are required. Electron star
 
 ## Optional cloud features
 
-Account sync, hosted tutoring and cloud publishing require a configured Recall API. Desktop reads configuration from `apps/web` environment files: set `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` and `RECALL_API_URL` only when enabling those features. Leave Supabase values blank for local-only use. Restart the desktop development process after changing configuration.
+Account sync, hosted tutoring and cloud publishing require a configured Recall API. To run both services locally, use `pnpm dev:api:desktop` from the repository root. Desktop reads `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` and `RECALL_API_URL` from `apps/web` environment files; the combined launcher starts ASP.NET at `http://localhost:5000` and sets that API origin for Electron. Backend-only settings can go in the ignored root `.env.backend.local`; ASP.NET does not load the web `.env` file itself. Desktop stores its Supabase sign-in in encrypted OS storage and sends bearer tokens from the Electron main process. Leave Supabase values blank for local-only use. Restart the desktop development process after changing configuration. For release builds, set `RECALL_API_URL` to the reachable HTTPS API origin or gateway.
 
 Published share links open in your default browser when clicked. Links must use the configured `RECALL_API_URL` origin and a valid shared-version path; arbitrary external navigation remains blocked. If opening fails, copy the link into your browser.
 

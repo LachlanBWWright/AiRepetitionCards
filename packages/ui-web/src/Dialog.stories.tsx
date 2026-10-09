@@ -3,7 +3,6 @@ import { useState } from "react";
 import { Button } from "./Button";
 import { Dialog } from "./Dialog";
 import { StatusBadge } from "./StatusBadge";
-import "./catalog.css";
 
 function Confirmation({
   initialOpen = true,
@@ -17,12 +16,12 @@ function Confirmation({
   const [open, setOpen] = useState(initialOpen);
   const [deleted, setDeleted] = useState(false);
   return (
-    <main className="component-catalog">
-      <p className="eyebrow">RECALL · SHARED UI</p>
+    <main className="mx-auto min-h-screen max-w-5xl space-y-6 bg-background px-5 py-8 text-foreground sm:px-8 sm:py-16">
+      <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">RECALL · SHARED UI</p>
       <h1>
         Your learning <em>library.</em>
       </h1>
-      <section className="catalog-area">
+      <section className="mt-8 min-h-[150px] rounded-xl border bg-card p-5">
         <h2>Biology foundations</h2>
         <p>24 cards · 4 learning objectives</p>
         <Button
@@ -42,8 +41,8 @@ function Confirmation({
             if (!saving) setOpen(false);
           }}
         >
-          <div className="catalog-dialog">
-            <p className="eyebrow">YOUR LIBRARY</p>
+          <div className="w-full max-w-[440px] space-y-4 rounded-xl bg-card p-7">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">YOUR LIBRARY</p>
             <h2 id="shared-dialog-title">Delete Biology foundations?</h2>
             <p>Its cards will leave your library. Your private review history stays saved.</p>
             {failed && (
@@ -51,7 +50,7 @@ function Confirmation({
                 <StatusBadge tone="danger">Could not delete area. Try again.</StatusBadge>
               </p>
             )}
-            <div className="catalog-dialog-actions">
+            <div className="mt-4 flex flex-wrap gap-2.5">
               <Button
                 variant="secondary"
                 disabled={saving}

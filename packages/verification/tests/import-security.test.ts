@@ -7,7 +7,7 @@ import { sha256 } from "@noble/hashes/sha2.js";
 import {
   MediaReferenceSchema,
   createAreaId,
-  createCardId,
+  createAssessmentId,
   createObjectiveId,
   type KnowledgeArea,
   type Workspace,
@@ -28,7 +28,7 @@ import { hasSafeZipExpansion } from "../../application/src/zip-safety";
 
 const now = new Date("2026-10-03T00:00:00.000Z");
 const areaId = createAreaId("00000000-0000-4000-8000-000000000801");
-const cardId = createCardId("00000000-0000-4000-8000-000000000802");
+const cardId = createAssessmentId("00000000-0000-4000-8000-000000000802");
 const objectiveId = createObjectiveId("00000000-0000-4000-8000-000000000803");
 const document: KnowledgeArea = {
   schemaVersion: "1.0.0",

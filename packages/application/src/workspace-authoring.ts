@@ -1,16 +1,27 @@
 import {
+  RestoreCardVersionSchema,
+  restoreCardVersion,
+  cardVersionRestoresAsCopy,
+} from "./card-history";
+import {
   AreaIdSchema,
+  AssessmentIdSchema,
   SchedulerSettingsSchema,
   WorkspaceSchema,
   type AreaId,
   type Workspace,
 } from "@recall/domain";
 import { Effect, Schema } from "effect";
+import { CardProposalSchema } from "@recall/ai-core";
+import { createObjectiveId } from "@recall/domain";
+import { expandCloze } from "./cloze";
 import { AreaDetailsSchema, deleteLearningArea, saveLearningArea } from "./area-management";
 import { AreaSettingsSchema, updateAreaSettings } from "./area-settings";
 import { updateSchedulerSettings } from "./scheduler-settings";
 import {
   DeleteCardSchema,
+  CardContentSchema,
+  type CardContent,
   SaveCardSchema,
   createStudyCard,
   deleteStudyCard,
@@ -25,8 +36,23 @@ export const WorkspaceAuthoringCommandSchema = Schema.Union(
   Schema.Struct({ kind: Schema.Literal("save-area"), ...AreaDetailsSchema.fields }),
   Schema.Struct({ kind: Schema.Literal("delete-area"), areaId: AreaIdSchema }),
   Schema.Struct({ kind: Schema.Literal("create-card"), ...SaveCardSchema.fields }),
+  Schema.Struct({
+    kind: Schema.Literal("create-cards"),
+    areaId: AreaIdSchema,
+    cards: Schema.Array(
+      Schema.Struct({ cardId: AssessmentIdSchema, content: CardContentSchema }),
+    ).pipe(Schema.minItems(1), Schema.maxItems(5)),
+  }),
   Schema.Struct({ kind: Schema.Literal("update-card"), ...SaveCardSchema.fields }),
   Schema.Struct({ kind: Schema.Literal("delete-card"), ...DeleteCardSchema.fields }),
+  Schema.Struct({ kind: Schema.Literal("restore-card"), ...RestoreCardVersionSchema.fields }),
+  Schema.Struct({
+    kind: Schema.Literal("replace-card"),
+    ...DeleteCardSchema.fields,
+    cards: Schema.Array(
+      Schema.Struct({ cardId: AssessmentIdSchema, content: CardContentSchema }),
+    ).pipe(Schema.minItems(1), Schema.maxItems(5)),
+  }),
   Schema.Struct({
     kind: Schema.Literal("update-area-settings"),
     areaId: AreaIdSchema,
@@ -49,6 +75,38 @@ const failure = (
   message: string,
 ): WorkspaceAuthoringFailure => ({ _tag: "WorkspaceAuthoringFailure", reason, message });
 
+/** Convert validated AI text to authored content, preserving caller-selected metadata. */
+export function refinementCardContent(
+  input: unknown,
+  metadata: Pick<CardContent, "tags" | "media" | "objectiveIds">,
+): Effect.Effect<CardContent, WorkspaceAuthoringFailure> {
+  return Effect.gen(function* () {
+    const card = yield* Schema.decodeUnknown(CardProposalSchema)(input).pipe(
+      Effect.mapError(() => failure("invalid-input", "The proposed card could not be validated.")),
+    );
+    const cloze = card.front.includes("{{c")
+      ? yield* expandCloze(card.front).pipe(
+          Effect.mapError(() => failure("invalid-input", "The proposed cloze syntax is invalid.")),
+        )
+      : [];
+    if (cloze.length > 1)
+      return yield* Effect.fail(
+        failure("invalid-input", "Use one deletion number per proposed cloze card."),
+      );
+    const first = cloze[0];
+    return {
+      ...metadata,
+      objectiveIds: card.objectiveId
+        ? [createObjectiveId(card.objectiveId)]
+        : metadata.objectiveIds,
+      kind: first ? "cloze" : "basic",
+      front: first?.front ?? card.front,
+      back: first?.back ?? card.back,
+      ...(first ? { cloze: { text: first.text, deletionIndex: first.deletionIndex } } : {}),
+    };
+  });
+}
+
 function canonical(value: unknown): unknown {
   if (Array.isArray(value)) return value.map((item: unknown) => canonical(item));
   if (value !== null && typeof value === "object")
@@ -69,12 +127,35 @@ export function workspaceAuthoringBaseline(
 ): string | undefined {
   if (command.kind === "update-scheduler-settings")
     return JSON.stringify(canonical(workspace.schedulerSettings ?? { requestRetention: 0.9 }));
-  if (command.kind === "create-card" || (command.kind === "save-area" && command.mode === "create"))
+  if (
+    command.kind === "create-card" ||
+    command.kind === "create-cards" ||
+    (command.kind === "save-area" && command.mode === "create")
+  )
     return undefined;
   const areaId = command.kind === "save-area" ? command.id : command.areaId;
   const area = workspace.areas.find((item) => item.id === areaId);
+  if (command.kind === "restore-card") {
+    const card = area?.cards.find((card) => card.id === command.cardId);
+    return JSON.stringify(
+      canonical({
+        syncOwnerId: workspace.syncOwnerId ?? null,
+        restoresAsCopy: cardVersionRestoresAsCopy(workspace, command.areaId, command.cardId),
+        card: card ? authoredCard(card) : null,
+        area: area ? { ...area, cards: undefined } : null,
+        version:
+          workspace.cardVersions?.find((version) => version.id === command.versionId) ?? null,
+        deletedCards: workspace.deletedCards ?? [],
+        deletedAreas: workspace.deletedAreas ?? [],
+      }),
+    );
+  }
   if (!area) return JSON.stringify(null);
-  if (command.kind === "update-card" || command.kind === "delete-card") {
+  if (
+    command.kind === "update-card" ||
+    command.kind === "delete-card" ||
+    command.kind === "replace-card"
+  ) {
     const card = area.cards.find((item) => item.id === command.cardId);
     return JSON.stringify(
       canonical({ card: card ? authoredCard(card) : null, objectives: area.objectives ?? [] }),
@@ -155,7 +236,7 @@ export function applyWorkspaceAuthoringCommand(
         };
       }
       case "delete-area": {
-        const result = yield* deleteLearningArea(workspace, areaId).pipe(
+        const result = yield* deleteLearningArea(workspace, areaId, now).pipe(
           Effect.mapError(authoringFailure),
         );
         const selectedAreaId = result.workspace.areas[0]?.id;
@@ -171,20 +252,64 @@ export function applyWorkspaceAuthoringCommand(
         );
         return { workspace: next, selectedAreaId: areaId, message: "Card created." };
       }
+      case "create-cards": {
+        let next = workspace;
+        for (const card of command.cards) {
+          next = yield* createStudyCard(next, { ...card, areaId }, now).pipe(
+            Effect.mapError(authoringFailure),
+          );
+        }
+        return {
+          workspace: next,
+          selectedAreaId: areaId,
+          message: "Cards created with fresh schedules.",
+        };
+      }
+      case "restore-card": {
+        const next = yield* restoreCardVersion(workspace, command, now).pipe(
+          Effect.mapError(authoringFailure),
+        );
+        const copied = cardVersionRestoresAsCopy(workspace, command.areaId, command.cardId);
+        const selectedAreaId = next.cardVersions?.at(-1)?.areaId;
+        return {
+          workspace: next,
+          ...(selectedAreaId ? { selectedAreaId } : {}),
+          message: copied
+            ? "Card recovered as a new copy with a fresh schedule. Original review history is preserved."
+            : "Card version restored. Review history is preserved.",
+        };
+      }
       case "update-card": {
-        const next = yield* updateStudyCard(workspace, command).pipe(
+        const next = yield* updateStudyCard(workspace, command, now).pipe(
           Effect.mapError(authoringFailure),
         );
         return { workspace: next, selectedAreaId: areaId, message: "Card updated." };
       }
       case "delete-card": {
-        const next = yield* deleteStudyCard(workspace, command).pipe(
+        const next = yield* deleteStudyCard(workspace, command, now).pipe(
           Effect.mapError(authoringFailure),
         );
         return {
           workspace: next,
           selectedAreaId: areaId,
           message: "Card deleted. Review history is preserved.",
+        };
+      }
+      case "replace-card": {
+        // Compose against an immutable snapshot; callers persist only the complete result.
+        let next = yield* deleteStudyCard(workspace, command, now, "replace").pipe(
+          Effect.mapError(authoringFailure),
+        );
+        for (const replacement of command.cards) {
+          next = yield* createStudyCard(next, { ...replacement, areaId }, now).pipe(
+            Effect.mapError(authoringFailure),
+          );
+        }
+        return {
+          workspace: next,
+          selectedAreaId: areaId,
+          message:
+            "Replacement cards created with fresh schedules. Original review history is preserved.",
         };
       }
       case "update-area-settings": {

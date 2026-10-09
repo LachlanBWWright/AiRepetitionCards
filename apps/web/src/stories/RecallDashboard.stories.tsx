@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import RecallDashboard from "../features/dashboard/RecallDashboard";
+import { DashboardView } from "../features/dashboard/dashboard-navigation";
 import { createObjectiveId, createReviewEventId } from "@recall/domain";
 import { caughtUpWorkspace, emptyWorkspace, mockWorkspace } from "../features/workspace/mock-data";
 import {
@@ -113,13 +114,13 @@ export const TodayDesktop: Story = {
 
 export const DeletedCardPendingFirstSync: Story = {
   name: "Insights · offline deleted card pending first sync",
-  args: { demo: { workspace: deletedCardPendingWorkspace, view: "Insights" } },
+  args: { demo: { workspace: deletedCardPendingWorkspace, view: DashboardView.Insights } },
   globals: { viewport: { value: "recallDesktop", isRotated: false } },
 };
 
 export const DeletedAreaPendingFirstSync: Story = {
   name: "Insights · offline deleted area pending first sync",
-  args: { demo: { workspace: deletedAreaPendingWorkspace, view: "Insights" } },
+  args: { demo: { workspace: deletedAreaPendingWorkspace, view: DashboardView.Insights } },
   globals: { viewport: { value: "recallDesktop", isRotated: false } },
 };
 
@@ -128,7 +129,7 @@ export const LegacyDeletedReviewRecovery: Story = {
   args: {
     demo: {
       workspace: legacyMissingReviewContentWorkspace,
-      view: "Insights",
+      view: DashboardView.Insights,
       missingReviewContent: true,
     },
   },
@@ -164,7 +165,7 @@ export const ReviewRecoveryInLibrary: Story = {
   args: {
     demo: {
       workspace: mockWorkspace,
-      view: "Explore",
+      view: DashboardView.Library,
       showAnswer: true,
       reviewSaveState: "failure",
     },
@@ -208,7 +209,7 @@ export const CaughtUp: Story = {
 
 export const Explore: Story = {
   name: "Explore · learning areas",
-  args: { demo: { workspace: mockWorkspace, view: "Explore" } },
+  args: { demo: { workspace: mockWorkspace, view: DashboardView.Library } },
   globals: { viewport: { value: "recallDesktop", isRotated: false } },
 };
 
@@ -231,7 +232,7 @@ export const EditCardObjectivesAndTags: Story = {
       workspace: authoredWorkspace,
       selectedAreaId: "area-biology",
       editCardId: "bio-1",
-      view: "Explore",
+      view: DashboardView.Library,
     },
   },
   globals: { viewport: { value: "recallDesktop", isRotated: false } },
@@ -263,7 +264,7 @@ export const StaleCardDraft: Story = {
       editCardId: "bio-1",
       ...(staleCardDraft ? { cardDraft: staleCardDraft } : {}),
       cardEditConflict: true,
-      view: "Explore",
+      view: DashboardView.Library,
     },
   },
   globals: { viewport: { value: "recallDesktop", isRotated: false } },
@@ -276,7 +277,7 @@ export const AreaObjectivesAndInstructions: Story = {
       workspace: authoredWorkspace,
       selectedAreaId: "area-biology",
       areaSettings: true,
-      view: "Explore",
+      view: DashboardView.Library,
     },
   },
   globals: { viewport: { value: "recallDesktop", isRotated: false } },
@@ -304,19 +305,19 @@ export const EditClozeCard: Story = {
 
 export const Insights: Story = {
   name: "Insights · practice summary",
-  args: { demo: { workspace: mockWorkspace, view: "Insights" } },
+  args: { demo: { workspace: mockWorkspace, view: DashboardView.Insights } },
   globals: { viewport: { value: "recallDesktop", isRotated: false } },
 };
 
 export const PracticeHistory: Story = {
   name: "Insights · daily and weekly practice",
-  args: { demo: { workspace: practiceWorkspace, view: "Insights" } },
+  args: { demo: { workspace: practiceWorkspace, view: DashboardView.Insights } },
   globals: { viewport: { value: "recallDesktop", isRotated: false } },
 };
 
 export const ReviewSyncConflict: Story = {
   name: "Insights · review sync conflict",
-  args: { demo: { workspace: reviewConflictWorkspace, view: "Insights" } },
+  args: { demo: { workspace: reviewConflictWorkspace, view: DashboardView.Insights } },
   globals: { viewport: { value: "recallDesktop", isRotated: false } },
 };
 
@@ -375,7 +376,7 @@ export const StaleAreaDraft: Story = {
       editAreaId: "area-biology",
       ...(originalAreaDraft ? { areaDraft: originalAreaDraft } : {}),
       areaEditFailure: "stale-content",
-      view: "Explore",
+      view: DashboardView.Library,
     },
   },
   globals: { viewport: { value: "recallDesktop", isRotated: false } },
@@ -388,7 +389,7 @@ export const AreaSaveFailure: Story = {
       editAreaId: "area-biology",
       ...(originalAreaDraft ? { areaDraft: originalAreaDraft } : {}),
       areaEditFailure: "storage",
-      view: "Explore",
+      view: DashboardView.Library,
     },
   },
   globals: { viewport: { value: "recallDesktop", isRotated: false } },
@@ -400,7 +401,7 @@ export const AreaDeletionFailure: Story = {
       workspace: authoredWorkspace,
       selectedAreaId: "area-biology",
       deletionFailure: "area",
-      view: "Explore",
+      view: DashboardView.Library,
     },
   },
   globals: { viewport: { value: "recallDesktop", isRotated: false } },
@@ -412,7 +413,7 @@ export const CardDeletionFailure: Story = {
       workspace: authoredWorkspace,
       selectedAreaId: "area-biology",
       deletionFailure: "card",
-      view: "Explore",
+      view: DashboardView.Library,
     },
   },
   globals: { viewport: { value: "recallDesktop", isRotated: false } },

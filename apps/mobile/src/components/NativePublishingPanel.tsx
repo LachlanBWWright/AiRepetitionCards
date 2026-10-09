@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Pressable, Text, TextInput, View } from "react-native";
 import { Effect, Either } from "effect";
 import { designTokens } from "@recall/design-tokens";
 import {
@@ -80,6 +80,9 @@ export function NativePublishingPanel({
       : null;
   const setUpstreamUpdate = (value: UpstreamUpdateState) =>
     setUpstreamRecord({ sourceVersionId: upstreamArea?.forkedFromVersionId ?? null, value });
+  const [mode, setMode] = useState<"publish" | "receive">(
+    initialPublication ? "receive" : "publish",
+  );
   const [visibility, setVisibility] = useState<"private" | "unlisted" | "public">("unlisted");
   const [attribution, setAttribution] = useState(area?.attribution ?? "");
   const [license, setLicense] = useState(area?.licence ?? "");
@@ -225,7 +228,7 @@ export function NativePublishingPanel({
       setPublicationConflict(false);
       setNotice(
         Either.isRight(cleared)
-          ? "Knowledge Area published. Its study history remains private."
+          ? "Published."
           : "Published, but the pending attempt could not be cleared. Retrying recovers this version.",
       );
     }
@@ -358,7 +361,7 @@ export function NativePublishingPanel({
       copied
         ? cleared && Either.isLeft(cleared)
           ? "Your copy was added. Retrying will reopen the same copy because its pending operation could not be cleared."
-          : "A personal copy was added. Its review schedule starts fresh."
+          : "Copy added with a fresh review schedule."
         : "Your cloud copy is saved, but its cards and attachments could not be saved on this device. Retry to recover the same copy.",
     );
     setBusy(false);
@@ -366,111 +369,154 @@ export function NativePublishingPanel({
 
   if (!clients)
     return (
-      <View style={styles.panel} testID="native-publishing-panel">
-        <Text style={styles.eyebrow}>SHARE KNOWLEDGE</Text>
-        <Text style={styles.title}>Local sharing</Text>
-        <Text style={styles.hint}>
-          Cloud publishing is not configured on this device. Use Account to export an area package
-          or import a shared file. Personal schedules and review history stay out of area packages.
+      <View
+        className={"gap-[9px] py-[16px] border-t border-t-recall-line"}
+        testID="native-publishing-panel"
+      >
+        <Text className={"text-recall-ink text-[17px] font-bold"}>Share files</Text>
+        <Text className={"text-recall-muted text-[12px] leading-[18px]"}>
+          Import or export an area in Account. Shared area files exclude your review history and
+          schedules.
         </Text>
       </View>
     );
   return (
-    <View style={styles.panel} testID="native-publishing-panel">
-      <Text style={styles.eyebrow}>SHARE KNOWLEDGE</Text>
-      <Text style={styles.title}>Publish or receive an area</Text>
-      <Text style={styles.hint}>
-        Shared content does not include personal schedules or review history.
-      </Text>
-      <Text style={styles.subheading}>Publish {area ? `“${area.title}”` : "an area"}</Text>
-      <View style={styles.row}>
-        {(["unlisted", "public", "private"] as const).map((item) => (
+    <View
+      className={"gap-[9px] py-[16px] border-t border-t-recall-line"}
+      testID="native-publishing-panel"
+    >
+      <View className={"flex-row gap-[8px]"}>
+        {(["publish", "receive"] as const).map((value) => (
           <Pressable
-            key={item}
+            key={value}
             accessibilityRole="button"
-            accessibilityState={{ selected: visibility === item }}
-            onPress={() => setVisibility(item)}
-            style={[styles.choice, visibility === item && styles.choiceSelected]}
+            accessibilityState={{ selected: mode === value, disabled: busy }}
+            disabled={busy}
+            onPress={() => setMode(value)}
+            className={`flex-1 min-h-[44px] items-center justify-center border-b border-recall-line ${mode === value ? "border-b-2 border-b-recall-darkGreen" : ""}`}
           >
-            <Text style={styles.choiceText}>{item}</Text>
+            <Text className={"text-recall-darkGreen text-[12px] font-bold capitalize"}>
+              {value === "publish" ? "Publish" : "Receive"}
+            </Text>
           </Pressable>
         ))}
       </View>
-      <TextInput
-        accessibilityLabel="Attribution"
-        onChangeText={setAttribution}
-        placeholder="Attribution (optional)"
-        placeholderTextColor={palette.muted}
-        maxLength={200}
-        style={styles.input}
-        value={attribution}
-      />
-      <TextInput
-        accessibilityLabel="License"
-        onChangeText={(value) => {
-          setLicense(value);
-          setReuseConfirmed(false);
-        }}
-        placeholder="Choose a license explicitly"
-        placeholderTextColor={palette.muted}
-        maxLength={120}
-        style={styles.input}
-        value={license}
-      />
-      {visibility !== "private" && needsReuseConfirmation && (
-        <Pressable
-          accessibilityRole="checkbox"
-          accessibilityState={{ checked: reuseConfirmed }}
-          onPress={() => setReuseConfirmed(!reuseConfirmed)}
-          style={styles.choice}
-        >
-          <Text>
-            {reuseConfirmed ? "☑" : "☐"} I own this content or have permission to share it under the
-            selected license.
+      {mode === "publish" && (
+        <>
+          <Text className={"text-recall-muted text-[12px] leading-[18px]"}>
+            Only content is shared. Your review history and schedule stay private.
           </Text>
-        </Pressable>
+          <Text className={"text-recall-ink text-[14px] font-bold mt-[4px]"}>
+            Publish {area ? `“${area.title}”` : "an area"}
+          </Text>
+          <View className={"flex-row gap-[8px]"}>
+            {(["unlisted", "public", "private"] as const).map((item) => (
+              <Pressable
+                key={item}
+                accessibilityRole="button"
+                accessibilityState={{ selected: visibility === item }}
+                onPress={() => setVisibility(item)}
+                className={`flex-1 items-center py-[9px] rounded-[9px] bg-recall-paper ${visibility === item ? "bg-recall-green" : ""}`}
+              >
+                <Text className={"text-recall-darkGreen text-[12px] font-bold capitalize"}>
+                  {item}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+          <Text className={"text-recall-muted text-[12px] leading-[18px]"}>
+            {visibility === "public"
+              ? "Anyone can find and view this area."
+              : visibility === "unlisted"
+                ? "Anyone with the share token can view this area."
+                : "Only your account can view this area."}
+          </Text>
+          <TextInput
+            accessibilityLabel="Attribution"
+            onChangeText={setAttribution}
+            placeholder="Attribution (optional)"
+            placeholderTextColor={palette.muted}
+            maxLength={200}
+            className={"min-h-[42px] px-[12px] rounded-[9px] bg-recall-paper text-recall-ink"}
+            value={attribution}
+          />
+          <TextInput
+            accessibilityLabel="License"
+            onChangeText={(value) => {
+              setLicense(value);
+              setReuseConfirmed(false);
+            }}
+            placeholder="Choose a license explicitly"
+            placeholderTextColor={palette.muted}
+            maxLength={120}
+            className={"min-h-[42px] px-[12px] rounded-[9px] bg-recall-paper text-recall-ink"}
+            value={license}
+          />
+          {visibility !== "private" && needsReuseConfirmation && (
+            <Pressable
+              accessibilityRole="checkbox"
+              accessibilityState={{ checked: reuseConfirmed }}
+              onPress={() => setReuseConfirmed(!reuseConfirmed)}
+              className={"flex-1 items-center py-[9px] rounded-[9px] bg-recall-paper"}
+            >
+              <Text>
+                {reuseConfirmed ? "☑" : "☐"} I own this content or have permission to share it under
+                the selected license.
+              </Text>
+            </Pressable>
+          )}
+          <Pressable
+            accessibilityRole="button"
+            disabled={
+              busy ||
+              !area ||
+              !mediaStore ||
+              (visibility !== "private" &&
+                (!license.trim() || (needsReuseConfirmation && !reuseConfirmed)))
+            }
+            onPress={() => void publish()}
+            className={
+              "min-h-[42px] justify-center items-center px-[14px] rounded-[9px] bg-recall-darkGreen"
+            }
+          >
+            {busy ? (
+              <ActivityIndicator color={palette.surface} />
+            ) : (
+              <Text className={"text-recall-surface font-bold text-[12px]"}>Publish area</Text>
+            )}
+          </Pressable>
+          {versionId ? (
+            <Text selectable className={"text-recall-muted text-[12px] leading-[18px]"}>
+              Version: {versionId}
+              {shareToken ? `\nShare token: ${shareToken}` : ""}
+            </Text>
+          ) : null}
+        </>
       )}
-      <Pressable
-        accessibilityRole="button"
-        disabled={
-          busy ||
-          !area ||
-          !mediaStore ||
-          (visibility !== "private" &&
-            (!license.trim() || (needsReuseConfirmation && !reuseConfirmed)))
-        }
-        onPress={() => void publish()}
-        style={styles.button}
-      >
-        {busy ? (
-          <ActivityIndicator color={palette.surface} />
-        ) : (
-          <Text style={styles.buttonText}>Publish area</Text>
-        )}
-      </Pressable>
-      {versionId ? (
-        <Text selectable style={styles.hint}>
-          Version: {versionId}
-          {shareToken ? `\nShare token: ${shareToken}` : ""}
-        </Text>
-      ) : null}
       {upstreamArea && (
-        <View style={styles.preview} accessibilityLabel="Upstream updates">
-          <Text style={styles.eyebrow}>YOUR FORK · UPSTREAM UPDATES</Text>
-          <Text style={styles.hint}>
-            Check newer public versions. Your copy and review history stay unchanged; review
-            differences before adding a separate copy.
+        <View
+          className={"gap-[10px] py-[14px] border-t border-recall-line"}
+          accessibilityLabel="Upstream updates"
+        >
+          <Text className={"text-recall-ink text-[14px] font-bold mt-[4px]"}>
+            Updates to your copy
+          </Text>
+          <Text className={"text-recall-muted text-[12px] leading-[18px]"}>
+            Review a newer version before adding it as a separate copy.
           </Text>
           <Pressable
             accessibilityRole="button"
             disabled={busy}
             onPress={() => void checkUpstreamUpdates()}
-            style={styles.secondaryButton}
+            className={"min-h-[40px] justify-center items-center border-b border-recall-line"}
           >
-            <Text style={styles.secondaryText}>Check upstream updates</Text>
+            <Text className={"text-recall-darkGreen font-bold text-[12px]"}>Check for updates</Text>
           </Pressable>
           {upstreamUpdate && (
-            <Text accessibilityLiveRegion="polite" style={styles.hint}>
+            <Text
+              accessibilityLiveRegion="polite"
+              className={"text-recall-muted text-[12px] leading-[18px]"}
+            >
               {upstreamUpdate.status === "available"
                 ? "A newer public version is available. Review its differences before adding a separate copy."
                 : upstreamUpdate.status === "no-public-update"
@@ -486,87 +532,116 @@ export function NativePublishingPanel({
               disabled={busy}
               onPress={() => {
                 setToken("");
+                setMode("receive");
                 void receive(upstreamUpdate.versionId);
               }}
-              style={styles.secondaryButton}
+              className={"min-h-[40px] justify-center items-center border-b border-recall-line"}
             >
-              <Text style={styles.secondaryText}>Review available version</Text>
+              <Text className={"text-recall-darkGreen font-bold text-[12px]"}>
+                Review available version
+              </Text>
             </Pressable>
           )}
         </View>
       )}
-      <Text style={styles.subheading}>Receive a shared area</Text>
-      <TextInput
-        accessibilityLabel="Publication version ID"
-        autoCapitalize="none"
-        onChangeText={setVersionId}
-        placeholder="Paste a version ID"
-        placeholderTextColor={palette.muted}
-        style={styles.input}
-        value={versionId}
-      />
-      <TextInput
-        accessibilityLabel="Share token"
-        autoCapitalize="none"
-        onChangeText={setToken}
-        placeholder="Share token, if required"
-        placeholderTextColor={palette.muted}
-        style={styles.input}
-        value={token}
-      />
-      <Pressable
-        accessibilityRole="button"
-        disabled={busy || !versionId.trim()}
-        onPress={() => void receive()}
-        style={styles.secondaryButton}
-      >
-        <Text style={styles.secondaryText}>Preview shared area</Text>
-      </Pressable>
-      {publication ? (
-        <View style={styles.preview}>
-          <Text style={styles.subheading}>{publication.document.title}</Text>
-          <Text style={styles.hint}>
-            {publication.document.description || "No description provided."}
-          </Text>
-          <Text style={styles.hint}>
-            Attribution: {publication.attribution || "Not provided"} · License:{" "}
-            {publication.license || "Not provided"}
-          </Text>
-          <Text style={styles.hint}>{publication.document.cards.length} cards</Text>
-          {comparison ? (
-            <View accessibilityLabel="Upstream version comparison" style={styles.comparison}>
-              <Text style={styles.eyebrow}>COMPARE WITH YOUR COPY</Text>
-              <Text style={styles.hint}>
-                Cards: +{comparison.cards.added.length} · ~{comparison.cards.changed.length} · −
-                {comparison.cards.removed.length}
-              </Text>
-              <Text style={styles.hint}>
-                Objectives: +{comparison.objectives.added.length} · ~
-                {comparison.objectives.changed.length} · −{comparison.objectives.removed.length}
-              </Text>
-              {comparison.metadata.length > 0 ? (
-                <Text style={styles.hint}>
-                  Changed details: {comparison.metadata.map(({ field }) => field).join(", ")}
-                </Text>
-              ) : null}
-              <Text style={styles.hint}>Counts include edits made to your copy.</Text>
-            </View>
-          ) : null}
-          {comparisonFailed ? (
-            <Text accessibilityRole="alert" style={styles.hint}>
-              The shared version loaded, but its differences could not be compared.
-            </Text>
-          ) : null}
+      {mode === "receive" && (
+        <>
+          <Text className={"text-recall-ink text-[14px] font-bold mt-[4px]"}>Receive an area</Text>
+          <TextInput
+            accessibilityLabel="Publication version ID"
+            autoCapitalize="none"
+            onChangeText={setVersionId}
+            placeholder="Paste a version ID"
+            placeholderTextColor={palette.muted}
+            className={"min-h-[42px] px-[12px] rounded-[9px] bg-recall-paper text-recall-ink"}
+            value={versionId}
+          />
+          <TextInput
+            accessibilityLabel="Share token"
+            autoCapitalize="none"
+            onChangeText={setToken}
+            placeholder="Share token, if required"
+            placeholderTextColor={palette.muted}
+            className={"min-h-[42px] px-[12px] rounded-[9px] bg-recall-paper text-recall-ink"}
+            value={token}
+          />
           <Pressable
             accessibilityRole="button"
-            disabled={busy}
-            onPress={() => void fork()}
-            style={styles.button}
+            disabled={busy || !versionId.trim()}
+            onPress={() => void receive()}
+            className={"min-h-[40px] justify-center items-center border-b border-recall-line"}
           >
-            <Text style={styles.buttonText}>Add a personal copy</Text>
+            <Text className={"text-recall-darkGreen font-bold text-[12px]"}>
+              Preview shared area
+            </Text>
           </Pressable>
-        </View>
-      ) : null}
+          {publication ? (
+            <View className={"gap-[10px] py-[14px] border-t border-recall-line"}>
+              <Text className={"text-recall-ink text-[14px] font-bold mt-[4px]"}>
+                {publication.document.title}
+              </Text>
+              {publication.document.description ? (
+                <Text className={"text-recall-muted text-[12px] leading-[18px]"}>
+                  {publication.document.description}
+                </Text>
+              ) : null}
+              <Text className={"text-recall-muted text-[12px] leading-[18px]"}>
+                Attribution: {publication.attribution || "Not provided"} · License:{" "}
+                {publication.license || "Not provided"}
+              </Text>
+              <Text className={"text-recall-muted text-[12px] leading-[18px]"}>
+                {publication.document.cards.length} cards
+              </Text>
+              {comparison ? (
+                <View
+                  accessibilityLabel="Upstream version comparison"
+                  className={"gap-[6px] py-[10px] border-t border-recall-line"}
+                >
+                  <Text className={"text-recall-ink text-[14px] font-bold mt-[4px]"}>
+                    Changes from your copy
+                  </Text>
+                  <Text className={"text-recall-muted text-[12px] leading-[18px]"}>
+                    Cards: +{comparison.cards.added.length} · ~{comparison.cards.changed.length} · −
+                    {comparison.cards.removed.length}
+                  </Text>
+                  <Text className={"text-recall-muted text-[12px] leading-[18px]"}>
+                    Objectives: +{comparison.objectives.added.length} · ~
+                    {comparison.objectives.changed.length} · −{comparison.objectives.removed.length}
+                  </Text>
+                  {comparison.metadata.length > 0 ? (
+                    <Text className={"text-recall-muted text-[12px] leading-[18px]"}>
+                      Changed details: {comparison.metadata.map(({ field }) => field).join(", ")}
+                    </Text>
+                  ) : null}
+                  <Text className={"text-recall-muted text-[12px] leading-[18px]"}>
+                    Counts include edits made to your copy.
+                  </Text>
+                </View>
+              ) : null}
+              {comparisonFailed ? (
+                <Text
+                  accessibilityRole="alert"
+                  className={"text-recall-muted text-[12px] leading-[18px]"}
+                >
+                  The shared version loaded, but its differences could not be compared.
+                </Text>
+              ) : null}
+              <Pressable
+                accessibilityRole="button"
+                disabled={busy}
+                onPress={() => void fork()}
+                className={
+                  "min-h-[42px] justify-center items-center px-[14px] rounded-[9px] bg-recall-darkGreen"
+                }
+              >
+                <Text className={"text-recall-surface font-bold text-[12px]"}>
+                  Add a personal copy
+                </Text>
+              </Pressable>
+            </View>
+          ) : null}
+        </>
+      )}
       {forkConflict && publication && (
         <Pressable
           accessibilityRole="button"
@@ -589,14 +664,16 @@ export function NativePublishingPanel({
               ),
             );
           }}
-          style={styles.choice}
+          className={"flex-1 items-center py-[9px] rounded-[9px] bg-recall-paper"}
         >
           <Text>Start a new copy attempt</Text>
         </Pressable>
       )}
       {publicationConflict && area ? (
         <Pressable
-          style={styles.button}
+          className={
+            "min-h-[42px] justify-center items-center px-[14px] rounded-[9px] bg-recall-darkGreen"
+          }
           accessibilityRole="button"
           disabled={busy}
           onPress={() => {
@@ -615,69 +692,16 @@ export function NativePublishingPanel({
             );
           }}
         >
-          <Text style={styles.buttonText}>Start a new publication attempt</Text>
+          <Text className={"text-recall-surface font-bold text-[12px]"}>
+            Start a new publication attempt
+          </Text>
         </Pressable>
       ) : null}
       {notice ? (
-        <Text accessibilityRole="alert" style={styles.hint}>
+        <Text accessibilityRole="alert" className={"text-recall-muted text-[12px] leading-[18px]"}>
           {notice}
         </Text>
       ) : null}
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  panel: {
-    gap: 9,
-    padding: 14,
-    backgroundColor: palette.surface,
-    borderTopWidth: 1,
-    borderTopColor: palette.line,
-  },
-  eyebrow: { color: palette.darkGreen, fontSize: 11, fontWeight: "700", letterSpacing: 1 },
-  title: { color: palette.ink, fontSize: 17, fontWeight: "700" },
-  subheading: { color: palette.ink, fontSize: 14, fontWeight: "700", marginTop: 4 },
-  hint: { color: palette.muted, fontSize: 12, lineHeight: 18 },
-  comparison: { gap: 4, padding: 10, borderRadius: 10, backgroundColor: palette.paper },
-  row: { flexDirection: "row", gap: 8 },
-  choice: {
-    flex: 1,
-    alignItems: "center",
-    paddingVertical: 9,
-    borderRadius: 9,
-    backgroundColor: palette.paper,
-  },
-  choiceSelected: { backgroundColor: palette.green },
-  choiceText: {
-    color: palette.darkGreen,
-    fontSize: 12,
-    fontWeight: "700",
-    textTransform: "capitalize",
-  },
-  input: {
-    minHeight: 42,
-    paddingHorizontal: 12,
-    borderRadius: 9,
-    backgroundColor: palette.paper,
-    color: palette.ink,
-  },
-  button: {
-    minHeight: 42,
-    justifyContent: "center",
-    alignItems: "center",
-    paddingHorizontal: 14,
-    borderRadius: 9,
-    backgroundColor: palette.darkGreen,
-  },
-  buttonText: { color: palette.surface, fontWeight: "700", fontSize: 12 },
-  secondaryButton: {
-    minHeight: 40,
-    justifyContent: "center",
-    alignItems: "center",
-    borderRadius: 9,
-    backgroundColor: palette.green,
-  },
-  secondaryText: { color: palette.darkGreen, fontWeight: "700", fontSize: 12 },
-  preview: { gap: 7, padding: 11, borderRadius: 10, backgroundColor: palette.paper },
-});

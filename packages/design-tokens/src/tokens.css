@@ -1,18 +1,18 @@
 /* Generated from tokens.json with pnpm tokens:write. */
 :root {
-  --recall-paper: #faf9f6;
-  --recall-surface: #ffffff;
-  --recall-ink: #252820;
-  --recall-muted: #62665c;
-  --recall-line: #eae9e3;
-  --recall-green: #c4ed68;
-  --recall-dark-green: #35512d;
+  --recall-paper: #0a1020;
+  --recall-surface: #111a2c;
+  --recall-ink: #e6edf8;
+  --recall-muted: #98a8c0;
+  --recall-line: #293950;
+  --recall-green: #60a5fa;
+  --recall-dark-green: #3b82f6;
   --recall-coral: #ffb29b;
   --recall-violet: #c4b5fd;
   --recall-amber: #f7cb70;
   --recall-danger: #a74132;
-  --recall-radius-card: 28px;
-  --recall-radius-control: 16px;
+  --recall-radius-card: 12px;
+  --recall-radius-control: 8px;
   --recall-radius-pill: 999px;
   --recall-spacing-xs: 8px;
   --recall-spacing-sm: 12px;

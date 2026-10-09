@@ -53,6 +53,7 @@ function shellPolicy() {
 }
 
 const nextConfig: NextConfig = {
+  typedRoutes: true,
   output: "standalone",
   outputFileTracingRoot: fileURLToPath(new URL("../../", import.meta.url)),
   transpilePackages: ["@recall/ui-web"],

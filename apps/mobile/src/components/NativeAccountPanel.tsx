@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Pressable, Text, TextInput, View } from "react-native";
 import { Effect, Either } from "effect";
 import { designTokens } from "@recall/design-tokens";
 
@@ -46,6 +46,8 @@ export function NativeAccountPanel({
   readonly onAdoptLegacyOwner?: () => Promise<string>;
   readonly onResetForAccount?: () => void;
 }) {
+  const [showTransfers, setShowTransfers] = useState(false);
+  const [showAccountActions, setShowAccountActions] = useState(initialDeleteConfirmationOpen);
   const [email, setEmail] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -160,94 +162,132 @@ export function NativeAccountPanel({
   }
 
   return (
-    <View style={styles.panel} testID="native-account-panel">
-      <View style={styles.heading}>
-        <Text style={styles.title}>{cloudAvailable ? "Cloud account" : "Local data"}</Text>
-        {account ? <Text style={styles.signedIn}>{account}</Text> : null}
+    <View
+      className={"gap-[10px] py-[16px] border-t-recall-line border-t"}
+      testID="native-account-panel"
+    >
+      <View className={"gap-[6px]"}>
+        <Text className={"text-recall-ink text-[15px] font-bold"}>
+          {cloudAvailable ? "Sign in and sync" : "Files and backups"}
+        </Text>
+        {account ? <Text className={"text-recall-darkGreen text-[12px]"}>{account}</Text> : null}
       </View>
       {!cloudAvailable && (
-        <Text style={styles.notice}>
-          Cloud sign-in and sync are not configured on this device. Study, edit cards and transfer
-          private backups locally.
-        </Text>
+        <Text className={"text-recall-muted text-[12px]"}>Sync is unavailable on this device.</Text>
       )}
-      {onImportDelimited || onExportDelimited ? (
-        <>
-          <Text style={styles.notice}>
-            CSV/TSV transfers questions, answers, tags and objective labels. Schedules, review
-            history and attachments are excluded. Use an area package for attachments or a private
-            backup for schedules and review history.
-          </Text>
-          {(["csv", "tsv"] as const).map((format) => (
-            <View key={format} style={styles.fileActions}>
-              {onImportDelimited ? (
-                <Pressable
-                  accessibilityRole="button"
-                  disabled={fileBusy}
-                  onPress={() => void runFileAction(() => onImportDelimited(format))}
-                  style={styles.fileButton}
-                >
-                  <Text style={styles.fileButtonText}>Import {format.toUpperCase()}</Text>
-                </Pressable>
-              ) : null}
-              {onExportDelimited ? (
-                <Pressable
-                  accessibilityRole="button"
-                  disabled={fileBusy}
-                  onPress={() => void runFileAction(() => onExportDelimited(format))}
-                  style={styles.fileButton}
-                >
-                  <Text style={styles.fileButtonText}>Export {format.toUpperCase()}</Text>
-                </Pressable>
-              ) : null}
-            </View>
-          ))}
-        </>
-      ) : null}
-      <View style={styles.fileActions}>
-        <Pressable
-          accessibilityRole="button"
-          disabled={fileBusy}
-          onPress={() => void runFileAction(onImport)}
-          style={styles.fileButton}
-        >
-          <Text style={styles.fileButtonText}>{fileBusy ? "Working…" : "Import area or ZIP"}</Text>
-        </Pressable>
-        <Pressable
-          accessibilityRole="button"
-          disabled={fileBusy}
-          onPress={() => void runFileAction(onExport)}
-          style={styles.fileButton}
-        >
-          <Text style={styles.fileButtonText}>Export area package</Text>
-        </Pressable>
-      </View>
-      <View style={styles.fileActions}>
-        <Pressable
-          accessibilityRole="button"
-          disabled={fileBusy}
-          onPress={() => void runFileAction(onBackupRestore)}
-          style={styles.fileButton}
-        >
-          <Text style={styles.fileButtonText}>Restore private backup</Text>
-        </Pressable>
-        <Pressable
-          accessibilityRole="button"
-          disabled={fileBusy}
-          onPress={() => void runFileAction(onBackupExport)}
-          style={styles.fileButton}
-        >
-          <Text style={styles.fileButtonText}>Export private backup</Text>
-        </Pressable>
-      </View>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityState={{ expanded: showTransfers }}
+        onPress={() => setShowTransfers((value) => !value)}
+        className={"flex-row justify-between items-center min-h-[44px] gap-[12px]"}
+      >
+        <Text className={"text-recall-ink text-[15px] font-bold"}>Import, export and backups</Text>
+        <Text className={"text-recall-muted text-[12px]"}>{showTransfers ? "⌃" : "⌄"}</Text>
+      </Pressable>
+      {showTransfers && (
+        <View className={"gap-[10px] pb-[12px]"}>
+          {onImportDelimited || onExportDelimited ? (
+            <>
+              <Text className={"text-recall-muted text-[12px]"}>
+                CSV and TSV include card text and tags. Area packages include attachments. Private
+                backups also include schedules and review history.
+              </Text>
+              {(["csv", "tsv"] as const).map((format) => (
+                <View key={format} className={"flex-row gap-[8px]"}>
+                  {onImportDelimited ? (
+                    <Pressable
+                      accessibilityRole="button"
+                      disabled={fileBusy}
+                      onPress={() => void runFileAction(() => onImportDelimited(format))}
+                      className={
+                        "flex-1 min-h-[38px] justify-center items-center px-[8px] border-b border-recall-line"
+                      }
+                    >
+                      <Text className={"text-recall-darkGreen font-bold text-[12px]"}>
+                        Import {format.toUpperCase()}
+                      </Text>
+                    </Pressable>
+                  ) : null}
+                  {onExportDelimited ? (
+                    <Pressable
+                      accessibilityRole="button"
+                      disabled={fileBusy}
+                      onPress={() => void runFileAction(() => onExportDelimited(format))}
+                      className={
+                        "flex-1 min-h-[38px] justify-center items-center px-[8px] border-b border-recall-line"
+                      }
+                    >
+                      <Text className={"text-recall-darkGreen font-bold text-[12px]"}>
+                        Export {format.toUpperCase()}
+                      </Text>
+                    </Pressable>
+                  ) : null}
+                </View>
+              ))}
+            </>
+          ) : null}
+          <View className={"flex-row gap-[8px]"}>
+            <Pressable
+              accessibilityRole="button"
+              disabled={fileBusy}
+              onPress={() => void runFileAction(onImport)}
+              className={
+                "flex-1 min-h-[38px] justify-center items-center px-[8px] border-b border-recall-line"
+              }
+            >
+              <Text className={"text-recall-darkGreen font-bold text-[12px]"}>
+                {fileBusy ? "Working…" : "Import area or ZIP"}
+              </Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              disabled={fileBusy}
+              onPress={() => void runFileAction(onExport)}
+              className={
+                "flex-1 min-h-[38px] justify-center items-center px-[8px] border-b border-recall-line"
+              }
+            >
+              <Text className={"text-recall-darkGreen font-bold text-[12px]"}>
+                Export area package
+              </Text>
+            </Pressable>
+          </View>
+          <View className={"flex-row gap-[8px]"}>
+            <Pressable
+              accessibilityRole="button"
+              disabled={fileBusy}
+              onPress={() => void runFileAction(onBackupRestore)}
+              className={
+                "flex-1 min-h-[38px] justify-center items-center px-[8px] border-b border-recall-line"
+              }
+            >
+              <Text className={"text-recall-darkGreen font-bold text-[12px]"}>
+                Restore private backup
+              </Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              disabled={fileBusy}
+              onPress={() => void runFileAction(onBackupExport)}
+              className={
+                "flex-1 min-h-[38px] justify-center items-center px-[8px] border-b border-recall-line"
+              }
+            >
+              <Text className={"text-recall-darkGreen font-bold text-[12px]"}>
+                Export private backup
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+      )}
       {cloudAvailable && ownershipIssue ? (
-        <View style={styles.conflict}>
-          <Text style={styles.conflictTitle}>
+        <View className={"gap-[10px] py-[12px] border-t border-recall-line"}>
+          <Text className={"text-recall-ink font-bold text-[13px]"}>
             {ownershipIssue === "account-mismatch"
               ? "Workspace belongs to another account"
               : "Confirm this workspace’s cloud account"}
           </Text>
-          <Text style={styles.notice}>
+          <Text className={"text-recall-muted text-[12px]"}>
             {ownershipIssue === "account-mismatch"
               ? "Sync is blocked. Keep studying offline, sign back in to its owner, or export a private backup before starting a fresh workspace for this account."
               : "Older sync data has no recorded owner. Only continue if the current account owns its existing cloud areas and review history."}
@@ -256,9 +296,13 @@ export function NativeAccountPanel({
             accessibilityRole="button"
             disabled={fileBusy}
             onPress={() => void runFileAction(onBackupExport)}
-            style={styles.fileButton}
+            className={
+              "flex-1 min-h-[38px] justify-center items-center px-[8px] border-b border-recall-line"
+            }
           >
-            <Text style={styles.fileButtonText}>Export private backup</Text>
+            <Text className={"text-recall-darkGreen font-bold text-[12px]"}>
+              Export private backup
+            </Text>
           </Pressable>
           {ownershipIssue === "owner-adoption-required" && onAdoptLegacyOwner ? (
             <>
@@ -266,9 +310,13 @@ export function NativeAccountPanel({
                 accessibilityRole="button"
                 disabled={syncBusy}
                 onPress={() => setConfirmOwnership(!confirmOwnership)}
-                style={styles.buttonSoft}
+                className={
+                  "min-h-[40px] justify-center items-center px-[12px] border-b border-recall-line"
+                }
               >
-                <Text style={styles.buttonSoftText}>I own this workspace with this account</Text>
+                <Text className={"text-recall-darkGreen font-bold text-[12px]"}>
+                  I own this workspace with this account
+                </Text>
               </Pressable>
               {confirmOwnership ? (
                 <Pressable
@@ -278,9 +326,13 @@ export function NativeAccountPanel({
                     setConfirmOwnership(false);
                     void runFileAction(onAdoptLegacyOwner);
                   }}
-                  style={styles.button}
+                  className={
+                    "min-h-[42px] justify-center px-[14px] rounded-[10px] bg-recall-darkGreen"
+                  }
                 >
-                  <Text style={styles.buttonText}>Confirm account and sync</Text>
+                  <Text className={"text-recall-surface font-bold text-[12px]"}>
+                    Confirm account and sync
+                  </Text>
                 </Pressable>
               ) : null}
             </>
@@ -290,9 +342,13 @@ export function NativeAccountPanel({
               accessibilityRole="button"
               disabled={syncBusy || fileBusy}
               onPress={onResetForAccount}
-              style={styles.buttonSoft}
+              className={
+                "min-h-[40px] justify-center items-center px-[12px] border-b border-recall-line"
+              }
             >
-              <Text style={styles.buttonSoftText}>Start a fresh local workspace</Text>
+              <Text className={"text-recall-darkGreen font-bold text-[12px]"}>
+                Start a fresh local workspace
+              </Text>
             </Pressable>
           ) : null}
         </View>
@@ -303,70 +359,99 @@ export function NativeAccountPanel({
             accessibilityRole="button"
             disabled={syncBusy || resolvingConflict || ownershipIssue !== null}
             onPress={() => void syncNow()}
-            style={styles.button}
+            className={"min-h-[42px] justify-center px-[14px] rounded-[10px] bg-recall-darkGreen"}
           >
             {syncBusy ? (
               <ActivityIndicator color={palette.surface} />
             ) : (
-              <Text style={styles.buttonText}>Sync now</Text>
+              <Text className={"text-recall-surface font-bold text-[12px]"}>Sync now</Text>
             )}
           </Pressable>
           <Pressable
             accessibilityRole="button"
-            disabled={fileBusy}
-            onPress={() => void runFileAction(onExportAccount)}
-            style={styles.fileButton}
+            accessibilityState={{ expanded: showAccountActions }}
+            onPress={() => setShowAccountActions((value) => !value)}
+            className={"flex-row justify-between items-center min-h-[44px] gap-[12px]"}
           >
-            <Text style={styles.fileButtonText}>Export account data</Text>
+            <Text className={"text-recall-ink text-[15px] font-bold"}>Account actions</Text>
+            <Text className={"text-recall-muted text-[12px]"}>
+              {showAccountActions ? "⌃" : "⌄"}
+            </Text>
           </Pressable>
-          <Pressable
-            accessibilityRole="button"
-            disabled={busy || syncBusy || resolvingConflict}
-            onPress={() => void signOut()}
-            style={styles.buttonSoft}
-          >
-            {busy ? (
-              <ActivityIndicator color={palette.darkGreen} />
-            ) : (
-              <Text style={styles.buttonSoftText}>Sign out</Text>
-            )}
-          </Pressable>
-          <Pressable
-            accessibilityRole="button"
-            disabled={fileBusy || syncBusy || resolvingConflict}
-            onPress={() => setShowDelete(true)}
-            style={styles.dangerButton}
-          >
-            <Text style={styles.dangerButtonText}>Delete account</Text>
-          </Pressable>
+          {showAccountActions && (
+            <View className={"gap-[10px] pb-[12px]"}>
+              <Pressable
+                accessibilityRole="button"
+                disabled={fileBusy}
+                onPress={() => void runFileAction(onExportAccount)}
+                className={
+                  "flex-1 min-h-[38px] justify-center items-center px-[8px] border-b border-recall-line"
+                }
+              >
+                <Text className={"text-recall-darkGreen font-bold text-[12px]"}>
+                  Export account data
+                </Text>
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                disabled={busy || syncBusy || resolvingConflict}
+                onPress={() => void signOut()}
+                className={
+                  "min-h-[40px] justify-center items-center px-[12px] border-b border-recall-line"
+                }
+              >
+                {busy ? (
+                  <ActivityIndicator color={palette.darkGreen} />
+                ) : (
+                  <Text className={"text-recall-darkGreen font-bold text-[12px]"}>Sign out</Text>
+                )}
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                disabled={fileBusy || syncBusy || resolvingConflict}
+                onPress={() => setShowDelete(true)}
+                className={
+                  "min-h-[40px] justify-center items-center px-[12px] rounded-[10px] bg-[#3a2025]"
+                }
+              >
+                <Text className={"text-[#fca5a5] font-bold text-[12px]"}>Delete account</Text>
+              </Pressable>
+            </View>
+          )}
           {conflictAreas ? (
-            <View style={styles.conflict}>
-              <Text style={styles.conflictTitle}>Server version is ready to review</Text>
-              <Text style={styles.notice}>
+            <View className={"gap-[10px] py-[12px] border-t border-recall-line"}>
+              <Text className={"text-recall-ink font-bold text-[13px]"}>
+                Server version is ready to review
+              </Text>
+              <Text className={"text-recall-muted text-[12px]"}>
                 {conflictAreas.length
                   ? conflictAreas.join(" · ")
                   : "All learning areas were deleted on the server."}
               </Text>
-              <Text style={styles.notice}>
+              <Text className={"text-recall-muted text-[12px]"}>
                 Loading it replaces local area content and keeps review history.
               </Text>
               <Pressable
                 accessibilityRole="button"
                 disabled={resolvingConflict || syncBusy}
                 onPress={() => void applyServerVersion()}
-                style={styles.buttonSoft}
+                className={
+                  "min-h-[40px] justify-center items-center px-[12px] border-b border-recall-line"
+                }
               >
                 {resolvingConflict ? (
                   <ActivityIndicator color={palette.darkGreen} />
                 ) : (
-                  <Text style={styles.buttonSoftText}>Use server version</Text>
+                  <Text className={"text-recall-darkGreen font-bold text-[12px]"}>
+                    Use server version
+                  </Text>
                 )}
               </Pressable>
             </View>
           ) : null}
         </>
       ) : cloudAvailable ? (
-        <View style={styles.form}>
+        <View className={"gap-[8px]"}>
           <TextInput
             accessibilityLabel="Email address"
             autoCapitalize="none"
@@ -375,31 +460,37 @@ export function NativeAccountPanel({
             onChangeText={setEmail}
             placeholder="you@example.com"
             placeholderTextColor={palette.muted}
-            style={styles.input}
+            className={
+              "flex-1 min-h-[42px] px-[12px] rounded-[10px] bg-recall-paper text-recall-ink"
+            }
             value={email}
           />
           <Pressable
             accessibilityRole="button"
             disabled={busy || email.trim().length === 0}
             onPress={() => void requestLink()}
-            style={styles.button}
+            className={"min-h-[42px] justify-center px-[14px] rounded-[10px] bg-recall-darkGreen"}
           >
             {busy ? (
               <ActivityIndicator color={palette.surface} />
             ) : (
-              <Text style={styles.buttonText}>Email sign-in link</Text>
+              <Text className={"text-recall-surface font-bold text-[12px]"}>
+                Email sign-in link
+              </Text>
             )}
           </Pressable>
         </View>
       ) : null}
       {cloudAvailable && showDelete ? (
-        <View style={styles.deleteConfirm}>
-          <Text style={styles.conflictTitle}>Delete your account and data?</Text>
-          <Text style={styles.notice}>
+        <View className={"gap-[12px] py-[16px] border-t border-[#fca5a5]"}>
+          <Text className={"text-recall-ink font-bold text-[13px]"}>
+            Delete your account and data?
+          </Text>
+          <Text className={"text-recall-muted text-[12px]"}>
             This removes synced account data and this device’s workspace and attachments. Signing
             out alone keeps offline data. Export account data first if you need a copy.
           </Text>
-          <Text style={styles.notice}>Type DELETE to confirm.</Text>
+          <Text className={"text-recall-muted text-[12px]"}>Type DELETE to confirm.</Text>
           <TextInput
             accessibilityLabel="Type DELETE to confirm account deletion"
             autoCapitalize="characters"
@@ -407,9 +498,11 @@ export function NativeAccountPanel({
             editable={!fileBusy}
             onChangeText={setDeleteConfirmation}
             value={deleteConfirmation}
-            style={styles.input}
+            className={
+              "flex-1 min-h-[42px] px-[12px] rounded-[10px] bg-recall-paper text-recall-ink"
+            }
           />
-          <View style={styles.fileActions}>
+          <View className={"flex-row gap-[8px]"}>
             <Pressable
               accessibilityRole="button"
               disabled={fileBusy}
@@ -417,17 +510,21 @@ export function NativeAccountPanel({
                 setShowDelete(false);
                 setDeleteConfirmation("");
               }}
-              style={styles.fileButton}
+              className={
+                "flex-1 min-h-[38px] justify-center items-center px-[8px] border-b border-recall-line"
+              }
             >
-              <Text style={styles.fileButtonText}>Cancel</Text>
+              <Text className={"text-recall-darkGreen font-bold text-[12px]"}>Cancel</Text>
             </Pressable>
             <Pressable
               accessibilityRole="button"
               disabled={fileBusy || deleteConfirmation !== "DELETE"}
               onPress={() => void deleteAccount()}
-              style={styles.dangerButton}
+              className={
+                "min-h-[40px] justify-center items-center px-[12px] rounded-[10px] bg-[#3a2025]"
+              }
             >
-              <Text style={styles.dangerButtonText}>
+              <Text className={"text-[#fca5a5] font-bold text-[12px]"}>
                 {fileBusy ? "Deleting…" : "Delete account and data"}
               </Text>
             </Pressable>
@@ -435,73 +532,10 @@ export function NativeAccountPanel({
         </View>
       ) : null}
       {notice ? (
-        <Text accessibilityRole="alert" style={styles.notice}>
+        <Text accessibilityRole="alert" className={"text-recall-muted text-[12px]"}>
           {notice}
         </Text>
       ) : null}
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  panel: {
-    gap: 10,
-    padding: 14,
-    backgroundColor: palette.surface,
-    borderTopColor: palette.line,
-    borderTopWidth: 1,
-  },
-  heading: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
-  title: { color: palette.ink, fontSize: 15, fontWeight: "700" },
-  signedIn: { color: palette.darkGreen, fontSize: 12 },
-  form: { flexDirection: "row", gap: 8 },
-  input: {
-    flex: 1,
-    minHeight: 42,
-    paddingHorizontal: 12,
-    borderRadius: 10,
-    backgroundColor: palette.paper,
-    color: palette.ink,
-  },
-  button: {
-    minHeight: 42,
-    justifyContent: "center",
-    paddingHorizontal: 14,
-    borderRadius: 10,
-    backgroundColor: palette.darkGreen,
-  },
-  buttonText: { color: palette.surface, fontWeight: "700", fontSize: 12 },
-  conflict: { gap: 7, padding: 10, borderRadius: 10, backgroundColor: palette.paper },
-  fileActions: { flexDirection: "row", gap: 8 },
-  fileButton: {
-    flex: 1,
-    minHeight: 38,
-    justifyContent: "center",
-    alignItems: "center",
-    paddingHorizontal: 8,
-    borderRadius: 10,
-    backgroundColor: palette.paper,
-  },
-  fileButtonText: { color: palette.darkGreen, fontWeight: "700", fontSize: 12 },
-  conflictTitle: { color: palette.ink, fontWeight: "700", fontSize: 13 },
-  buttonSoft: {
-    minHeight: 40,
-    justifyContent: "center",
-    alignItems: "center",
-    paddingHorizontal: 12,
-    borderRadius: 10,
-    backgroundColor: palette.green,
-  },
-  buttonSoftText: { color: palette.darkGreen, fontWeight: "700", fontSize: 12 },
-  dangerButton: {
-    minHeight: 40,
-    justifyContent: "center",
-    alignItems: "center",
-    paddingHorizontal: 12,
-    borderRadius: 10,
-    backgroundColor: "#FCE8E5",
-  },
-  dangerButtonText: { color: "#A5281B", fontWeight: "700", fontSize: 12 },
-  deleteConfirm: { gap: 9, padding: 12, borderRadius: 10, backgroundColor: "#FFF5F2" },
-  notice: { color: palette.muted, fontSize: 12 },
-});

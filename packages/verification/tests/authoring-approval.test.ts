@@ -2,7 +2,12 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import fc from "fast-check";
 import { Effect, Either } from "effect";
-import { createAreaId, createCardId, createObjectiveId, type Workspace } from "@recall/domain";
+import {
+  createAreaId,
+  createAssessmentId,
+  createObjectiveId,
+  type Workspace,
+} from "@recall/domain";
 import { cardIdForTutorProposal } from "@recall/ai-core";
 import { newSchedule } from "@recall/scheduler";
 import {
@@ -20,7 +25,7 @@ import {
 
 const now = new Date("2026-10-03T00:00:00.000Z");
 const areaId = createAreaId("00000000-0000-4000-8000-000000000101");
-const cardId = createCardId("00000000-0000-4000-8000-000000000102");
+const cardId = createAssessmentId("00000000-0000-4000-8000-000000000102");
 const objectiveId = createObjectiveId("00000000-0000-4000-8000-000000000103");
 const sessionId = "00000000-0000-4000-8000-000000000104";
 const proposalId = "00000000-0000-4000-8000-000000000105";

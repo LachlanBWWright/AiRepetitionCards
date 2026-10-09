@@ -111,7 +111,7 @@ function splitText(text: string, title: string, pageNumber: number | null): read
   while (remaining.length > 0) {
     let length = Math.min(remaining.length, maxSectionCharacters);
     if (remaining.length > length) {
-      const newline = remaining.lastIndexOf("\n", length);
+      const newline = remaining.lastIndexOf("\n", length - 1);
       if (newline > length / 2) length = newline + 1;
       else if (/^[\uDC00-\uDFFF]/.test(remaining.slice(length, length + 1))) length -= 1;
     }
@@ -218,6 +218,7 @@ function docxText(bytes: Uint8Array): Effect.Effect<string, StudyMaterialExtract
           trimValues: false,
           parseTagValue: false,
           processEntities: true,
+          htmlEntities: true,
         }).parse(xml) as unknown;
       },
       catch: () => failure("invalid-document", "The DOCX document XML could not be read."),

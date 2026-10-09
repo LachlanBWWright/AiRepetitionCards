@@ -6,6 +6,18 @@ import { Effect, Either } from "effect";
 import { updateSchedulerSettings, workspaceAuthoringBaseline } from "@recall/application";
 import type { SchedulerSettings as SchedulerPreferences, Workspace } from "@recall/domain";
 import { Button } from "@/components/ui/Button";
+import { Alert, AlertDescription, Input } from "@recall/ui-web";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@recall/ui-web/components/alert-dialog";
+import { Slider } from "@recall/ui-web/components/slider";
 
 export type SchedulerSettingsSaveFailure = {
   readonly _tag: "SchedulerSettingsSaveFailure";
@@ -40,6 +52,7 @@ export function SchedulerSettings({ workspace, onSave, readLatest, initialDraft 
     () => initialDraft?.retentionPercent ?? percentText(workspace),
   );
   const [busy, setBusy] = useState(false);
+  const [confirmReload, setConfirmReload] = useState(false);
   const saving = useRef(false);
   const mounted = useRef(true);
   useEffect(() => {
@@ -58,7 +71,6 @@ export function SchedulerSettings({ workspace, onSave, readLatest, initialDraft 
   };
   const reload = () => {
     if (saving.current || !readLatest) return;
-    if (!window.confirm("Discard your draft and load the latest review settings?")) return;
     const latest = readLatest();
     setDraftWorkspace(latest);
     setRetentionPercent(percentText(latest));
@@ -97,15 +109,14 @@ export function SchedulerSettings({ workspace, onSave, readLatest, initialDraft 
     setRetentionPercent(percentText(result.right));
     setFeedback({
       kind: "saved",
-      text: "Review settings saved. Future reviews will use this target.",
+      text: "Review settings saved.",
     });
   };
 
   return (
     <form onSubmit={save} aria-busy={busy} style={{ display: "grid", gap: 20 }}>
       <div>
-        <h2 style={{ marginBottom: 6 }}>Review settings</h2>
-        <p style={{ margin: 0 }}>Choose how often you want to revisit what you learn.</p>
+        <h2 className="mb-2 text-lg font-semibold">Review settings</h2>
       </div>
       <fieldset disabled={busy} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
         <section
@@ -113,35 +124,33 @@ export function SchedulerSettings({ workspace, onSave, readLatest, initialDraft 
           style={{
             display: "grid",
             gap: 16,
-            border: "1px solid var(--border, #d8ded3)",
-            borderRadius: 12,
-            padding: 20,
+            padding: "12px 0",
           }}
         >
-          <h3 id={`${prefix}-retention-heading`} style={{ margin: 0 }}>
+          <h3 className="m-0 text-base font-semibold" id={`${prefix}-retention-heading`}>
             Target retention
           </h3>
           <p id={`${prefix}-retention-help`} style={{ margin: 0 }}>
-            This is the chance of remembering a card when it is due. A higher target means more
-            frequent reviews. The recommended starting point is 90%.
+            Higher targets mean more frequent reviews. Start at 90%.
           </p>
-          <label htmlFor={`${prefix}-retention`}>
+          <label id={`${prefix}-retention-label`}>
             Target retention: <strong>{retentionPercent}%</strong>
           </label>
-          <input
+          <Slider
             id={`${prefix}-retention`}
-            type="range"
             min={70}
             max={97}
-            step="any"
-            value={retentionPercent}
+            step={0.1}
+            value={[Number(retentionPercent)]}
+            aria-labelledby={`${prefix}-retention-label`}
             aria-describedby={`${prefix}-retention-help ${prefix}-retention-timing`}
             aria-valuetext={`${retentionPercent} percent`}
-            onChange={(event) => updateRetention(event.target.value)}
-            style={{ width: "100%", accentColor: "var(--accent, #58734a)" }}
+            onValueChange={([value]) => {
+              if (value !== undefined) updateRetention(String(value));
+            }}
           />
           <label htmlFor={`${prefix}-retention-number`}>Exact target (%)</label>
-          <input
+          <Input
             id={`${prefix}-retention-number`}
             type="number"
             min={70}
@@ -157,29 +166,49 @@ export function SchedulerSettings({ workspace, onSave, readLatest, initialDraft 
             <span>97% · more reviews</span>
           </div>
           <p id={`${prefix}-retention-timing`} style={{ margin: 0 }}>
-            This applies when you next review a card. Your existing due dates and past review
-            history stay unchanged.
+            Applies after each card’s next review.
           </p>
         </section>
       </fieldset>
       {feedback && (
-        <p
+        <Alert
           role={feedback.kind === "error" ? "alert" : "status"}
-          style={{ margin: 0, color: feedback.kind === "error" ? "#a12e20" : "inherit" }}
+          variant={feedback.kind === "error" ? "destructive" : "default"}
         >
-          {feedback.text}
-        </p>
+          <AlertDescription>{feedback.text}</AlertDescription>
+        </Alert>
       )}
       <div>
         <Button type="submit" disabled={busy}>
-          {busy ? "Saving review settings…" : "Save review settings"}
+          {busy ? "Saving…" : "Save settings"}
         </Button>
         {readLatest && (
-          <Button variant="secondary" disabled={busy} onClick={reload}>
+          <Button
+            type="button"
+            variant="secondary"
+            disabled={busy}
+            onClick={() => setConfirmReload(true)}
+          >
             Reload latest settings
           </Button>
         )}
       </div>
+      <AlertDialog open={confirmReload} onOpenChange={setConfirmReload}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Discard this draft?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Your unsaved changes will be replaced with the latest review settings.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Keep editing</AlertDialogCancel>
+            <AlertDialogAction type="button" onClick={reload}>
+              Reload settings
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </form>
   );
 }

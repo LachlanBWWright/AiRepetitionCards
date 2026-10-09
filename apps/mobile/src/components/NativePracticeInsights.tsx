@@ -1,7 +1,6 @@
+import { NativeButton } from "./ui/NativeButton";
 import { useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
-import { NativeButton } from "@recall/ui-native";
-import { designTokens } from "@recall/design-tokens";
+import { Text, View } from "react-native";
 import { summarizeReviews } from "@recall/application";
 import type { Workspace } from "@recall/domain";
 
@@ -40,11 +39,7 @@ export function NativePracticeInsights({
     .slice(0, 20);
   const ratingLabels = { again: "Again", hard: "Hard", good: "Good", easy: "Easy" } as const;
   return (
-    <View style={styles.panel}>
-      <Text style={styles.title}>Your practice</Text>
-      <Text style={styles.summary}>
-        {today.inWindow} today · {week.inWindow} in the last 7 days
-      </Text>
+    <View className={"gap-[12px] py-[18px] border-t border-recall-line"}>
       <NativeButton
         tone="soft"
         label={expanded ? "Hide review history" : "View review history"}
@@ -52,36 +47,41 @@ export function NativePracticeInsights({
       />
       {expanded && (
         <>
-          <Text style={styles.hint}>
-            Across all learning areas. Counts come from recorded reviews, including deleted cards.
+          <Text className={"text-recall-ink text-[14px]"}>
+            {today.inWindow} reviewed today · {week.inWindow} in the last 7 days
           </Text>
-          <Text style={styles.heading}>Last 7 days</Text>
-          <Text style={styles.summary}>
+          <Text className={"text-recall-ink text-[16px] font-bold"}>Last 7 days</Text>
+          <Text className={"text-recall-ink text-[14px]"}>
             {(["again", "hard", "good", "easy"] as const)
               .map((rating) => `${ratingLabels[rating]} ${week.ratings[rating]}`)
               .join(" · ")}
           </Text>
-          <Text style={styles.hint}>{today.total} recorded reviews in this library.</Text>
+          <Text className={"text-recall-muted text-[12px] leading-[18px]"}>
+            {today.total} recorded reviews in this library.
+          </Text>
           {workspace.reviews > today.total && (
-            <Text style={styles.hint}>
-              Older review totals without individual events are excluded from daily counts and
-              history.
+            <Text className={"text-recall-muted text-[12px] leading-[18px]"}>
+              Daily counts cover reviews with a recorded date.
             </Text>
           )}
-          <Text style={styles.heading}>Recent reviews</Text>
+          <Text className={"text-recall-ink text-[16px] font-bold"}>Recent reviews</Text>
           {recent.length === 0 && (
-            <Text style={styles.hint}>Your first review will appear here after it saves.</Text>
+            <Text className={"text-recall-muted text-[12px] leading-[18px]"}>
+              Your first review will appear here after it saves.
+            </Text>
           )}
           {recent.map((event) => {
             const area = workspace.areas.find((item) => item.id === event.areaId);
             const card = area?.cards.find((item) => item.id === event.cardId);
             return (
-              <View key={event.id} style={styles.review}>
-                <Text style={styles.card}>{card?.front ?? "Deleted card"}</Text>
-                <Text style={styles.hint}>
+              <View key={event.id} className={"gap-[4px] border-t border-recall-line pt-[12px]"}>
+                <Text className={"text-recall-ink text-[14px] font-semibold"}>
+                  {card?.front ?? "Deleted card"}
+                </Text>
+                <Text className={"text-recall-muted text-[12px] leading-[18px]"}>
                   {area?.title ?? "Deleted learning area"} · {ratingLabels[event.rating]}
                 </Text>
-                <Text style={styles.hint}>
+                <Text className={"text-recall-muted text-[12px] leading-[18px]"}>
                   {Number.isFinite(Date.parse(event.ratedAt))
                     ? new Intl.DateTimeFormat("en-GB", {
                         day: "numeric",
@@ -97,8 +97,8 @@ export function NativePracticeInsights({
             );
           })}
           {events.length > 20 && (
-            <Text style={styles.hint}>
-              Showing the latest 20 reviews. Export a private backup to keep your full history.
+            <Text className={"text-recall-muted text-[12px] leading-[18px]"}>
+              Latest 20 reviews.
             </Text>
           )}
         </>
@@ -106,20 +106,3 @@ export function NativePracticeInsights({
     </View>
   );
 }
-const palette = designTokens.color;
-const styles = StyleSheet.create({
-  panel: {
-    gap: 12,
-    padding: 18,
-    borderWidth: 1,
-    borderColor: palette.line,
-    borderRadius: 20,
-    backgroundColor: palette.surface,
-  },
-  title: { color: palette.ink, fontSize: 22, fontWeight: "700" },
-  heading: { color: palette.ink, fontSize: 16, fontWeight: "700" },
-  summary: { color: palette.ink, fontSize: 14 },
-  hint: { color: palette.muted, fontSize: 12, lineHeight: 18 },
-  card: { color: palette.ink, fontSize: 14, fontWeight: "600" },
-  review: { gap: 4, borderTopWidth: 1, borderColor: palette.line, paddingTop: 12 },
-});

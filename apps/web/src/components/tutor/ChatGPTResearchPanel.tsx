@@ -1,7 +1,15 @@
 "use client";
 
+import { Alert, AlertDescription } from "@recall/ui-web/components/alert";
+import { Textarea } from "@recall/ui-web";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@recall/ui-web/components/collapsible";
 import { Fragment, useEffect, useRef, useState, type MouseEvent } from "react";
 import { Effect, Either } from "effect";
+import { Label } from "@recall/ui-web/components/label";
 import { Button } from "@/components/ui/Button";
 import {
   chatGPTResearchApi,
@@ -108,21 +116,18 @@ function ResearchForm({
       ].sort((left, right) => left - right)
     : [];
   return (
-    <section className="tutor-panel" aria-labelledby="chatgpt-research-title">
-      <p className="eyebrow">CHATGPT PLAN · WEB SEARCH</p>
-      <h2 id="chatgpt-research-title">Research a topic</h2>
-      <p>
-        Using {model}. Search availability depends on the model, account and workspace. Only this
-        query is sent; your learning area and review history are not included.
-      </p>
+    <section className="space-y-4 py-4" aria-labelledby="chatgpt-research-title">
+      <h2 className="text-lg font-semibold" id="chatgpt-research-title">
+        Research
+      </h2>
       <form
         onSubmit={(event) => {
           event.preventDefault();
           void search();
         }}
       >
-        <label htmlFor="chatgpt-research-query">What would you like to research?</label>
-        <textarea
+        <Label htmlFor="chatgpt-research-query">What would you like to research?</Label>
+        <Textarea
           id="chatgpt-research-query"
           rows={3}
           maxLength={2000}
@@ -130,16 +135,20 @@ function ResearchForm({
           onChange={(event) => setQuery(event.target.value)}
           placeholder="Find sources explaining how mitochondria produce ATP."
         />
-        <p>{query.length}/2,000 characters</p>
+        <p>Only your search query is sent to OpenAI.</p>
         <Button size="small" type="submit" disabled={disabled || busy || !query.trim()}>
           {busy ? "Searching…" : message ? "Retry search" : "Search the web"}
         </Button>
       </form>
-      {message && <p role="alert">{message}</p>}
+      {message && (
+        <Alert variant="destructive">
+          <AlertDescription>{message}</AlertDescription>
+        </Alert>
+      )}
       {currentView && result && (
         <section aria-label="Research result">
-          <h3>Results for: {currentView.query}</h3>
-          <p style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>
+          <h3 className="text-base font-semibold">{currentView.query}</h3>
+          <p className="whitespace-pre-wrap [overflow-wrap:anywhere]">
             {/[\uD800-\uDFFF]/.test(result.text) ? (
               <>
                 {result.text}
@@ -186,28 +195,30 @@ function ResearchForm({
               ))
             )}
           </p>
-          <h4>Sources</h4>
-          <ol>
-            {result.citations.map((citation, index) => (
-              <li key={`${citation.url}:${index}`}>
-                <a
-                  href={safeResearchUrl(citation.url) ?? undefined}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  onClick={(event) => {
-                    void openSource(event, citation.url);
-                  }}
-                >
-                  {citation.title || citation.url}
-                </a>
-                <p style={{ overflowWrap: "anywhere" }}>{citation.url}</p>
-              </li>
-            ))}
-          </ol>
-          <p>
-            Review these sources before using the answer. Research does not change your cards or
-            learning evidence.
-          </p>
+          <Collapsible>
+            <CollapsibleTrigger className="w-full text-left font-medium">
+              Sources
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <ol>
+                {result.citations.map((citation, index) => (
+                  <li key={`${citation.url}:${index}`}>
+                    <a
+                      href={safeResearchUrl(citation.url) ?? undefined}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(event) => {
+                        void openSource(event, citation.url);
+                      }}
+                    >
+                      {citation.title || citation.url}
+                    </a>
+                    <p className="[overflow-wrap:anywhere]">{citation.url}</p>
+                  </li>
+                ))}
+              </ol>
+            </CollapsibleContent>
+          </Collapsible>
           <Button
             size="small"
             variant="secondary"
@@ -221,7 +232,11 @@ function ResearchForm({
           </Button>
         </section>
       )}
-      {sourceMessage && <p role="alert">{sourceMessage}</p>}
+      {sourceMessage && (
+        <Alert variant="destructive">
+          <AlertDescription>{sourceMessage}</AlertDescription>
+        </Alert>
+      )}
     </section>
   );
 }

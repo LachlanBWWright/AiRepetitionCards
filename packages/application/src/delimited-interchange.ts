@@ -1,6 +1,6 @@
 import {
   createAreaId,
-  createCardId,
+  createAssessmentId,
   createObjectiveId,
   LearningAreaSchema,
   type LearningArea,
@@ -139,7 +139,7 @@ export function importDelimitedCards(
   const importedTitle = title.trim() || "Imported cards";
   if (importedTitle.length > 80 || !/^#[0-9a-fA-F]{6}$/.test(color))
     return { _tag: "Failure", reason: "invalid-metadata" };
-  const parsed = parseRows(text, delimiter);
+  const parsed = parseRows(text.startsWith("\uFEFF") ? text.slice(1) : text, delimiter);
   if (parsed._tag === "Failure") return parsed;
   const [first, ...remaining] = parsed.rows;
   if (!first) return { _tag: "Failure", reason: "no-cards" };
@@ -199,7 +199,7 @@ export function importDelimitedCards(
         try: () =>
           preparedRecords.right.flat().map((record) => ({
             ...record,
-            id: createCardId(createId()),
+            id: createAssessmentId(createId()),
             origin: "imported" as const,
             schedule: newSchedule(now),
           })),

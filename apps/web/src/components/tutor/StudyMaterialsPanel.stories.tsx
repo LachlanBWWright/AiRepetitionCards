@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { Effect } from "effect";
 import {
   addNotebookMaterial,
+  addStudyCoveragePlan,
   addMaterialCardProposals,
   seedKnowledgeNotebook,
   type KnowledgeNotebook,
@@ -95,10 +96,10 @@ const meta = {
   parameters: { layout: "fullscreen" },
   decorators: [
     (Story) => (
-      <main className="component-catalog tutor-story">
+      <main className="mx-auto min-h-screen max-w-5xl space-y-6 bg-background p-8">
         <div>
-          <p className="eyebrow">RECALL · GO WORKSHOP · MOCK DATA</p>
-          <h1>Build a deck from your course materials.</h1>
+          <p className="mb-1 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">RECALL · GO WORKSHOP · MOCK DATA</p>
+          <h1>Study materials</h1>
           <Story />
         </div>
       </main>
@@ -152,6 +153,67 @@ export const OcrPreview: Story = {
           title: "Image text",
           pageNumber: null,
         })),
+      }),
+    ),
+  },
+};
+
+export const CoveragePlan: Story = {
+  name: "Materials · review coverage outline",
+  args: {
+    initialNotebook: Effect.runSync(
+      addStudyCoveragePlan(preview, {
+        id: "00000000-0000-4000-8000-000000000030",
+        materialId: material.id,
+        sectionId: material.sections[0]?.id,
+        createdAt: now,
+        claims: [
+          {
+            id: "00000000-0000-4000-8000-000000000031",
+            title: "Slice descriptors share backing storage",
+            description: "Predict whether mutation through one slice appears through another.",
+            priority: "high",
+            decision: "selected",
+            sourceReferences: [
+              {
+                materialId: material.id,
+                sectionId: material.sections[0]?.id,
+                pageNumber: 7,
+                quote: "Copying a slice does not copy its backing array.",
+              },
+            ],
+          },
+          {
+            id: "00000000-0000-4000-8000-000000000032",
+            title: "Append allocation depends on capacity",
+            description: "Explain why append can retain or replace the backing array.",
+            priority: "medium",
+            decision: "pending",
+            sourceReferences: [
+              {
+                materialId: material.id,
+                sectionId: material.sections[0]?.id,
+                pageNumber: 7,
+                quote: "An append may reuse capacity or allocate a new array.",
+              },
+            ],
+          },
+          {
+            id: "00000000-0000-4000-8000-000000000033",
+            title: "Use copy for independent elements",
+            description: "Create independent storage before copying elements.",
+            priority: "low",
+            decision: "skipped",
+            sourceReferences: [
+              {
+                materialId: material.id,
+                sectionId: material.sections[0]?.id,
+                pageNumber: 7,
+                quote: "To obtain independent elements, allocate a destination and use copy.",
+              },
+            ],
+          },
+        ],
       }),
     ),
   },

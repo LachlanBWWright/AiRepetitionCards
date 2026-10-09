@@ -1,24 +1,17 @@
-import {
-  ActivityIndicator,
-  Image,
-  Pressable,
-  SafeAreaView,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import { NativeButton } from "./ui/NativeButton";
+import { Card } from "../../components/ui/card";
+import { ActivityIndicator, Image, Pressable, ScrollView, Text, View } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { designTokens } from "@recall/design-tokens";
-import { NativeButton, NativeEmptyState, NativeStatusBadge } from "@recall/ui-native";
-import { NativePracticeInsights } from "./NativePracticeInsights";
 import { NativeAudioAttachment } from "./NativeAudioAttachment";
-import type { Workspace, StudyCard } from "@recall/domain";
+import type { Workspace, Assessment } from "@recall/domain";
 import type { ReviewRating } from "@recall/scheduler";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
+import { summarizeReviews } from "@recall/application";
 
 const palette = designTokens.color;
 
-function dueNow(card: StudyCard, now: number): boolean {
+function dueNow(card: Assessment, now: number): boolean {
   return Date.parse(card.schedule.due) <= now;
 }
 
@@ -39,6 +32,7 @@ export type NativeTodayScreenProps = {
   readonly onReview: (rating: ReviewRating) => void;
   readonly onReset: () => void;
   readonly onImportAnki: () => void;
+  readonly onOpenLibrary?: () => void;
   readonly tutorPanel?: ReactNode;
   readonly authoringPanel?: ReactNode;
 };
@@ -60,14 +54,19 @@ export function NativeTodayScreen({
   onReview,
   onReset,
   onImportAnki,
+  onOpenLibrary,
   tutorPanel,
   authoringPanel,
 }: NativeTodayScreenProps) {
+  const [choosingArea, setChoosingArea] = useState(false);
   if (!ready || !workspace) {
     return (
-      <SafeAreaView style={styles.loading}>
+      <SafeAreaView
+        edges={["top"]}
+        className={"flex-1 items-center justify-center gap-[16px] bg-recall-paper"}
+      >
         <ActivityIndicator color={palette.darkGreen} size="large" />
-        <Text style={styles.muted}>Loading your offline library…</Text>
+        <Text className={"text-recall-muted text-[13px]"}>Loading library…</Text>
       </SafeAreaView>
     );
   }
@@ -76,7 +75,12 @@ export function NativeTodayScreen({
   const dueCards = activeArea?.cards.filter((item) => dueNow(item, now)) ?? [];
   const card = dueCards[0];
   const totalDue = activeArea?.cards.filter((item) => dueNow(item, now)).length ?? 0;
-  const totalReviews = workspace.reviews;
+  const date = new Date(now);
+  const totalReviews = summarizeReviews(
+    [...new Map((workspace.reviewEvents ?? []).map((event) => [event.id, event])).values()],
+    new Date(date.getFullYear(), date.getMonth(), date.getDate()),
+    date,
+  ).inWindow;
   const retainedCards = (workspace.retainedReviewAreas ?? []).flatMap((area) => area.cards).length;
   const displayedDate =
     dateLabel ??
@@ -87,88 +91,98 @@ export function NativeTodayScreen({
     });
 
   return (
-    <SafeAreaView testID="mobile-screen" style={styles.safeArea}>
-      <ScrollView contentContainerStyle={styles.screen}>
-        <View style={styles.topBar}>
-          <View style={styles.brandMark}>
-            <Text style={styles.brandGlyph}>R</Text>
-          </View>
-          <Text style={styles.brand}>Recall</Text>
-          <NativeStatusBadge label="OFFLINE READY" style={styles.offlineBadge} />
-        </View>
-
-        <Text style={styles.eyebrow}>YOUR STUDY SPACE</Text>
-        <View style={styles.headingRow}>
-          <Text style={styles.title}>Today</Text>
-          <Text style={styles.date}>{displayedDate}</Text>
-        </View>
-
-        {workspace && workspace.areas.length > 1 && (
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.areaList}
+    <SafeAreaView edges={["top"]} testID="mobile-screen" className={"flex-1 bg-recall-paper"}>
+      <ScrollView contentContainerClassName="w-full max-w-[720px] self-center px-[22px] pt-[16px] pb-[48px]">
+        <View className={"flex-row items-end justify-between mb-[20px]"}>
+          <Text
+            className={"text-recall-ink text-[40px] leading-[48px] font-bold tracking-[-1.7px]"}
           >
-            {workspace.areas.map((area) => (
-              <Pressable
-                key={area.id}
-                disabled={reviewPending}
-                accessibilityState={{ disabled: reviewPending }}
-                onPress={() => {
-                  onSelectArea(area.id);
-                  onHideAnswer();
-                }}
-                style={[styles.areaChip, area.id === activeArea?.id && styles.areaChipSelected]}
-              >
-                <View style={[styles.areaDot, { backgroundColor: area.color }]} />
-                <Text
-                  style={[
-                    styles.areaChipText,
-                    area.id === activeArea?.id && styles.areaChipTextSelected,
-                  ]}
-                >
-                  {area.title}
-                </Text>
-              </Pressable>
-            ))}
-          </ScrollView>
-        )}
-
-        <View style={styles.statsCard}>
-          <View>
-            <Text style={styles.statsLabel}>DUE NOW</Text>
-            <Text style={styles.statsValue}>{totalDue}</Text>
-            <Text style={styles.statsHint}>cards ready to review</Text>
-          </View>
-          <View style={styles.statsDivider} />
-          <View>
-            <Text style={styles.statsLabel}>REVIEWS</Text>
-            <Text style={styles.statsValue}>{totalReviews}</Text>
-            <Text style={styles.statsHint}>in this library</Text>
-          </View>
-          <View style={styles.statsOrb}>
-            <Text style={styles.orbGlyph}>✳</Text>
-          </View>
+            Today
+          </Text>
+          <Text className={"text-recall-muted text-[13px] pb-[7px]"}>{displayedDate}</Text>
         </View>
+
+        {workspace.areas.length > 1 && (
+          <View className={"mb-[8px]"}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Study area: ${activeArea?.title ?? "Choose area"}`}
+              accessibilityState={{ expanded: choosingArea, disabled: reviewPending }}
+              disabled={reviewPending}
+              onPress={() => setChoosingArea((value) => !value)}
+              className={
+                "flex-row items-center border-t-recall-line border-t py-[12px] justify-between"
+              }
+            >
+              <Text className={"text-recall-ink text-[13px] font-semibold"}>
+                {activeArea?.title ?? "Choose area"}
+              </Text>
+              <Text className={"text-recall-muted text-[24px] mt-[-3px]"}>
+                {choosingArea ? "⌃" : "⌄"}
+              </Text>
+            </Pressable>
+            {choosingArea &&
+              workspace.areas.map((area) => (
+                <Pressable
+                  key={area.id}
+                  accessibilityRole="button"
+                  accessibilityState={{
+                    selected: area.id === activeArea?.id,
+                    disabled: reviewPending,
+                  }}
+                  disabled={reviewPending}
+                  onPress={() => {
+                    onSelectArea(area.id);
+                    onHideAnswer();
+                    setChoosingArea(false);
+                  }}
+                  className={
+                    "flex-row items-center border-t-recall-line border-t py-[12px] justify-between"
+                  }
+                >
+                  <Text className={"text-recall-ink text-[13px] font-semibold"}>{area.title}</Text>
+                  <Text className={"text-recall-muted text-[10px] mr-[12px]"}>
+                    {area.cards.filter((item) => dueNow(item, now)).length} due
+                  </Text>
+                </Pressable>
+              ))}
+          </View>
+        )}
+        <Text className={"text-recall-muted text-[14px] mb-[8px]"}>
+          {totalDue} due · {totalReviews} reviewed today
+        </Text>
 
         {message && (
-          <Text accessibilityRole="alert" style={styles.notice}>
+          <Text
+            accessibilityRole="alert"
+            className={
+              "text-recall-darkGreen text-[12px] bg-recall-paper rounded-[12px] p-[12px] mt-[14px] leading-[18px]"
+            }
+          >
             {message}
           </Text>
         )}
 
         {card ? (
-          <View style={styles.studySection}>
-            <View style={styles.sectionHeading}>
-              <Text style={styles.sectionTitle}>{activeArea?.title ?? "Study"}</Text>
-              <Text style={styles.queueCount}>{dueCards.length} DUE</Text>
-            </View>
-            <View style={styles.studyCard}>
-              <View style={styles.cardMeta}>
-                <Text style={styles.cardLabel}>{showAnswer ? "ANSWER" : "QUESTION"}</Text>
-                <Text style={styles.cardObjective}>{card.objective}</Text>
+          <View className={"mt-[16px]"}>
+            {workspace.areas.length <= 1 && (
+              <Text className={"text-recall-ink text-[17px] font-bold tracking-[-0.3px]"}>
+                {activeArea?.title ?? "Study"}
+              </Text>
+            )}
+            <Card
+              className={
+                "rounded-[12px] bg-recall-surface border border-recall-line p-[23px] min-h-[260px] justify-between"
+              }
+            >
+              <View className={"flex-row justify-between items-center"}>
+                <Text className={"text-recall-muted text-[12px]"}>
+                  {showAnswer ? "Answer" : "Question"}
+                </Text>
               </View>
-              <Text style={styles.cardText}>{showAnswer ? card.back : card.front}</Text>
+              <Text className={"text-recall-ink text-[23px] leading-[32px] font-medium my-[28px]"}>
+                {showAnswer ? card.back : card.front}
+              </Text>
               {card.media?.map((reference) => {
                 const uri = mediaUris[reference.id];
                 if (!uri) return null;
@@ -179,19 +193,19 @@ export function NativeTodayScreen({
                     accessibilityLabel="Study card image attachment"
                     alt="Study card image attachment"
                     resizeMode="contain"
-                    style={styles.mediaImage}
+                    className={"w-full h-[220px] rounded-[14px] my-[18px] bg-recall-green"}
                   />
                 ) : (
                   <NativeAudioAttachment key={reference.id} uri={uri} />
                 );
               })}
               {reviewPending && (
-                <Text accessibilityLiveRegion="polite" style={styles.muted}>
+                <Text accessibilityLiveRegion="polite" className={"text-recall-muted text-[13px]"}>
                   Saving review…
                 </Text>
               )}
               {showAnswer ? (
-                <View style={styles.ratingList}>
+                <View className={"flex-row flex-wrap gap-[8px]"}>
                   {(
                     [
                       ["again", "Again", palette.coral],
@@ -206,12 +220,10 @@ export function NativeTodayScreen({
                       disabled={reviewPending}
                       accessibilityState={{ disabled: reviewPending, busy: reviewPending }}
                       onPress={() => onReview(rating)}
-                      style={[
-                        styles.ratingButton,
-                        { backgroundColor: color, opacity: reviewPending ? 0.5 : 1 },
-                      ]}
+                      className={`${"grow basis-[45%] items-center justify-center min-h-[47px] rounded-[14px]"}`}
+                      style={[{ backgroundColor: color, opacity: reviewPending ? 0.5 : 1 }]}
                     >
-                      <Text style={styles.ratingText}>{label}</Text>
+                      <Text className={"text-recall-ink text-[13px] font-bold"}>{label}</Text>
                     </Pressable>
                   ))}
                 </View>
@@ -222,257 +234,91 @@ export function NativeTodayScreen({
                   onPress={() => onShowAnswer()}
                 />
               )}
-            </View>
+            </Card>
           </View>
         ) : (
-          <NativeEmptyState
-            title="You’re all caught up"
-            description={`There are no cards due in ${activeArea?.title ?? "this area"}. Come back later for your next review.`}
-          />
+          <Text
+            accessibilityLiveRegion="polite"
+            className={"text-recall-muted text-[15px] mt-[20px] mb-[12px]"}
+          >
+            {activeArea
+              ? "You’re all caught up."
+              : "Create a learning area in Library to get started."}
+          </Text>
         )}
 
-        <NativePracticeInsights workspace={workspace} now={now} />
+        {onOpenLibrary ? (
+          <NativeButton label="Open Library" tone="soft" onPress={onOpenLibrary} />
+        ) : (
+          <>
+            {authoringPanel}
+            {tutorPanel}
 
-        {authoringPanel}
-        {tutorPanel}
-
-        <View style={styles.librarySection}>
-          <View style={styles.sectionHeading}>
-            <Text style={styles.sectionTitle}>Learning areas</Text>
-            <Text style={styles.libraryCount}>{workspace?.areas.length ?? 0} AREAS</Text>
-          </View>
-          {workspace?.areas.map((area) => {
-            const areaDue = area.cards.filter((item) => dueNow(item, now)).length;
-            return (
-              <Pressable
-                key={area.id}
+            <View className={"mt-[31px]"}>
+              <View className={"flex-row justify-between items-center mb-[13px]"}>
+                <Text className={"text-recall-ink text-[17px] font-bold tracking-[-0.3px]"}>
+                  Learning areas
+                </Text>
+                <Text className={"text-recall-muted text-[9px] font-extrabold tracking-[1.1px]"}>
+                  {workspace?.areas.length ?? 0} AREAS
+                </Text>
+              </View>
+              {workspace?.areas.map((area) => {
+                const areaDue = area.cards.filter((item) => dueNow(item, now)).length;
+                return (
+                  <Pressable
+                    key={area.id}
+                    disabled={reviewPending}
+                    accessibilityState={{ disabled: reviewPending }}
+                    onPress={() => {
+                      onSelectArea(area.id);
+                      onHideAnswer();
+                    }}
+                    className={
+                      "flex-row items-center border-t-recall-line border-t py-[12px] justify-between"
+                    }
+                  >
+                    <View
+                      className={`${"h-[35px] w-[5px] rounded-[4px] mr-[12px]"}`}
+                      style={[{ backgroundColor: area.color }]}
+                    />
+                    <View className={"flex-1"}>
+                      <Text className={"text-recall-ink text-[13px] font-semibold"}>
+                        {area.title}
+                      </Text>
+                      <Text className={"text-recall-muted text-[10px] mt-[3px]"}>
+                        {area.cards.length} cards
+                      </Text>
+                    </View>
+                    <Text className={"text-recall-muted text-[10px] mr-[12px]"}>{areaDue} due</Text>
+                    <Text className={"text-recall-muted text-[24px] mt-[-3px]"}>›</Text>
+                  </Pressable>
+                );
+              })}
+              <NativeButton
+                label="Import Anki deck"
+                onPress={onImportAnki}
+                tone="soft"
                 disabled={reviewPending}
-                accessibilityState={{ disabled: reviewPending }}
-                onPress={() => {
-                  onSelectArea(area.id);
-                  onHideAnswer();
-                }}
-                style={styles.areaRow}
-              >
-                <View style={[styles.areaAccent, { backgroundColor: area.color }]} />
-                <View style={styles.areaDetails}>
-                  <Text style={styles.areaName}>{area.title}</Text>
-                  <Text style={styles.areaCardCount}>{area.cards.length} cards</Text>
-                </View>
-                <Text style={styles.areaDueCount}>{areaDue} due</Text>
-                <Text style={styles.chevron}>›</Text>
-              </Pressable>
-            );
-          })}
-          <NativeButton
-            label="Import Anki deck"
-            onPress={onImportAnki}
-            tone="soft"
-            disabled={reviewPending}
-          />
-          <NativeButton
-            label="Reset sample library"
-            onPress={onReset}
-            tone="soft"
-            disabled={!canReset || reviewPending}
-          />
-        </View>
+              />
+              <NativeButton
+                label="Reset local study data"
+                onPress={onReset}
+                tone="soft"
+                disabled={!canReset || reviewPending}
+              />
+            </View>
+          </>
+        )}
         {retainedCards > 0 && (
-          <View style={styles.statsCard}>
-            <Text style={styles.areaName}>Deleted content awaiting sync</Text>
-            <Text style={styles.footer}>
-              {retainedCards} deleted card{retainedCards === 1 ? "" : "s"} retained privately until
-              reviews and deletions are acknowledged. These cards stay out of your library and study
-              queue; sync again to finish.
+          <View className={"mt-[31px]"}>
+            <Text className={"text-recall-ink text-[13px] font-semibold"}>Sync needed</Text>
+            <Text className={"text-recall-muted text-[10px] text-center leading-[16px] mt-[29px]"}>
+              Sync to finish deleting {retainedCards} card{retainedCards === 1 ? "" : "s"}.
             </Text>
           </View>
         )}
-        <Text style={styles.footer}>
-          Your cards and review history stay on this device until you choose to sync.
-        </Text>
       </ScrollView>
     </SafeAreaView>
   );
 }
-
-const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: palette.paper },
-  loading: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 16,
-    backgroundColor: palette.paper,
-  },
-  screen: {
-    paddingHorizontal: 22,
-    paddingTop: 16,
-    paddingBottom: 48,
-    maxWidth: 720,
-    width: "100%",
-    alignSelf: "center",
-  },
-  topBar: { flexDirection: "row", alignItems: "center", marginBottom: 34 },
-  brandMark: {
-    height: 34,
-    width: 34,
-    borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: palette.green,
-  },
-  brandGlyph: { color: palette.darkGreen, fontSize: 22, fontWeight: "800" },
-  brand: {
-    marginLeft: 10,
-    color: palette.ink,
-    fontSize: 20,
-    fontWeight: "700",
-    letterSpacing: -0.5,
-  },
-  offlineBadge: { marginLeft: "auto" },
-  eyebrow: {
-    color: palette.muted,
-    fontSize: 10,
-    fontWeight: "800",
-    letterSpacing: 1.4,
-    marginBottom: 7,
-  },
-  headingRow: {
-    flexDirection: "row",
-    alignItems: "flex-end",
-    justifyContent: "space-between",
-    marginBottom: 20,
-  },
-  title: {
-    color: palette.ink,
-    fontSize: 40,
-    lineHeight: 48,
-    fontWeight: "700",
-    letterSpacing: -1.7,
-  },
-  date: { color: palette.muted, fontSize: 13, paddingBottom: 7 },
-  areaList: { gap: 8, paddingBottom: 16 },
-  areaChip: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    borderColor: palette.line,
-    borderWidth: 1,
-    borderRadius: 999,
-    paddingHorizontal: 13,
-    paddingVertical: 9,
-  },
-  areaChipSelected: { backgroundColor: palette.ink, borderColor: palette.ink },
-  areaDot: { width: 8, height: 8, borderRadius: 4 },
-  areaChipText: { color: palette.ink, fontWeight: "600", fontSize: 12 },
-  areaChipTextSelected: { color: palette.surface },
-  statsCard: {
-    minHeight: 142,
-    borderRadius: 25,
-    padding: 22,
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: palette.ink,
-    overflow: "hidden",
-    position: "relative",
-  },
-  statsLabel: { color: "#b8b9b2", fontSize: 9, letterSpacing: 1.4, fontWeight: "800" },
-  statsValue: {
-    color: palette.surface,
-    fontSize: 42,
-    lineHeight: 49,
-    fontWeight: "600",
-    marginTop: 5,
-  },
-  statsHint: { color: "#b8b9b2", fontSize: 11 },
-  statsDivider: { height: 62, width: 1, backgroundColor: "#4a4c43", marginHorizontal: 26 },
-  statsOrb: {
-    position: "absolute",
-    height: 116,
-    width: 116,
-    borderRadius: 58,
-    backgroundColor: "#c4ed681f",
-    right: -23,
-    bottom: -37,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  orbGlyph: { fontSize: 64, color: palette.green, marginTop: -20 },
-  notice: {
-    color: palette.darkGreen,
-    fontSize: 12,
-    backgroundColor: "#eaf3d9",
-    borderRadius: 12,
-    padding: 12,
-    marginTop: 14,
-    lineHeight: 18,
-  },
-  studySection: { marginTop: 30 },
-  sectionHeading: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 13,
-  },
-  sectionTitle: { color: palette.ink, fontSize: 17, fontWeight: "700", letterSpacing: -0.3 },
-  queueCount: { color: palette.muted, fontSize: 9, fontWeight: "800", letterSpacing: 1.2 },
-  studyCard: {
-    borderRadius: 28,
-    backgroundColor: palette.surface,
-    borderWidth: 1,
-    borderColor: palette.line,
-    padding: 23,
-    minHeight: 260,
-    justifyContent: "space-between",
-  },
-  cardMeta: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  cardLabel: { color: palette.darkGreen, fontSize: 9, fontWeight: "800", letterSpacing: 1.2 },
-  cardObjective: { color: palette.muted, fontSize: 10 },
-  cardText: {
-    color: palette.ink,
-    fontSize: 23,
-    lineHeight: 32,
-    fontWeight: "500",
-    marginVertical: 28,
-  },
-  mediaImage: {
-    width: "100%",
-    height: 220,
-    borderRadius: 14,
-    marginVertical: 18,
-    backgroundColor: palette.green,
-  },
-  ratingList: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  ratingButton: {
-    flexGrow: 1,
-    flexBasis: "45%",
-    alignItems: "center",
-    justifyContent: "center",
-    minHeight: 47,
-    borderRadius: 14,
-  },
-  ratingText: { color: palette.ink, fontSize: 13, fontWeight: "700" },
-  librarySection: { marginTop: 31 },
-  libraryCount: { color: palette.muted, fontSize: 9, fontWeight: "800", letterSpacing: 1.1 },
-  areaRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    borderTopColor: palette.line,
-    borderTopWidth: 1,
-    paddingVertical: 15,
-  },
-  areaAccent: { height: 35, width: 5, borderRadius: 4, marginRight: 12 },
-  areaDetails: { flex: 1 },
-  areaName: { color: palette.ink, fontSize: 13, fontWeight: "600" },
-  areaCardCount: { color: palette.muted, fontSize: 10, marginTop: 3 },
-  areaDueCount: { color: palette.muted, fontSize: 10, marginRight: 12 },
-  chevron: { color: palette.muted, fontSize: 24, marginTop: -3 },
-  footer: {
-    color: palette.muted,
-    fontSize: 10,
-    textAlign: "center",
-    lineHeight: 16,
-    marginTop: 29,
-  },
-  muted: { color: palette.muted, fontSize: 13 },
-});

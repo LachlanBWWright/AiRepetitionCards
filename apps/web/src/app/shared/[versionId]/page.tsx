@@ -17,8 +17,8 @@ export default async function SharedKnowledgeAreaPage({
   });
   if (Either.isLeft(request)) {
     return (
-      <main className="publication-panel">
-        <h1>Invalid share link</h1>
+      <main className="mx-auto mt-12 w-full max-w-5xl rounded-xl border bg-card p-5 shadow-sm sm:p-8">
+        <h1 className="text-2xl font-semibold tracking-tight">Invalid share link</h1>
         <p>Ask the sender for a complete share link.</p>
         <Link href="/">Open your workspace</Link>
       </main>

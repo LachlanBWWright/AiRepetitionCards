@@ -1,6 +1,6 @@
 import {
   createAreaId,
-  createCardId,
+  createAssessmentId,
   createDeviceId,
   createObjectiveId,
   createReviewEventId,
@@ -73,7 +73,14 @@ export function repairReviewSyncConflicts(
 }
 
 export function prepareWorkspaceForSync(workspace: Workspace, createId: () => string): Workspace {
-  const allAreas = [...workspace.areas, ...(workspace.retainedReviewAreas ?? [])];
+  const allAreas = [
+    ...(workspace.cardVersions ?? []).map((version) => ({
+      ...version.area,
+      cards: [version.card],
+    })),
+    ...workspace.areas,
+    ...(workspace.retainedReviewAreas ?? []),
+  ];
   const identityAreas = [...new Map(allAreas.map((area) => [area.id, area])).values()].map(
     (area) => ({
       ...area,
@@ -127,7 +134,9 @@ export function prepareWorkspaceForSync(workspace: Workspace, createId: () => st
             scopedKey(area.id, card.id),
             isUuid(card.id)
               ? card.id
-              : createCardId(stableSyncId(`card:${areaSeed(area)}:${card.sourceId ?? card.id}`)),
+              : createAssessmentId(
+                  stableSyncId(`card:${areaSeed(area)}:${card.sourceId ?? card.id}`),
+                ),
           ] as const,
       ),
     ),
@@ -244,6 +253,23 @@ export function prepareWorkspaceForSync(workspace: Workspace, createId: () => st
     ...workspace,
     areas,
     ...(retainedReviewAreas ? { retainedReviewAreas } : {}),
+    ...(workspace.cardVersions
+      ? {
+          cardVersions: workspace.cardVersions.map((version) => {
+            const normalized = normalizeArea({ ...version.area, cards: [version.card] });
+            const card = normalized.cards[0];
+            return card
+              ? {
+                  ...version,
+                  areaId: normalized.id,
+                  cardId: card.id,
+                  area: { ...normalized, cards: [] },
+                  card,
+                }
+              : version;
+          }),
+        }
+      : {}),
     ...(workspace.deletedAreas
       ? {
           deletedAreas: workspace.deletedAreas.map((item) => ({

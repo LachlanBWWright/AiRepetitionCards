@@ -1,14 +1,15 @@
+import { captureCardVersion } from "./card-history";
 import { retainReviewDeletionContent } from "./review-deletion-retention";
 import { Effect, Schema } from "effect";
 import {
   AreaIdSchema,
-  CardIdSchema,
+  AssessmentIdSchema,
   ClozeContentSchema,
   MediaReferenceSchema,
   ObjectiveIdSchema,
   WorkspaceSchema,
   type LearningArea,
-  type StudyCard,
+  type Assessment,
   type Workspace,
 } from "@recall/domain";
 import { newSchedule } from "@recall/scheduler";
@@ -26,10 +27,10 @@ export const CardContentSchema = Schema.Struct({
 });
 export const SaveCardSchema = Schema.Struct({
   areaId: AreaIdSchema,
-  cardId: CardIdSchema,
+  cardId: AssessmentIdSchema,
   content: CardContentSchema,
 });
-export const DeleteCardSchema = Schema.Struct({ areaId: AreaIdSchema, cardId: CardIdSchema });
+export const DeleteCardSchema = Schema.Struct({ areaId: AreaIdSchema, cardId: AssessmentIdSchema });
 export type CardContent = typeof CardContentSchema.Type;
 export type CardManagementFailure = {
   readonly _tag: "CardManagementFailure";
@@ -45,7 +46,7 @@ const decodeWorkspace = (input: unknown) =>
     Effect.mapError(() => failure("invalid-input", "This workspace contains invalid data.")),
   );
 
-function prepareContent(area: LearningArea, input: CardContent, previous?: StudyCard) {
+function prepareContent(area: LearningArea, input: CardContent, previous?: Assessment) {
   return Effect.gen(function* () {
     const tags = input.tags;
     if (!tagsUnchanged(tags, previous?.tags ?? []) && !authoredTagsValid(tags)) {
@@ -143,7 +144,7 @@ export function createStudyCard(workspaceInput: unknown, commandInput: unknown, 
       try: () => newSchedule(now),
       catch: () => failure("invalid-input", "This card's schedule could not be created."),
     });
-    const card: StudyCard = { id: command.cardId, ...content, origin: "authored", schedule };
+    const card: Assessment = { id: command.cardId, ...content, origin: "authored", schedule };
     return {
       ...workspace,
       areas: workspace.areas.map((candidate) =>
@@ -154,7 +155,11 @@ export function createStudyCard(workspaceInput: unknown, commandInput: unknown, 
 }
 
 /** Edit content while retaining identity, schedule, origin and source lineage. */
-export function updateStudyCard(workspaceInput: unknown, commandInput: unknown) {
+export function updateStudyCard(
+  workspaceInput: unknown,
+  commandInput: unknown,
+  now: Date = new Date(),
+) {
   return Effect.gen(function* () {
     const workspace = yield* decodeWorkspace(workspaceInput);
     const command = yield* Schema.decodeUnknown(SaveCardSchema)(commandInput).pipe(
@@ -166,8 +171,14 @@ export function updateStudyCard(workspaceInput: unknown, commandInput: unknown) 
     const card = area.cards.find((candidate) => candidate.id === command.cardId);
     if (!card) return yield* Effect.fail(failure("card-missing", "This card no longer exists."));
     const content = yield* prepareContent(area, command.content, card);
+    if (!Number.isFinite(now.getTime()))
+      return yield* Effect.fail(failure("invalid-input", "The edit time is invalid."));
+    const changed = Object.entries(content).some(
+      ([key, value]) => JSON.stringify(value) !== JSON.stringify(card[key as keyof Assessment]),
+    );
+    const captured = changed ? captureCardVersion(workspace, area, card, "edit", now) : workspace;
     return {
-      ...workspace,
+      ...captured,
       areas: workspace.areas.map((candidate) =>
         candidate.id === area.id
           ? {
@@ -183,7 +194,12 @@ export function updateStudyCard(workspaceInput: unknown, commandInput: unknown) 
 }
 
 /** Remove active content and retain append-only reviews and a sync deletion tombstone. */
-export function deleteStudyCard(workspaceInput: unknown, commandInput: unknown) {
+export function deleteStudyCard(
+  workspaceInput: unknown,
+  commandInput: unknown,
+  now: Date = new Date(),
+  reason: "delete" | "replace" = "delete",
+) {
   return Effect.gen(function* () {
     const workspace = yield* decodeWorkspace(workspaceInput);
     const command = yield* Schema.decodeUnknown(DeleteCardSchema)(commandInput).pipe(
@@ -202,8 +218,11 @@ export function deleteStudyCard(workspaceInput: unknown, commandInput: unknown) 
     if (!area.cards.some((card) => card.id === command.cardId)) {
       return yield* Effect.fail(failure("card-missing", "This card no longer exists."));
     }
+    const deleted = area.cards.find((card) => card.id === command.cardId);
+    if (!deleted || !Number.isFinite(now.getTime()))
+      return yield* Effect.fail(failure("invalid-input", "The deletion time is invalid."));
     const next = {
-      ...workspace,
+      ...captureCardVersion(workspace, area, deleted, reason, now),
       deletedCards: [
         ...(workspace.deletedCards ?? []).filter(
           (item) => item.areaId !== area.id || item.cardId !== command.cardId,

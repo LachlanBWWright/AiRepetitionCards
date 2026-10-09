@@ -7,7 +7,7 @@ import {
 } from "@recall/application";
 import type { MediaStore } from "@recall/local-store";
 import type { PublicationForkOperationStore } from "@recall/application";
-import { createCardId, createObjectiveId, type KnowledgeArea } from "@recall/domain";
+import { createAssessmentId, createObjectiveId, type KnowledgeArea } from "@recall/domain";
 import { mockWorkspace } from "../features/workspace/mock-data";
 import { NativePublishingPanel } from "../../../mobile/src/components/NativePublishingPanel";
 
@@ -23,7 +23,7 @@ const lineageArea: KnowledgeArea | null = area
       forkedFromVersionId: "00000000-0000-4000-8000-000000000099",
       cards: area.cards.map((card) => ({
         ...card,
-        id: createCardId(`fork-${card.id}`),
+        id: createAssessmentId(`fork-${card.id}`),
         sourceId: card.sourceId ?? card.id,
       })),
       objectives: area.objectives.map((objective) => ({

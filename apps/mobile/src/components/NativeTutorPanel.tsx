@@ -1,6 +1,6 @@
-import { NativeButton } from "@recall/ui-native";
+import { NativeButton } from "./ui/NativeButton";
 import { useEffect, useRef, useState } from "react";
-import { ActivityIndicator, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Text, TextInput, View } from "react-native";
 import { Effect, Either, Schema } from "effect";
 import type { TutorSessionState } from "@recall/ai-core";
 import type {
@@ -8,16 +8,28 @@ import type {
   CardProposal,
   KnowledgeGap,
   TutorActionRequest,
+  CardRefinementInput,
+  CardRefinementResult,
+  CardInspectionResult,
 } from "@recall/ai-core";
+import { CardProposalSchema, selectTutorContextHistory } from "@recall/ai-core";
+import { NativeProposalDuplicateWarning } from "./NativeProposalDuplicateWarning";
+import { NativeCardAssistancePanel } from "./NativeCardAssistancePanel";
 import {
-  CardProposalSchema,
-  selectTutorContextHistory,
-  selectTutorInferenceContext,
-} from "@recall/ai-core";
+  readNativeKnowledgeNotebook,
+  writeNativeKnowledgeNotebook,
+} from "../storage/native-knowledge-notebook-store";
 import { NativeKnowledgeNotebookPanel } from "./NativeKnowledgeNotebookPanel";
 import type { ReviewEvent, KnowledgeArea } from "@recall/domain";
 import {
+  findCardDuplicates,
+  knowledgeAreaDuplicateCandidates,
+  type CardDuplicateCandidate,
+  type WorkspaceSearchTarget,
   accumulateTutorObservations,
+  createCardAssistanceTutor,
+  importTutorProposal,
+  applyNotebookRefinement,
   selectTutorQuizObjective,
   tutorApiFailureMessage,
 } from "@recall/application";
@@ -25,10 +37,13 @@ import { designTokens } from "@recall/design-tokens";
 import type { makeNativeTutorApi } from "../storage/native-tutor-api";
 
 const palette = designTokens.color;
+const refinementNamespace = "knowledge-notebook:card-refinements";
 type TutorApi = ReturnType<typeof makeNativeTutorApi>;
 
 export function NativeTutorPanel({
   area,
+  searchTarget,
+  duplicateCandidates = area ? knowledgeAreaDuplicateCandidates(area) : [],
   reviewEvents = [],
   mayWrite = () => true,
   api,
@@ -47,6 +62,8 @@ export function NativeTutorPanel({
   readonly initialNotice?: string | null;
   readonly initialAnswer?: string;
   readonly area: KnowledgeArea | null;
+  readonly searchTarget?: WorkspaceSearchTarget | undefined;
+  readonly duplicateCandidates?: readonly CardDuplicateCandidate[];
   readonly reviewEvents?: readonly ReviewEvent[];
   readonly mayWrite?: () => boolean;
   readonly api: TutorApi | null;
@@ -60,6 +77,22 @@ export function NativeTutorPanel({
     sessionId: string,
   ) => Promise<{ readonly cardId: string; readonly content: CardProposal } | null>;
 }) {
+  const [showConversation, setShowConversation] = useState(false);
+  const [showProposalDetails, setShowProposalDetails] = useState(false);
+  const [showTargets, setShowTargets] = useState(false);
+  const [notebookReload, setNotebookReload] = useState(0);
+  const [showRefinementNotebook, setShowRefinementNotebook] = useState(false);
+  useEffect(() => {
+    if (
+      !searchTarget ||
+      !("namespace" in searchTarget) ||
+      searchTarget.namespace !== refinementNamespace
+    )
+      return;
+    const frame = requestAnimationFrame(() => setShowRefinementNotebook(true));
+    return () => cancelAnimationFrame(frame);
+  }, [searchTarget]);
+  const assistanceLocked = useRef(false);
   const [sessionId, setSessionId] = useState<string | null>(initialSessionId);
   const [session, setSession] = useState<TutorSessionState | null>(null);
   const [question, setQuestion] = useState("");
@@ -97,23 +130,55 @@ export function NativeTutorPanel({
         : session.proposal.content
     : null;
   const approvalSaved = savedApproval?.key === proposalKey;
+  const [duplicateAcknowledgement, setDuplicateAcknowledgement] = useState<string | null>(null);
+  const duplicateMatches = proposalContent
+    ? findCardDuplicates(proposalContent, duplicateCandidates)
+    : [];
+  const duplicateKey = JSON.stringify([
+    proposalKey,
+    proposalContent?.front,
+    proposalContent?.back,
+    duplicateMatches.map((match) => match.candidate),
+  ]);
+  const duplicatesAllowed =
+    approvalSaved || duplicateMatches.length === 0 || duplicateAcknowledgement === duplicateKey;
   function editProposal(field: "front" | "back" | "rationale", value: string) {
     if (proposalKey && proposalContent && !approvalSaved)
       setDraft({ key: proposalKey, content: { ...proposalContent, [field]: value } });
   }
 
+  const areaId = area?.id;
   useEffect(() => {
     if (!api || !sessionId) return;
     let active = true;
-    void Effect.runPromise(Effect.either(api.readSession(sessionId))).then((result) => {
+    void Effect.runPromise(Effect.either(api.readSession(sessionId))).then(async (result) => {
       if (!active) return;
-      if (Either.isRight(result)) setSession(result.right);
-      else setNotice(tutorApiFailureMessage(result.left));
+      if (Either.isRight(result)) {
+        let restored = result.right;
+        if (areaId && restored?.proposal) {
+          const restoredProposalId = restored.proposal.proposalId;
+          const local = await Effect.runPromise(
+            Effect.either(readNativeKnowledgeNotebook(areaId, refinementNamespace)),
+          );
+          if (!active) return;
+          if (Either.isLeft(local))
+            setNotice("The refinement notebook could not be read. Its saved data was preserved.");
+          else if (
+            local.right?.proposals.some(
+              (proposal) => proposal.id === restoredProposalId && proposal.status === "discarded",
+            ) &&
+            local.right.proposals.some((proposal) => proposal.aiRefinementOf === restoredProposalId)
+          ) {
+            restored = { ...restored, proposal: null };
+          }
+        }
+        setSession(restored);
+      } else setNotice(tutorApiFailureMessage(result.left));
     });
     return () => {
       active = false;
     };
-  }, [api, sessionId]);
+  }, [api, sessionId, areaId]);
 
   async function request(
     action: TutorActionRequest,
@@ -259,9 +324,200 @@ export function NativeTutorPanel({
     if (accepted) setQuizAnswer((current) => (current === submitted ? "" : current));
   }
 
+  async function assistProposal(mode: CardRefinementInput["mode"], instructions: string) {
+    if (
+      !area ||
+      !api ||
+      !proposalContent ||
+      !mayWrite() ||
+      approvalSaved ||
+      assistanceLocked.current
+    )
+      return null;
+    assistanceLocked.current = true;
+    const epoch = approvalEpoch.current;
+    setBusy(true);
+    const result = await Effect.runPromise(
+      Effect.either(
+        createCardAssistanceTutor(api).refine(
+          null,
+          { knowledgeArea: area, history: selectTutorContextHistory(session?.history ?? []) },
+          { ...proposalContent, mode, instructions, sources: [] },
+          Date.now(),
+        ),
+      ),
+    );
+    assistanceLocked.current = false;
+    if (approvalEpoch.current !== epoch || !mayWrite()) return null;
+    setBusy(false);
+    if (Either.isLeft(result)) {
+      setNotice(result.left.message);
+      return null;
+    }
+    return result.right.result;
+  }
+
+  async function inspectProposal(): Promise<CardInspectionResult | null> {
+    if (
+      !area ||
+      !api ||
+      !proposalContent ||
+      !mayWrite() ||
+      approvalSaved ||
+      assistanceLocked.current
+    )
+      return null;
+    assistanceLocked.current = true;
+    const epoch = approvalEpoch.current;
+    setBusy(true);
+    const result = await Effect.runPromise(
+      Effect.either(
+        createCardAssistanceTutor(api).inspect(
+          null,
+          { knowledgeArea: area, history: selectTutorContextHistory(session?.history ?? []) },
+          { ...proposalContent, sources: [] },
+          Date.now(),
+        ),
+      ),
+    );
+    assistanceLocked.current = false;
+    if (approvalEpoch.current !== epoch || !mayWrite()) return null;
+    setBusy(false);
+    if (Either.isLeft(result)) {
+      setNotice(result.left.message);
+      return null;
+    }
+    return result.right.result;
+  }
+
+  async function keepRefinement(result: CardRefinementResult): Promise<boolean> {
+    if (
+      !area ||
+      !session?.proposal ||
+      !proposalContent ||
+      !proposalKey ||
+      !sessionId ||
+      !mayWrite() ||
+      approvalSaved ||
+      assistanceLocked.current
+    )
+      return false;
+    if (result.cards.length === 1 && result.cards[0]) {
+      setDraft({ key: proposalKey, content: result.cards[0] });
+      return true;
+    }
+    assistanceLocked.current = true;
+    const epoch = approvalEpoch.current;
+    const sourceProposal = session.proposal;
+    const sourceArea = area;
+    const matchingQuizAnswers =
+      session.quiz?.questions.filter(
+        (item) =>
+          item.evaluation &&
+          session.evaluation &&
+          JSON.stringify(item.evaluation) === JSON.stringify(session.evaluation),
+      ) ?? [];
+    const quizEvidence = matchingQuizAnswers.length === 1 ? matchingQuizAnswers[0] : undefined;
+    const learnerIndex = session.history.reduce(
+      (last, item, index) => (item.role === "learner" ? index : last),
+      -1,
+    );
+    const observedAnswer = quizEvidence?.learnerAnswer ?? session.history[learnerIndex]?.content;
+    const observedQuestion =
+      quizEvidence?.prompt ??
+      session.history
+        .slice(0, learnerIndex)
+        .reverse()
+        .find((item) => item.role === "assistant")?.content;
+    if (
+      !observedAnswer ||
+      !observedQuestion ||
+      !session.evaluation ||
+      matchingQuizAnswers.length > 1
+    ) {
+      assistanceLocked.current = false;
+      setNotice(
+        "The original question, answer and evaluation are required to retain evidence for split proposals. Evaluate a fresh answer first.",
+      );
+      return false;
+    }
+    setBusy(true);
+    const transferred = await Effect.runPromise(
+      Effect.either(
+        Effect.gen(function* () {
+          const stored = yield* readNativeKnowledgeNotebook(
+            sourceArea.id,
+            refinementNamespace,
+          ).pipe(
+            Effect.mapError(() => ({
+              message: "Your notebook could not be read. Its saved data was preserved.",
+            })),
+          );
+          const notebook = stored;
+          const imported = yield* importTutorProposal(
+            notebook,
+            sourceArea,
+            {
+              proposalId: sourceProposal.proposalId,
+              sessionId,
+              proposal: proposalContent,
+              evaluation: session.evaluation,
+              question: observedQuestion,
+              answer: observedAnswer,
+              evidenceId: createId(),
+              now: Date.now(),
+            },
+            sourceArea.cards,
+          );
+          const next = yield* applyNotebookRefinement(
+            imported,
+            {
+              proposalId: sourceProposal.proposalId,
+              baseline: {
+                front: proposalContent.front,
+                back: proposalContent.back,
+                objectiveId: proposalContent.objectiveId,
+              },
+              cards: result.cards,
+              newProposalIds: result.cards.map(() => createId()),
+            },
+            sourceArea.cards,
+          );
+          yield* writeNativeKnowledgeNotebook(
+            sourceArea.id,
+            next,
+            () => approvalEpoch.current === epoch && mayWrite(),
+            refinementNamespace,
+          ).pipe(
+            Effect.mapError(() => ({
+              message:
+                "The split proposals could not be saved. The original proposal remains available.",
+            })),
+          );
+        }),
+      ),
+    );
+    assistanceLocked.current = false;
+    if (approvalEpoch.current !== epoch || !mayWrite()) return false;
+    setBusy(false);
+    if (Either.isLeft(transferred)) {
+      setNotice(transferred.left.message);
+      return false;
+    }
+    setNotebookReload((previous) => previous + 1);
+    setShowRefinementNotebook(true);
+    setSession((current) => (current ? { ...current, proposal: null } : current));
+    setNotice("Split suggestions saved. Open Split suggestions to review them.");
+    return true;
+  }
+
   async function resolveProposal(state: "approved" | "rejected") {
     const proposal = session?.proposal;
     if (!api || !proposal || !sessionId) return;
+    if (state === "approved" && !duplicatesAllowed) {
+      setNotice("Review the possible duplicates and choose Keep both before saving.");
+      return;
+    }
     const key = proposalKey;
     const epoch = approvalEpoch.current;
     if (!key) return;
@@ -337,22 +593,10 @@ export function NativeTutorPanel({
       return;
     }
     setSession((current) => (current ? { ...current, proposal: null } : current));
-    setNotice(state === "approved" ? "Approved and saved to this device." : "Proposal rejected.");
+    setNotice(state === "approved" ? "Saved." : "Discarded.");
   }
 
   if (!area) return null;
-  const contextPreview = Effect.runSync(
-    Effect.either(
-      selectTutorInferenceContext(
-        {
-          knowledgeArea: area,
-          history: selectTutorContextHistory(session?.history ?? []),
-        },
-        undefined,
-        session?.quiz?.objectiveId ?? session?.evaluation?.objectiveId,
-      ),
-    ),
-  );
   const quizSelection = Effect.runSync(
     Effect.either(
       selectTutorQuizObjective(area, objectiveGaps, tutorEvidence(session), selectedObjectiveId),
@@ -360,9 +604,17 @@ export function NativeTutorPanel({
   );
   const objective = session?.quiz?.questions.find((item) => item.learnerAnswer === null);
   return (
-    <View testID="native-tutor-panel" style={styles.panel}>
+    <View testID="native-tutor-panel" className={"gap-[10px] mt-[12px]"}>
       <NativeKnowledgeNotebookPanel
         area={area}
+        searchTarget={
+          searchTarget &&
+          "namespace" in searchTarget &&
+          searchTarget.namespace === "knowledge-notebook"
+            ? searchTarget
+            : undefined
+        }
+        duplicateCandidates={duplicateCandidates}
         reviewEvents={reviewEvents}
         api={api}
         createId={createId}
@@ -370,247 +622,341 @@ export function NativeTutorPanel({
         onApproveProposal={onApproveProposal}
         onStartReview={onStartReview}
       />
-      <View style={styles.heading}>
-        <View>
-          <Text style={styles.eyebrow}>AI STUDY PARTNER</Text>
-          <Text style={styles.title}>Tutor</Text>
-        </View>
-        {sessionId ? <Text style={styles.session}>Session ready</Text> : null}
-      </View>
-      {!api && (
-        <Text style={styles.response}>
-          The AI tutor is not configured on this device. You can keep studying and editing cards in
-          Today and Library.
-        </Text>
-      )}
-      <Text accessibilityLiveRegion="polite" style={styles.session}>
-        {Either.isRight(contextPreview)
-          ? `Tutor context: ${contextPreview.right.knowledgeArea.cards.length} of ${area.cards.length} cards; objectives and AI instructions retained.`
-          : "Required context exceeds the tutor budget. Shorten objective descriptions or AI instructions."}
-      </Text>
-      {!sessionId ? (
-        <NativeButton
-          disabled={busy || !api}
-          onPress={() => {
-            const nextSessionId = createId();
-            setSessionId(nextSessionId);
-            onSessionIdChange(nextSessionId);
-          }}
-          label={busy ? "Loading…" : "Resume tutor"}
-          style={styles.softButton}
-          labelStyle={styles.softText}
+      <NativeButton
+        label={showRefinementNotebook ? "Hide split suggestions" : "Split suggestions"}
+        onPress={() => setShowRefinementNotebook((previous) => !previous)}
+        className={
+          "min-h-[38px] justify-center items-center px-[12px] rounded-[10px] bg-transparent"
+        }
+        labelClassName="text-recall-darkGreen text-[11px] font-bold"
+      />
+      {showRefinementNotebook ? (
+        <NativeKnowledgeNotebookPanel
+          key={`${area.id}:${refinementNamespace}:${notebookReload}`}
+          storageNamespace={refinementNamespace}
+          searchTarget={
+            searchTarget &&
+            "namespace" in searchTarget &&
+            searchTarget.namespace === refinementNamespace
+              ? searchTarget
+              : undefined
+          }
+          area={area}
+          duplicateCandidates={duplicateCandidates}
+          reviewEvents={reviewEvents}
+          api={api}
+          createId={createId}
+          mayWrite={mayWrite}
+          onApproveProposal={onApproveProposal}
+          onStartReview={onStartReview}
         />
       ) : null}
-      {tutorReply || session?.history.length ? (
-        <Text style={styles.response}>
-          {tutorReply ||
-            [...(session?.history ?? [])].reverse().find((item) => item.role === "assistant")
-              ?.content}
-        </Text>
-      ) : null}
-      <View style={styles.row}>
-        <TextInput
-          accessibilityLabel="Ask the tutor"
-          onChangeText={setQuestion}
-          placeholder="Ask about this area…"
-          placeholderTextColor={palette.muted}
-          style={styles.input}
-          value={question}
-        />
-        <NativeButton
-          disabled={busy || !api || !question.trim()}
-          onPress={() => void ask()}
-          label="Ask"
-          style={styles.button}
-          labelStyle={styles.buttonText}
-        />
-      </View>
-      {sessionId && !session?.quiz ? (
-        <View style={styles.row}>
-          <TextInput
-            accessibilityLabel="Answer the tutor"
-            onChangeText={setAnswer}
-            placeholder="Try an answer…"
-            placeholderTextColor={palette.muted}
-            style={styles.input}
-            value={answer}
-          />
-          <NativeButton
-            disabled={busy || !api || !answer.trim()}
-            onPress={() => void evaluateAnswer()}
-            label="Check"
-            style={styles.softButton}
-            labelStyle={styles.softText}
-          />
-        </View>
-      ) : null}
-      {session?.evaluation && !session.quiz ? (
-        <NativeTutorEvaluation evaluation={session.evaluation} area={area} />
-      ) : null}
-      {session?.quiz?.questions.map((item, index) =>
-        item.evaluation ? (
-          <View key={`${session.quiz?.objectiveId}:${index}`} style={styles.quiz}>
-            <Text style={styles.quizTitle}>
-              Quiz answer {index + 1}: {item.prompt}
-            </Text>
-            {item.learnerAnswer ? (
-              <Text style={styles.response}>Your answer: {item.learnerAnswer}</Text>
-            ) : null}
-            <NativeTutorEvaluation evaluation={item.evaluation} area={area} />
-          </View>
-        ) : null,
-      )}
-      {Either.isRight(quizSelection) && quizSelection.right.objective ? (
-        <View style={styles.quiz}>
-          <Text style={styles.quizTitle}>
-            Practice target: {quizSelection.right.objective.title}
+      <NativeButton
+        label={showConversation ? "Close tutor conversation" : "Ask the tutor"}
+        onPress={() => setShowConversation((current) => !current)}
+        className={"py-[9px] px-[4px]"}
+        labelClassName="text-recall-darkGreen text-[11px] font-bold"
+      />
+      <View className={showConversation ? "gap-[10px]" : "hidden"}>
+        {!api ? (
+          <Text className={"text-recall-muted text-[11px] leading-[16px]"}>
+            Connect AI in settings to ask questions.
           </Text>
-          {quizSelection.right.gap ? (
-            <Text style={styles.response}>{quizSelection.right.gap.evidenceSummary}</Text>
-          ) : null}
-          {quizSelection.right.gaps.map((gap) => (
-            <NativeButton
-              key={gap.objectiveId}
-              disabled={busy}
-              onPress={() => setSelectedObjectiveId(gap.objectiveId)}
-              label={`Practice ${gap.objectiveTitle}`}
-              style={styles.softButton}
-              labelStyle={styles.softText}
-            />
-          ))}
-        </View>
-      ) : null}
-      <View style={styles.row}>
-        <NativeButton
-          disabled={busy || !api}
-          onPress={() => void startQuiz()}
-          label="Targeted quiz"
-          style={styles.softButton}
-          labelStyle={styles.softText}
-        />
-        {sessionId &&
-        session?.evaluation?.suggestedAction === "propose-card" &&
-        !session.proposal ? (
+        ) : null}
+        {!sessionId ? (
           <NativeButton
             disabled={busy || !api}
-            onPress={() => void request({ action: "propose-card", sessionId })}
-            label="Propose card"
-            style={styles.softButton}
-            labelStyle={styles.softText}
+            onPress={() => {
+              const nextSessionId = createId();
+              setSessionId(nextSessionId);
+              onSessionIdChange(nextSessionId);
+            }}
+            label={busy ? "Loading…" : "Resume tutor"}
+            className={
+              "min-h-[38px] justify-center items-center px-[12px] rounded-[10px] bg-transparent"
+            }
+            labelClassName="text-recall-darkGreen text-[11px] font-bold"
           />
         ) : null}
-      </View>
-      {objective ? (
-        <View style={styles.quiz}>
-          <Text style={styles.quizTitle}>{objective.prompt}</Text>
-          {objective.evaluation ? (
-            <NativeTutorEvaluation evaluation={objective.evaluation} area={area} />
-          ) : null}
-          <View style={styles.row}>
+        {tutorReply || session?.history.length ? (
+          <Text className={"text-recall-ink text-[13px] leading-[19px]"}>
+            {tutorReply ||
+              [...(session?.history ?? [])].reverse().find((item) => item.role === "assistant")
+                ?.content}
+          </Text>
+        ) : null}
+        <View className={"flex-row gap-[8px] items-center"}>
+          <TextInput
+            accessibilityLabel="Ask the tutor"
+            onChangeText={setQuestion}
+            placeholder="Ask about this area…"
+            placeholderTextColor={palette.muted}
+            className={
+              "flex-1 min-h-[42px] px-[11px] rounded-[10px] bg-recall-paper text-recall-ink"
+            }
+            value={question}
+          />
+          <NativeButton
+            disabled={busy || !api || !question.trim()}
+            onPress={() => void ask()}
+            label="Ask"
+            className={"min-h-[40px] justify-center px-[13px] rounded-[10px] bg-recall-darkGreen"}
+            labelClassName="text-recall-surface text-[12px] font-bold"
+          />
+        </View>
+        {sessionId && !session?.quiz ? (
+          <View className={"flex-row gap-[8px] items-center"}>
             <TextInput
-              accessibilityLabel="Quiz answer"
-              onChangeText={setQuizAnswer}
-              placeholder="Your answer"
+              accessibilityLabel="Answer the tutor"
+              onChangeText={setAnswer}
+              placeholder="Try an answer…"
               placeholderTextColor={palette.muted}
-              style={styles.input}
-              value={quizAnswer}
+              className={
+                "flex-1 min-h-[42px] px-[11px] rounded-[10px] bg-recall-paper text-recall-ink"
+              }
+              value={answer}
             />
             <NativeButton
-              disabled={busy || !api || !quizAnswer.trim()}
-              onPress={() => void evaluateQuizAnswer()}
-              label="Submit"
-              style={styles.button}
-              labelStyle={styles.buttonText}
+              disabled={busy || !api || !answer.trim()}
+              onPress={() => void evaluateAnswer()}
+              label="Check"
+              className={
+                "min-h-[38px] justify-center items-center px-[12px] rounded-[10px] bg-transparent"
+              }
+              labelClassName="text-recall-darkGreen text-[11px] font-bold"
             />
           </View>
-        </View>
-      ) : null}
-      {session?.proposal && proposalContent ? (
-        <View style={styles.proposal}>
-          <Text style={styles.quizTitle}>Proposed card · approval required</Text>
-          <Text style={styles.muted}>
-            {approvalSaved
-              ? "Saved on this device. Retry acknowledgment using this saved content."
-              : "Edit the Basic card before saving. Question: 1,000 characters; answer: 3,000; rationale: 1,000."}
-          </Text>
-          <TextInput
-            accessibilityLabel="Proposed card question"
-            multiline
-            editable={!busy && !approvalSaved}
-            value={proposalContent.front}
-            onChangeText={(value) => editProposal("front", value)}
-            style={styles.input}
+        ) : null}
+        {session?.evaluation && !session.quiz ? (
+          <NativeTutorEvaluation evaluation={session.evaluation} area={area} />
+        ) : null}
+        {session?.quiz?.questions.map((item, index) =>
+          item.evaluation ? (
+            <View
+              key={`${session.quiz?.objectiveId}:${index}`}
+              className={"gap-[8px] py-[11px] border-b border-b-recall-line"}
+            >
+              <Text className={"text-recall-ink font-bold text-[13px]"}>
+                Quiz answer {index + 1}: {item.prompt}
+              </Text>
+              {item.learnerAnswer ? (
+                <Text className={"text-recall-ink text-[13px] leading-[19px]"}>
+                  Your answer: {item.learnerAnswer}
+                </Text>
+              ) : null}
+              <NativeTutorEvaluation evaluation={item.evaluation} area={area} />
+            </View>
+          ) : null,
+        )}
+        <NativeButton
+          label={showTargets ? "Hide practice targets" : "Practice targets"}
+          onPress={() => setShowTargets((current) => !current)}
+          className={"py-[9px] px-[4px]"}
+          labelClassName="text-recall-darkGreen text-[11px] font-bold"
+        />
+        {showTargets && Either.isRight(quizSelection) && quizSelection.right.objective ? (
+          <View className={"gap-[8px] py-[11px] border-b border-b-recall-line"}>
+            <Text className={"text-recall-ink font-bold text-[13px]"}>
+              Practice target: {quizSelection.right.objective.title}
+            </Text>
+            {quizSelection.right.gap ? (
+              <Text className={"text-recall-ink text-[13px] leading-[19px]"}>
+                {quizSelection.right.gap.evidenceSummary}
+              </Text>
+            ) : null}
+            {quizSelection.right.gaps.map((gap) => (
+              <NativeButton
+                key={gap.objectiveId}
+                disabled={busy}
+                onPress={() => setSelectedObjectiveId(gap.objectiveId)}
+                label={`Practice ${gap.objectiveTitle}`}
+                className={
+                  "min-h-[38px] justify-center items-center px-[12px] rounded-[10px] bg-transparent"
+                }
+                labelClassName="text-recall-darkGreen text-[11px] font-bold"
+              />
+            ))}
+          </View>
+        ) : null}
+        <View className={"flex-row gap-[8px] items-center"}>
+          <NativeButton
+            disabled={busy || !api}
+            onPress={() => void startQuiz()}
+            label="Targeted quiz"
+            className={
+              "min-h-[38px] justify-center items-center px-[12px] rounded-[10px] bg-transparent"
+            }
+            labelClassName="text-recall-darkGreen text-[11px] font-bold"
           />
-          <TextInput
-            accessibilityLabel="Proposed card answer"
-            multiline
-            editable={!busy && !approvalSaved}
-            value={proposalContent.back}
-            onChangeText={(value) => editProposal("back", value)}
-            style={styles.input}
-          />
-          <Text style={styles.response}>Learning objective</Text>
-          {[{ id: null, title: "No objective" }, ...area.objectives].map((objective) => (
-            <NativeButton
-              key={objective.id ?? "none"}
-              disabled={busy || approvalSaved}
-              label={`${proposalContent.objectiveId === objective.id ? "✓ " : ""}${objective.title}`}
-              onPress={() => {
-                if (proposalKey)
-                  setDraft({
-                    key: proposalKey,
-                    content: { ...proposalContent, objectiveId: objective.id },
-                  });
-              }}
-              style={styles.softButton}
-              labelStyle={styles.softText}
-            />
-          ))}
-          <TextInput
-            accessibilityLabel="Proposed card rationale"
-            multiline
-            editable={!busy && !approvalSaved}
-            value={proposalContent.rationale}
-            onChangeText={(value) => editProposal("rationale", value)}
-            style={styles.input}
-          />
-          <View style={styles.row}>
+          {sessionId &&
+          session?.evaluation?.suggestedAction === "propose-card" &&
+          !session.proposal ? (
             <NativeButton
               disabled={busy || !api}
-              onPress={() => void resolveProposal("approved")}
-              label={approvalSaved ? "Retry approval" : "Save & approve"}
-              style={styles.button}
-              labelStyle={styles.buttonText}
+              onPress={() => void request({ action: "propose-card", sessionId })}
+              label="Propose card"
+              className={
+                "min-h-[38px] justify-center items-center px-[12px] rounded-[10px] bg-transparent"
+              }
+              labelClassName="text-recall-darkGreen text-[11px] font-bold"
+            />
+          ) : null}
+        </View>
+        {objective ? (
+          <View className={"gap-[8px] py-[11px] border-b border-b-recall-line"}>
+            <Text className={"text-recall-ink font-bold text-[13px]"}>{objective.prompt}</Text>
+            {objective.evaluation ? (
+              <NativeTutorEvaluation evaluation={objective.evaluation} area={area} />
+            ) : null}
+            <View className={"flex-row gap-[8px] items-center"}>
+              <TextInput
+                accessibilityLabel="Quiz answer"
+                onChangeText={setQuizAnswer}
+                placeholder="Your answer"
+                placeholderTextColor={palette.muted}
+                className={
+                  "flex-1 min-h-[42px] px-[11px] rounded-[10px] bg-recall-paper text-recall-ink"
+                }
+                value={quizAnswer}
+              />
+              <NativeButton
+                disabled={busy || !api || !quizAnswer.trim()}
+                onPress={() => void evaluateQuizAnswer()}
+                label="Submit"
+                className={
+                  "min-h-[40px] justify-center px-[13px] rounded-[10px] bg-recall-darkGreen"
+                }
+                labelClassName="text-recall-surface text-[12px] font-bold"
+              />
+            </View>
+          </View>
+        ) : null}
+        {session?.proposal && proposalContent ? (
+          <View className={"gap-[7px] py-[11px]"}>
+            <Text className={"text-recall-ink font-bold text-[13px]"}>Suggested card</Text>
+            {approvalSaved ? (
+              <Text className={"text-recall-muted text-[11px] leading-[16px]"}>
+                Saved. Retry approval to finish.
+              </Text>
+            ) : null}
+            <TextInput
+              accessibilityLabel="Proposed card question"
+              multiline
+              editable={!busy && !approvalSaved}
+              value={proposalContent.front}
+              onChangeText={(value) => editProposal("front", value)}
+              className={
+                "flex-1 min-h-[42px] px-[11px] rounded-[10px] bg-recall-paper text-recall-ink"
+              }
+            />
+            <TextInput
+              accessibilityLabel="Proposed card answer"
+              multiline
+              editable={!busy && !approvalSaved}
+              value={proposalContent.back}
+              onChangeText={(value) => editProposal("back", value)}
+              className={
+                "flex-1 min-h-[42px] px-[11px] rounded-[10px] bg-recall-paper text-recall-ink"
+              }
             />
             <NativeButton
-              disabled={busy || !api || approvalSaved}
-              onPress={() => void resolveProposal("rejected")}
-              label="Reject"
-              style={styles.softButton}
-              labelStyle={styles.softText}
+              label={showProposalDetails ? "Hide details" : "Details"}
+              onPress={() => setShowProposalDetails((current) => !current)}
+              className={"py-[9px] px-[4px]"}
+              labelClassName="text-recall-darkGreen text-[11px] font-bold"
             />
+            <View className={showProposalDetails ? "gap-[10px]" : "hidden"}>
+              <Text className={"text-recall-ink text-[13px] leading-[19px]"}>
+                Learning objective
+              </Text>
+              {[{ id: null, title: "No objective" }, ...area.objectives].map((objective) => (
+                <NativeButton
+                  key={objective.id ?? "none"}
+                  disabled={busy || approvalSaved}
+                  label={`${proposalContent.objectiveId === objective.id ? "✓ " : ""}${objective.title}`}
+                  onPress={() => {
+                    if (proposalKey)
+                      setDraft({
+                        key: proposalKey,
+                        content: { ...proposalContent, objectiveId: objective.id },
+                      });
+                  }}
+                  className={
+                    "min-h-[38px] justify-center items-center px-[12px] rounded-[10px] bg-transparent"
+                  }
+                  labelClassName="text-recall-darkGreen text-[11px] font-bold"
+                />
+              ))}
+              <TextInput
+                accessibilityLabel="Proposed card rationale"
+                multiline
+                editable={!busy && !approvalSaved}
+                value={proposalContent.rationale}
+                onChangeText={(value) => editProposal("rationale", value)}
+                className={
+                  "flex-1 min-h-[42px] px-[11px] rounded-[10px] bg-recall-paper text-recall-ink"
+                }
+              />
+            </View>
+            <NativeCardAssistancePanel
+              key={proposalKey}
+              content={proposalContent}
+              proposalOnly
+              disabled={busy || approvalSaved || !mayWrite()}
+              onRefine={api ? assistProposal : undefined}
+              onInspect={api ? inspectProposal : undefined}
+              onApply={keepRefinement}
+            />
+            {!approvalSaved && (
+              <NativeProposalDuplicateWarning
+                matches={duplicateMatches}
+                acknowledged={duplicateAcknowledgement === duplicateKey}
+                disabled={busy}
+                onChange={(value) => setDuplicateAcknowledgement(value ? duplicateKey : null)}
+              />
+            )}
+            <View className={"flex-row gap-[8px] items-center"}>
+              <NativeButton
+                disabled={busy || !api || !duplicatesAllowed}
+                onPress={() => void resolveProposal("approved")}
+                label={approvalSaved ? "Retry approval" : "Save & approve"}
+                className={
+                  "min-h-[40px] justify-center px-[13px] rounded-[10px] bg-recall-darkGreen"
+                }
+                labelClassName="text-recall-surface text-[12px] font-bold"
+              />
+              <NativeButton
+                disabled={busy || !api || approvalSaved}
+                onPress={() => void resolveProposal("rejected")}
+                label="Reject"
+                className={
+                  "min-h-[38px] justify-center items-center px-[12px] rounded-[10px] bg-transparent"
+                }
+                labelClassName="text-recall-darkGreen text-[11px] font-bold"
+              />
+            </View>
           </View>
-        </View>
-      ) : null}
+        ) : null}
+      </View>
       {busy ? <ActivityIndicator color={palette.darkGreen} /> : null}
       {notice ? (
-        <Text accessibilityRole="alert" style={styles.notice}>
+        <Text
+          accessibilityRole="alert"
+          className={"text-recall-darkGreen bg-recall-paper p-[9px] rounded-[9px] text-[12px]"}
+        >
           {notice}
         </Text>
       ) : null}
-      <Text style={styles.muted}>AI suggestions stay proposals until you approve them.</Text>
     </View>
   );
 }
 
 function NativeTutorEvaluation({
   evaluation,
-  area,
 }: {
   readonly evaluation: AnswerEvaluation;
   readonly area: KnowledgeArea;
 }) {
-  const objective = area.objectives.find((item) => item.id === evaluation.objectiveId);
   const assessment = {
     mastered: "Answer understood",
     partial: "Partially understood",
@@ -618,23 +964,21 @@ function NativeTutorEvaluation({
     uncertain: "Uncertain",
   }[evaluation.result];
   return (
-    <View accessibilityLiveRegion="polite" style={styles.quiz}>
-      <Text style={styles.quizTitle}>Tutor assessment: {assessment}</Text>
-      <Text style={styles.muted}>
-        Model-reported confidence: {Math.round(evaluation.confidence * 100)}%. This is an assessment
-        signal, not a measured probability of mastery.
-      </Text>
-      <Text style={styles.muted}>
-        Objective: {objective?.title ?? "Not linked to an objective"}
-      </Text>
+    <View
+      accessibilityLiveRegion="polite"
+      className={"gap-[8px] py-[11px] border-b border-b-recall-line"}
+    >
+      <Text className={"text-recall-ink font-bold text-[13px]"}>{assessment}</Text>
       {evaluation.result === "uncertain" || evaluation.confidence < 0.5 ? (
-        <Text style={styles.response}>
+        <Text className={"text-recall-ink text-[13px] leading-[19px]"}>
           This assessment is tentative. Ask for clarification or try another answer.
         </Text>
       ) : null}
-      <Text style={styles.response}>{evaluation.feedback}</Text>
+      <Text className={"text-recall-ink text-[13px] leading-[19px]"}>{evaluation.feedback}</Text>
       {evaluation.misconception ? (
-        <Text style={styles.muted}>Possible misconception: {evaluation.misconception}</Text>
+        <Text className={"text-recall-muted text-[11px] leading-[16px]"}>
+          Possible misconception: {evaluation.misconception}
+        </Text>
       ) : null}
     </View>
   );
@@ -657,57 +1001,3 @@ function accumulatedEvidence(
 function emptySession(sessionId: string): TutorSessionState {
   return { sessionId, history: [], evaluation: null, proposal: null, quiz: null };
 }
-
-const styles = StyleSheet.create({
-  panel: {
-    gap: 10,
-    marginTop: 28,
-    padding: 16,
-    borderRadius: 22,
-    backgroundColor: palette.surface,
-    borderColor: palette.line,
-    borderWidth: 1,
-  },
-  heading: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  eyebrow: { color: palette.muted, fontSize: 9, fontWeight: "800", letterSpacing: 1.1 },
-  title: { color: palette.ink, fontSize: 19, fontWeight: "700" },
-  session: { color: palette.darkGreen, fontSize: 11, fontWeight: "600" },
-  row: { flexDirection: "row", gap: 8, alignItems: "center" },
-  input: {
-    flex: 1,
-    minHeight: 42,
-    paddingHorizontal: 11,
-    borderRadius: 10,
-    backgroundColor: palette.paper,
-    color: palette.ink,
-  },
-  button: {
-    minHeight: 40,
-    justifyContent: "center",
-    paddingHorizontal: 13,
-    borderRadius: 10,
-    backgroundColor: palette.darkGreen,
-  },
-  buttonText: { color: palette.surface, fontSize: 12, fontWeight: "700" },
-  softButton: {
-    minHeight: 38,
-    justifyContent: "center",
-    alignItems: "center",
-    paddingHorizontal: 12,
-    borderRadius: 10,
-    backgroundColor: palette.green,
-  },
-  softText: { color: palette.darkGreen, fontSize: 12, fontWeight: "700" },
-  response: { color: palette.ink, fontSize: 13, lineHeight: 19 },
-  quiz: { gap: 8, padding: 11, borderRadius: 12, backgroundColor: palette.paper },
-  quizTitle: { color: palette.ink, fontWeight: "700", fontSize: 13 },
-  proposal: { gap: 7, padding: 11, borderRadius: 12, borderColor: palette.line, borderWidth: 1 },
-  muted: { color: palette.muted, fontSize: 11, lineHeight: 16 },
-  notice: {
-    color: palette.darkGreen,
-    backgroundColor: "#eaf3d9",
-    padding: 9,
-    borderRadius: 9,
-    fontSize: 12,
-  },
-});

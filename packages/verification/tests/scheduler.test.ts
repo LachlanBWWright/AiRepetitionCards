@@ -4,7 +4,7 @@ import fc from "fast-check";
 import { Effect, Either } from "effect";
 import {
   createAreaId,
-  createCardId,
+  createAssessmentId,
   createDeviceId,
   createReviewEventId,
   type ReviewEvent,
@@ -19,7 +19,7 @@ import {
 
 const initial = new Date("2026-01-01T12:00:00.000Z");
 const areaId = createAreaId("00000000-0000-4000-8000-000000000001");
-const cardId = createCardId("00000000-0000-4000-8000-000000000002");
+const cardId = createAssessmentId("00000000-0000-4000-8000-000000000002");
 const deviceId = createDeviceId("00000000-0000-4000-8000-000000000003");
 const ratings: readonly ReviewRating[] = ["again", "hard", "good", "easy"];
 function event(index: number, ratedAt: Date, rating: ReviewRating, retention = 0.9): ReviewEvent {

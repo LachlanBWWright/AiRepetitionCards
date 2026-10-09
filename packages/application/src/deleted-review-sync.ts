@@ -3,7 +3,7 @@ import type {
   WorkspaceSnapshotSchema,
   WorkspaceReviewIdentitiesResponseSchema,
 } from "@recall/contracts";
-import type { AreaId, CardId, LearningArea, ReviewEvent, Workspace } from "@recall/domain";
+import type { AreaId, AssessmentId, LearningArea, ReviewEvent, Workspace } from "@recall/domain";
 import { toKnowledgeArea } from "./knowledge-area-interchange";
 import { retainedReviewContent } from "./review-deletion-retention";
 import type { WorkspaceSyncFailure } from "./workspace-sync";
@@ -21,12 +21,12 @@ export function prepareDeletedReviewProvisions(
   batch: readonly ReviewEvent[],
   identities: Identities["reviewCards"],
   snapshot: Snapshot,
-  safeDeletedCardIds: ReadonlySet<CardId>,
+  safeDeletedCardIds: ReadonlySet<AssessmentId>,
 ) {
   return Effect.gen(function* () {
     const known = new Map(identities.map((card) => [card.id, card]));
     const archived = new Map(retainedReviewContent(workspace).map((area) => [area.id, area]));
-    const missing = new Map<AreaId, Set<CardId>>();
+    const missing = new Map<AreaId, Set<AssessmentId>>();
     for (const event of batch) {
       const remote = known.get(event.cardId);
       if (remote) {
@@ -40,7 +40,7 @@ export function prepareDeletedReviewProvisions(
         snapshot.deletedAreaIds.includes(event.areaId)
       )
         return yield* Effect.fail(failure("deleted-review-content-missing"));
-      const cards = missing.get(event.areaId) ?? new Set<CardId>();
+      const cards = missing.get(event.areaId) ?? new Set<AssessmentId>();
       cards.add(event.cardId);
       missing.set(event.areaId, cards);
     }

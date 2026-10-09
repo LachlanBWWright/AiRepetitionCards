@@ -100,6 +100,14 @@ export function preparePublication(input: unknown) {
 }
 
 export type PublicationForkFailure = { readonly _tag: "PublicationForkFailure" };
+export const PublicationForkIdKind = {
+  Area: "area",
+  InitialVersion: "initial-version",
+  Objective: "objective",
+  Card: "card",
+  CardRevision: "card-revision",
+} as const;
+type PublicationForkIdKind = (typeof PublicationForkIdKind)[keyof typeof PublicationForkIdKind];
 const ForkIdentityInput = Schema.Struct({
   ownerId: PublicationForkOperationIdSchema,
   operationId: PublicationForkOperationIdSchema,
@@ -110,7 +118,7 @@ const ForkIdentityInput = Schema.Struct({
 export function publicationForkIdentity(input: unknown) {
   const parsed = Schema.decodeUnknownEither(ForkIdentityInput)(input);
   if (Either.isLeft(parsed)) return Effect.fail({ _tag: "PublicationForkFailure" } as const);
-  const id = (kind: string, sourceId = "") => {
+  const id = (kind: PublicationForkIdKind, sourceId = "") => {
     const seed = JSON.stringify([
       "recall-publication-fork-v1",
       parsed.right.ownerId,
@@ -128,8 +136,8 @@ export function publicationForkIdentity(input: unknown) {
   return Effect.succeed({
     ...parsed.right,
     id,
-    areaId: id("area"),
-    initialVersionId: id("initial-version"),
+    areaId: id(PublicationForkIdKind.Area),
+    initialVersionId: id(PublicationForkIdKind.InitialVersion),
   });
 }
 
@@ -146,7 +154,7 @@ export function createPublicationFork(input: {
     const objectives = new Map(
       input.source.objectives.map((objective) => [
         objective.id,
-        identity.id("objective", objective.id),
+        identity.id(PublicationForkIdKind.Objective, objective.id),
       ]),
     );
     const document = yield* decodeAndMigrateKnowledgeArea({
@@ -164,7 +172,7 @@ export function createPublicationFork(input: {
       })),
       cards: input.source.cards.map((card) => ({
         ...card,
-        id: identity.id("card", card.id),
+        id: identity.id(PublicationForkIdKind.Card, card.id),
         sourceId: card.sourceId ?? card.id,
         objectiveIds: card.objectiveIds.map((id) => objectives.get(id)),
       })),

@@ -1,12 +1,60 @@
 # Regression verification
 
-Run `pnpm test` from the repository root. `pnpm check:pure` runs these checks and the static source/type/lint/format/application/Storybook gates. `pnpm check` also requires the separate local Supabase integration suite below. Browser/device end-to-end checks and release verification remain unfinished gates; neither command claims to exercise them.
+Run `pnpm test` from the repository root for unit regression and seeded property checks.
+`pnpm test:local-integration` runs the local application and storage integration suite.
+`pnpm check:pure` includes both and the static source/type/lint/format/application/Storybook
+gates. `pnpm check` also requires the separate local Supabase suite below. Browser E2E tests
+run through `pnpm test:e2e`; native device and signed release verification remain separate.
 
 The private `@recall/verification` package uses [Node's test runner](https://nodejs.org/download/release/v22.17.0/docs/api/test.html). Its [esbuild runner](https://esbuild.github.io/api/) bundles actual workspace TypeScript into a temporary directory, targets Node 22, executes under UTC and removes the bundles afterward. Tests are typechecked and included in strict zero-warning lint, formatting and source policy. Production clients never depend on this package.
 
 The runner selects the `react-server` package-export condition so real server adapters can be imported in their intended server context. Adapter fixtures replace HTTP transport and use synthetic environment values; no app server or live service is started.
 
 Run one file with `pnpm --filter @recall/verification test import-security.test.ts`. Unknown filenames fail instead of silently running a different suite.
+
+## Local application integration
+
+Run `pnpm test:local-integration`, or select a file with
+`pnpm --filter @recall/verification test:local-integration private-library.test.ts`.
+These tests use the same strict TypeScript runner, without service configuration.
+
+The suite combines authoring, review scheduling, durable save/reload, version restoration,
+duplicate checks, tutor approvals, notebook source validation, search and private backup ZIPs.
+It verifies historical attachments, atomic replacement, failed media commits and stale restore
+baselines. Browser notebook tests execute the real adapter with fake local storage and locks,
+including namespace isolation, corruption, concurrent edits, pending reviews and cleanup fences.
+Mocks replace external I/O; no browser, SQLite process or database service is started.
+
+CI runs both local suites on pull requests and main commits.
+
+## Browser end-to-end workflows
+
+```bash
+pnpm --filter web exec playwright install chromium
+pnpm test:e2e
+```
+
+The runner builds the real offline web application and Storybook, serves them on an ephemeral
+loopback port and runs Chromium cases with fresh browser contexts. Tests exercise UI actions
+and inspect committed IndexedDB records, covering duplicate decisions, card history and recovery,
+append-only reviews, search filters and navigation, offline reload and workspace isolation.
+Mock Storybook cases cover AI refinement controls and shared native UI interactions without
+provider calls. These native cases render through React Native Web; they do not prove device
+notifications, native SQLite, OCR engines or Electron operating-system integration.
+
+External network requests are blocked, and unexpected requests or unhandled page errors fail
+the tests. No Supabase or OpenAI credentials are needed. The runner writes JUnit results to
+`artifacts/e2e/results.xml`; failures also save screenshots, traces and diagnostics. The separate
+E2E CI workflow installs Chromium and uploads these artifacts on pull requests and main commits.
+
+`pnpm --filter web test:e2e --check` checks JavaScript syntax only and starts no builds, server
+or browser. `RECALL_E2E_SKIP_BUILD=1 pnpm test:e2e` reuses existing application and Storybook
+builds. Syntax checks are not evidence of passing browser workflows; browser execution was
+deferred locally in accordance with the workspace's no-browser preference.
+
+Select individual browser files with `pnpm test:e2e card-workflows.test.mjs`, or use
+`pnpm test:e2e --check card-workflows.test.mjs` for syntax only. Unknown flags, unknown paths
+and repeated selections fail before builds, servers or browsers can start.
 
 ## Local Supabase integration
 
@@ -34,6 +82,11 @@ There is no collaborator model in the current single-owner/private-fork scope. T
 - Clock/sync checks cover real calendar parsing, future clamping, raw evidence preservation, causal ordering, branch behavior, independent schedule hashes, canonical acknowledgment reconciliation, retries and immutable identity collisions.
 - Content/domain checks cover version migration, unknown-version rejection, Basic/Cloze validation, seeded round trips and private-state exclusion from portable exports.
 - Authoring/approval checks cover stable identities, schedules/provenance/history preservation, stale draft rejection, concurrent reviews, deleted review retention, private preferences and idempotent approved cards.
+- Version history checks cover no-op edits, immutable snapshot chains, restore/recover behavior,
+  scheduling preservation, ownership changes during previews, objective dependencies, capacity,
+  malformed snapshots and identity collisions. Duplicate/search properties cover cloze retrieval
+  targets, conflicting answers, conservative similarity, canonical deduplication, namespaces,
+  deterministic ordering, limits and Unicode-normalized snippets.
 - Tutor/provider and budget checks use deterministic fake transports and ports to verify output/capability validation, expected provider failures and reservation/settlement behavior.
 - Hostile import fixtures exercise ZIP paths, duplicate entries, archive limits, malformed ZIP/Zstandard data, media integrity, HTML sanitization, delimited exports and private-backup tampering using in-memory archives and validated mock readers.
 - Workspace sync fixtures run the application orchestration against in-memory ports: owner checks, media checkpoints, uncertain acknowledgments, canonical receipts past the pull cursor, deleted/live card provisioning, interrupted tombstones and retry preservation.
@@ -42,8 +95,12 @@ There is no collaborator model in the current single-owner/private-fork scope. T
 - Publication recovery fixtures recompute real content hashes and reject tampered documents or changed publish acknowledgments. Tutor limiter fixtures check retry bounds, status/code association, unknown error names and daily-budget distinctions, including malformed limiter responses during session restoration.
 - Tag properties exercise 300 seeded arbitrary UTF-16 arrays, quoted delimiters, whitespace, empty/duplicate tags and unchanged imported values beyond authoring limits. Shared card/area commands preserve schedules, provenance and append-only reviews.
 - Media fixtures exercise paired commit ordering, new-only rollback, conservative uncoordinated retention, rollback failures and genuinely concurrent commits against in-memory stores. They do not simulate browser Web Locks or native power loss.
+- Reminder checks validate every local clock minute and exercise real browser adapter/runtime
+  code with controlled Notification, storage, service-worker, event and clock ports. They cover
+  permission decisions, daily delivery, cleanup and failure paths without real notifications.
+  E2E runner checks prove help, syntax-only selection and invalid arguments avoid runtime work.
 - HTTP adapter fixtures check real Redis REST serialization, hashed keys, response limits, transport/configuration failures and trusted IPv4/IPv6 normalization with keyed identities. They do not execute the Redis script or prove a deployed proxy strips forged headers.
 
-These are executable examples and properties, not proof of every report invariant. Fake infrastructure does not verify Redis atomic scripts, Postgres/RLS, Storage policies, keyrings, real provider streams, real exported Anki archives, device power loss or signed artifacts. Contract coverage is still incomplete for all Route Handlers. The [completion audit](implementation-audit.md) remains the release ledger.
+These are executable examples and properties, not proof of every report invariant. Fake infrastructure does not verify Redis atomic scripts, Postgres/RLS, Storage policies, keyrings, real provider streams, real exported Anki archives, device power loss or signed artifacts. Contract coverage is still incomplete for all Route Handlers. Browser workflows must pass separately before claiming runtime UI coverage. The [completion audit](implementation-audit.md) remains the release ledger.
 
 To reproduce a property failure, preserve the printed seed/path and rerun the corresponding test. Add focused fixtures for a repaired regression; do not weaken the property or suppress lint to obtain a green run.

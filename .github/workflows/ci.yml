@@ -48,12 +48,30 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Run local regression checks without services
         run: pnpm test
+      - name: Run local integration checks without services
+        run: pnpm test:local-integration
       - run: pnpm policy:static
       - run: pnpm typecheck
       - run: pnpm lint
       - run: pnpm format:check
       - name: Build deterministic screen catalog
         run: pnpm build-storybook
+      - name: Install Chromium for Storybook screenshots
+        run: pnpm --filter web exec playwright install --with-deps chromium
+      - name: Capture every Storybook story
+        id: capture-storybook
+        continue-on-error: true
+        run: pnpm screenshots
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: recall-storybook-screenshots
+          path: artifacts/storybook-screenshots
+          if-no-files-found: error
+          retention-days: 14
+      - name: Report Storybook screenshot failures
+        if: steps.capture-storybook.outcome == 'failure'
+        run: exit 1
       - uses: actions/upload-artifact@v4
         with:
           name: recall-storybook

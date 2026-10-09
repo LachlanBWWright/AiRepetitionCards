@@ -8,16 +8,16 @@ const meta = {
   parameters: { layout: "fullscreen" },
   decorators: [
     (Story) => (
-      <main className="component-catalog tutor-story">
+      <main className="mx-auto min-h-screen max-w-5xl space-y-6 bg-background p-8">
         <div>
-          <p className="eyebrow">RECALL · DESKTOP</p>
-          <h1>Study with your ChatGPT plan</h1>
+          <h1>AI settings</h1>
           <Story />
         </div>
       </main>
     ),
   ],
   args: {
+    initialExpanded: true,
     state: { enabled: true, activeClientId: null, accounts: [] },
     models: [],
     model: "",

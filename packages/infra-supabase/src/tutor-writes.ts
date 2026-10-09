@@ -1,5 +1,9 @@
 import { Effect, Schema } from "effect";
-import { CardProposalSchema, cardIdForTutorProposal } from "@recall/ai-core";
+import {
+  CardProposalSchema,
+  TutorProposalResolution,
+  cardIdForTutorProposal,
+} from "@recall/ai-core";
 import type { RecallSupabaseClient } from "./client";
 import type { Database, Json } from "./database.types";
 
@@ -128,7 +132,7 @@ export function updateTutorSession(
 export function resolveTutorProposal(
   client: RecallSupabaseClient,
   proposalId: string,
-  state: string,
+  state: TutorProposalResolution,
   content?: Exclude<Json, null>,
   cardId?: string,
 ): Effect.Effect<boolean, TutorWriteError> {

@@ -4,6 +4,14 @@ import { useEffect, useState, useSyncExternalStore } from "react";
 import { Effect, Fiber, Either, Schema } from "effect";
 import type { Workspace } from "@/features/workspace/types";
 import { Dialog } from "@/components/ui/Dialog";
+import { Button } from "@/components/ui/Button";
+import { Alert, Input, toast } from "@recall/ui-web";
+import {
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@recall/ui-web/components/dialog";
 import { readBrowserSession } from "@/lib/auth/browser-session";
 import { readSupabaseConfig } from "@/lib/supabase/config";
 import { DesktopAccountAction } from "@/components/auth/DesktopAccountAction";
@@ -106,7 +114,7 @@ export function AccountAction({
 
   async function exportAccount() {
     if (demo) {
-      setMessage("Mock account export is ready.");
+      toast.success("Mock account export is ready.");
       return;
     }
     setBusy(true);
@@ -134,7 +142,7 @@ export function AccountAction({
       ),
       Effect.match({
         onFailure: () => setMessage("Your account export could not be downloaded. Try again."),
-        onSuccess: () => setMessage("Your account data has been downloaded."),
+        onSuccess: () => toast.success("Your account data has been downloaded."),
       }),
       Effect.ensuring(Effect.sync(() => setBusy(false))),
     );
@@ -143,7 +151,7 @@ export function AccountAction({
 
   async function deleteAccount() {
     if (demo) {
-      setMessage("Mock account deletion confirmed.");
+      toast.success("Mock account deletion confirmed.");
       setShowDeleteConfirm(false);
       return;
     }
@@ -180,7 +188,7 @@ export function AccountAction({
             else window.location.replace("/sign-in?account=deleted");
           } else {
             setMessage(
-              "Account deleted. This device is read-only until local data is cleared. Retry clearing this device.",
+              "Account deleted. This tab is read-only until its working copy is cleared. Retry clearing this tab.",
             );
           }
         },
@@ -202,20 +210,24 @@ export function AccountAction({
         }}
       >
         <form
-          className="modal"
+          className="grid gap-4"
           onSubmit={(event) => {
             event.preventDefault();
             void deleteAccount();
           }}
         >
-          <p className="eyebrow">ACCOUNT SETTINGS</p>
-          <h2 id="delete-account-title">Delete your account?</h2>
-          <p className="modal-copy">
-            This permanently deletes your account, synced learning data, and this device&apos;s
-            local workspace. Download an account export first if you want a copy.
-          </p>
+          <DialogHeader>
+            <p className="mb-1 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+              ACCOUNT SETTINGS
+            </p>
+            <DialogTitle id="delete-account-title">Delete your account?</DialogTitle>
+          </DialogHeader>
+          <DialogDescription>
+            This permanently deletes your account and synced learning data. Download an account
+            export first if you want a copy.
+          </DialogDescription>
           <label htmlFor="delete-account-confirmation">Type DELETE to confirm</label>
-          <input
+          <Input
             id="delete-account-confirmation"
             autoComplete="off"
             value={confirmation}
@@ -223,15 +235,11 @@ export function AccountAction({
             disabled={deleting}
             required
           />
-          {message && (
-            <p className="tutor-error" role="alert">
-              {message}
-            </p>
-          )}
-          <div className="modal-actions">
-            <button
+          {message && <Alert variant="destructive">{message}</Alert>}
+          <DialogFooter className="gap-2 sm:justify-end">
+            <Button
+              variant="secondary"
               type="button"
-              className="cancel-button"
               disabled={deleting}
               onClick={() => {
                 setShowDeleteConfirm(false);
@@ -239,19 +247,19 @@ export function AccountAction({
               }}
             >
               Cancel
-            </button>
-            <button
+            </Button>
+            <Button
+              variant="danger"
               type="submit"
-              className="danger-button"
               disabled={deleting || (!accountDeleted && confirmation !== "DELETE")}
             >
               {deleting
                 ? "Deleting…"
                 : accountDeleted
-                  ? "Retry clearing this device"
+                  ? "Retry clearing this tab"
                   : "Delete account and data"}
-            </button>
-          </div>
+            </Button>
+          </DialogFooter>
         </form>
       </Dialog>
     );
@@ -260,18 +268,18 @@ export function AccountAction({
   if (demo && demoEmail) {
     return (
       <>
-        <div className="account-action account-action-demo">
-          <span className="account-email">{demoEmail}</span>
-          <button className="text-button" type="button" onClick={() => void exportAccount()}>
+        <div data-slot="account-action" className="flex flex-wrap items-center gap-2">
+          <span className="mr-auto text-sm text-muted-foreground">{demoEmail}</span>
+          <Button variant="secondary" type="button" onClick={() => void exportAccount()}>
             Export account data
-          </button>
-          <button className="text-button" type="button" onClick={() => setShowDeleteConfirm(true)}>
+          </Button>
+          <Button variant="secondary" type="button" onClick={() => setShowDeleteConfirm(true)}>
             Delete account
-          </button>
-          <button className="text-button" type="button" disabled>
+          </Button>
+          <Button variant="secondary" type="button" disabled>
             Sign out
-          </button>
-          {message && <span className="saved-state">{message}</span>}
+          </Button>
+          {message && <Alert role="status">{message}</Alert>}
         </div>
         {deleteConfirmationDialog()}
       </>
@@ -281,10 +289,23 @@ export function AccountAction({
   if (desktop && !email && !accountDeleted) return <DesktopAccountAction />;
   if (demo || (!isConfigured && !desktop)) {
     return (
-      <div className="account-action">
-        {!demo && <span className="saved-state">Learning on this device</span>}
+      <div data-slot="account-action" className="flex flex-wrap items-center gap-2">
+        {!demo && (
+          <p className="text-sm text-muted-foreground">Web study requires a signed-in account.</p>
+        )}
+        {!demo && isConfigured && (
+          <a
+            className="inline-flex min-h-9 items-center rounded-md border px-3 text-sm hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            href={signInHref}
+          >
+            Sign in
+          </a>
+        )}
         {demo && (
-          <a className="text-button" href={signInHref}>
+          <a
+            className="inline-flex min-h-9 items-center rounded-md border px-3 text-sm hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            href={signInHref}
+          >
             Sign in
           </a>
         )}
@@ -292,11 +313,14 @@ export function AccountAction({
     );
   }
   if (email === undefined) {
-    return <span className="saved-state">Checking account…</span>;
+    return <Alert role="status">Checking account…</Alert>;
   }
   if (!email && !accountDeleted) {
     return (
-      <a className="text-button" href={signInHref}>
+      <a
+        className="inline-flex min-h-9 items-center rounded-md border px-3 text-sm hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        href={signInHref}
+      >
         Sign in
       </a>
     );
@@ -304,35 +328,40 @@ export function AccountAction({
 
   return (
     <>
-      <form action="/auth/sign-out" method="post" className="account-action">
-        <span className="account-email">
+      <form
+        action="/auth/sign-out"
+        method="post"
+        data-slot="account-action"
+        className="flex flex-wrap items-center gap-2"
+      >
+        <span className="mr-auto text-sm text-muted-foreground">
           {email && /^chatgpt\+[a-f0-9]{48}@identity\.recall\.invalid$/.test(email)
             ? "ChatGPT account"
             : email}
         </span>
         {desktop ? <DesktopAccountAction /> : <ChatGPTAccountConnection compact />}
-        <button
-          className="text-button"
+        <Button
+          variant="secondary"
           type="button"
           disabled={busy}
           onClick={() => void exportAccount()}
         >
           {busy ? "Preparing export…" : "Export account data"}
-        </button>
-        <button className="text-button" type="button" onClick={() => setShowDeleteConfirm(true)}>
+        </Button>
+        <Button variant="secondary" type="button" onClick={() => setShowDeleteConfirm(true)}>
           Delete account
-        </button>
+        </Button>
         {!desktop && (
-          <button className="text-button" type="submit">
+          <Button variant="secondary" type="submit">
             Sign out
-          </button>
+          </Button>
         )}
-        {message && <span className="saved-state">{message}</span>}
+        {message && <Alert variant="destructive">{message}</Alert>}
       </form>
       {ownerId && (
-        <button type="button" className="text-button" onClick={() => setShowBudget(!showBudget)}>
+        <Button variant="secondary" type="button" onClick={() => setShowBudget(!showBudget)}>
           AI budget settings
-        </button>
+        </Button>
       )}
       {ownerId && showBudget && (
         <BudgetSettingsPanel

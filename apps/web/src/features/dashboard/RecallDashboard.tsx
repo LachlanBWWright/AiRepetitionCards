@@ -9,33 +9,33 @@ import {
   useSyncExternalStore,
   type SetStateAction,
 } from "react";
-import Image from "next/image";
 import { Effect, Either, Schema } from "effect";
 import { sha256 } from "@noble/hashes/sha2.js";
 import {
   MediaReferenceSchema,
   WorkspaceSchema,
   createAreaId,
+  createAssessmentId,
+  createObjectiveId,
   type AreaId,
-  parseKnowledgeAreaJson,
   parseWorkspaceJson,
   type MediaReference,
   type ReviewEvent,
-  type CardSchedule,
+  type AssessmentSchedule,
+  type CardVersion,
 } from "@recall/domain";
 import { rebuildScheduleEffect, type ReviewRating } from "@recall/scheduler";
 import { orderReviewEvents } from "@recall/sync-core";
 import {
   applyWorkspaceAuthoringCommand,
+  refinementCardContent,
   type WorkspaceAuthoringCommand,
   workspaceAuthoringBaseline,
   formatTagInput,
   parseTagInput,
   persistTutorCardApproval,
   exportDelimitedCards,
-  exportKnowledgeAreaPackage,
   importDelimitedCards,
-  importKnowledgeAreaPackage,
   isSupportedMediaContent,
   exportWorkspaceBackupPackage,
   importWorkspaceBackupPackage,
@@ -50,20 +50,76 @@ import {
   applyWorkspaceContentConflict,
   renderClozeCard,
   saveWorkspace,
-  MAX_KNOWLEDGE_AREA_PACKAGE_BYTES,
+  workspaceDuplicateCandidates,
+  findCardDuplicates,
+  cardVersionRestoresAsCopy,
+  type WorkspaceSearchResult,
 } from "@recall/application";
 import type { StoredMediaAsset } from "@recall/local-store";
 import { mockWorkspace } from "@/features/workspace/mock-data";
-import { type LearningArea, type StudyCard, type Workspace } from "@/features/workspace/types";
+import {
+  DashboardView,
+  dashboardNavigationItems,
+  type DashboardView as DashboardViewValue,
+} from "@/features/dashboard/dashboard-navigation";
+import { type LearningArea, type Assessment, type Workspace } from "@/features/workspace/types";
 import { fromKnowledgeArea, toKnowledgeArea } from "@/features/workspace/knowledge-area-json";
 import { Button } from "@/components/ui/Button";
+import { Button as ShadcnButton } from "@recall/ui-web/components/button";
 import { ReviewCard } from "@/components/ui/ReviewCard";
-import { Dialog } from "@/components/ui/Dialog";
+import { InlineImage } from "@/components/ui/InlineImage";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@recall/ui-web/components/dialog";
+import { toast } from "@recall/ui-web";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@recall/ui-web/components/alert-dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@recall/ui-web/components/select";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@recall/ui-web/components/accordion";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@recall/ui-web/components/dropdown-menu";
+import { Alert } from "@recall/ui-web/components/alert";
+import { Input } from "@recall/ui-web/components/input";
+import { Textarea } from "@recall/ui-web/components/textarea";
+import { Checkbox } from "@recall/ui-web/components/checkbox";
+import { RadioGroup, RadioGroupItem } from "@recall/ui-web/components/radio-group";
+import { Popover, PopoverContent, PopoverTrigger } from "@recall/ui-web/components/popover";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { StatusBadge } from "@/components/ui/StatusBadge";
+import { StudyAreaSelect } from "@/components/workspace/StudyAreaSelect";
 import { DailyReminderSettingsPanel } from "@/components/auth/DailyReminderSettingsPanel";
 import { startDailyReminderRuntime } from "@/lib/daily-reminder-api";
 import { AccountAction } from "@/components/auth/AccountAction";
+import { readBrowserSession } from "@/lib/auth/browser-session";
+import { readSupabaseConfig } from "@/lib/supabase/config";
 import { WorkspaceSyncAction } from "@/components/auth/WorkspaceSyncAction";
 import { prepareWorkspaceForSync } from "@/features/workspace/sync-outbox";
 import {
@@ -82,15 +138,69 @@ import {
   setReviewWritePending,
 } from "@/features/workspace/local-write-coordinator";
 import { LocalChatGPTTutor as TutorPanel } from "@/components/tutor/LocalChatGPTTutor";
-import { identifyObjectiveGaps, type CardProposal } from "@recall/ai-core";
+import { CardAssistancePanel } from "@/components/tutor/CardAssistancePanel";
+import {
+  identifyObjectiveGaps,
+  type CardProposal,
+  type CardRefinementResult,
+} from "@recall/ai-core";
 import { KnowledgeAreaPublishing } from "@/components/publishing/KnowledgeAreaPublishing";
 import { AnkiImportAction } from "@/features/interchange/AnkiImportAction";
 import { KnowledgeAreaCardLibrary } from "@/components/knowledge/KnowledgeAreaCardLibrary";
+import {
+  CardDuplicateWarnings,
+  cardDuplicateAcknowledgementKey,
+} from "@/components/knowledge/CardDuplicateWarnings";
+import { DeletedCardRecovery } from "@/components/knowledge/DeletedCardRecovery";
+import { WorkspaceSearchPanel } from "@/components/search/WorkspaceSearchPanel";
 import { KnowledgeAreaSettings } from "@/components/knowledge/KnowledgeAreaSettings";
 import { SchedulerSettings } from "@/components/knowledge/SchedulerSettings";
 import { isDesktopRuntime } from "@/lib/desktop-api";
+import {
+  BookOpen,
+  CalendarDays,
+  ChartNoAxesCombined,
+  ChevronDown,
+  Ellipsis,
+  Plus,
+  Pipette,
+  Search,
+  Settings2,
+  Sparkles,
+  UserRound,
+} from "lucide-react";
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarGroup,
+  SidebarGroupAction,
+  SidebarGroupLabel,
+  SidebarHeader,
+  SidebarInset,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuBadge,
+  SidebarMenuItem,
+  SidebarProvider,
+  SidebarRail,
+  SidebarTrigger,
+} from "@recall/ui-web/components/sidebar";
 
-const colors = ["#c4ed68", "#ffb29b", "#c4b5fd", "#f7cb70"];
+const colors = [
+  "#c4ed68",
+  "#ffb29b",
+  "#c4b5fd",
+  "#f7cb70",
+  "#7dd3fc",
+  "#86efac",
+  "#f9a8d4",
+  "#fdba74",
+  "#a5b4fc",
+  "#5eead4",
+  "#fca5a5",
+  "#d9f99d",
+];
 const starter: Workspace = { schemaVersion: 1, reviews: 0, reviewEvents: [], areas: [] };
 
 /** Demo identities stay in stories; every fresh device gets independent content identities. */
@@ -125,7 +235,7 @@ function downloadText(filename: string, content: string, mimeType: string): void
   URL.revokeObjectURL(objectUrl);
 }
 
-function dueNow(card: StudyCard, now: Date): boolean {
+function dueNow(card: Assessment, now: Date): boolean {
   return new Date(card.schedule.due).getTime() <= now.getTime();
 }
 
@@ -141,13 +251,12 @@ function MediaFilePreview({ file }: { file: File }) {
   }, [file]);
   if (!url) return null;
   return file.type.startsWith("image/") ? (
-    <Image
-      className="card-media-preview"
+    <InlineImage
+      className="max-h-[180px] max-w-[320px] rounded-md object-contain"
       src={url}
       alt="Selected card attachment preview"
       width={320}
       height={180}
-      unoptimized
     />
   ) : (
     <audio controls src={url} aria-label="Selected audio preview" />
@@ -156,14 +265,14 @@ function MediaFilePreview({ file }: { file: File }) {
 
 type StoryDemo = {
   workspace: Workspace;
-  view?: string;
+  view?: DashboardViewValue;
   selectedAreaId?: string;
   editAreaId?: string;
   areaDraft?: LearningArea;
   areaEditFailure?: "stale-content" | "storage";
   deletionFailure?: "area" | "card";
   editCardId?: string;
-  cardDraft?: StudyCard;
+  cardDraft?: Assessment;
   cardEditConflict?: boolean;
   areaSettings?: boolean;
   showAnswer?: boolean;
@@ -179,7 +288,7 @@ type StoryDemo = {
 const staleCardDraftMessage =
   "This card changed while you were editing. Your draft is preserved. Reopen the latest card before saving.";
 
-function cardEditingBaseline(workspace: Workspace, area: LearningArea, card: StudyCard) {
+function cardEditingBaseline(workspace: Workspace, area: LearningArea, card: Assessment) {
   return workspaceAuthoringBaseline(
     {
       ...workspace,
@@ -223,7 +332,7 @@ type DeletionRequest = {
 const staleAreaDraftMessage =
   "This area changed while you were editing. Your draft is preserved. Reopen the latest area before saving.";
 const areaSaveFailureMessage =
-  "This area could not be saved on this device. Your draft is preserved; restore local storage before retrying.";
+  "This area could not be kept in the current tab. Your draft is preserved; reconnect to the account server and retry.";
 function areaEditingBaseline(workspace: Workspace, area: LearningArea): string {
   return (
     workspaceAuthoringBaseline(
@@ -240,7 +349,7 @@ type PendingReview = {
   readonly eventId: string;
   readonly ratedAt: string;
   readonly event?: ReviewEvent;
-  readonly schedule?: CardSchedule;
+  readonly schedule?: AssessmentSchedule;
   readonly baseSchedule?: string;
   readonly baseEvents?: string;
 };
@@ -257,10 +366,28 @@ type PendingContentImport = {
 export default function Home({
   demo,
   sharedRequest,
+  routeView,
+  onViewChange,
+  practiceId,
+  onPracticeChange,
 }: {
   readonly demo?: StoryDemo;
   readonly sharedRequest?: { readonly versionId: string; readonly token?: string };
+  readonly routeView?: DashboardViewValue;
+  readonly onViewChange?: (view: DashboardViewValue) => void;
+  readonly practiceId?: string;
+  readonly onPracticeChange?: (id: string) => void;
 }) {
+  const [pendingConfirmation, setPendingConfirmation] = useState<{
+    readonly description: string;
+    readonly onConfirm: () => void | Promise<unknown>;
+    readonly onCancel?: () => void;
+  } | null>(null);
+  const requestConfirmation = (
+    description: string,
+    onConfirm: () => void | Promise<unknown>,
+    onCancel?: () => void,
+  ) => setPendingConfirmation({ description, onConfirm, ...(onCancel ? { onCancel } : {}) });
   const demoArea =
     demo?.areaDraft ?? demo?.workspace.areas.find((item) => item.id === demo.editAreaId);
   const demoCard =
@@ -325,6 +452,38 @@ export default function Home({
       catch: () => ({ _tag: "WorkspaceCommitQueueFailure" }) as const,
     }).pipe(Effect.flatMap((result) => result));
   const [ready, setReady] = useState(false);
+  const [cloudWorkspaceLoaded, setCloudWorkspaceLoaded] = useState(false);
+  const [accountStatus, setAccountStatus] = useState<
+    "checking" | "signed-in" | "signed-out" | "unavailable"
+  >(demo || isDesktopRuntime() ? "signed-in" : "checking");
+  const checkAccount = useCallback(() => {
+    if (demo || isDesktopRuntime()) {
+      setAccountStatus("signed-in");
+      return;
+    }
+    void Effect.runPromise(Effect.either(readBrowserSession())).then((result) => {
+      if (Either.isLeft(result)) {
+        setCloudWorkspaceLoaded(false);
+        setAccountStatus("unavailable");
+      } else {
+        setAccountStatus(result.right.authenticated ? "signed-in" : "signed-out");
+        if (!result.right.authenticated) setCloudWorkspaceLoaded(false);
+      }
+    });
+  }, [demo]);
+  useEffect(() => {
+    checkAccount();
+    const refresh = () => checkAccount();
+    window.addEventListener("focus", refresh);
+    window.addEventListener("pageshow", refresh);
+    return () => {
+      window.removeEventListener("focus", refresh);
+      window.removeEventListener("pageshow", refresh);
+    };
+  }, [checkAccount]);
+  const workspaceUnlocked =
+    Boolean(demo) || isDesktopRuntime() || (accountStatus === "signed-in" && cloudWorkspaceLoaded);
+  const webAccountConfigured = Either.isRight(readSupabaseConfig());
   const [cacheMayWrite, setCacheWritable] = useState(false);
   const [cacheHasProblem, setCacheBlocked] = useState(false);
   const localErased = useSyncExternalStore(subscribeLocalWrites, localWritesBlocked, () => false);
@@ -375,7 +534,7 @@ export default function Home({
       baseline: workspaceAuthoringBaseline(workspace, command) ?? "",
       label: demo.deletionFailure === "card" ? (card?.front ?? "card") : targetArea.title,
       error:
-        "Deletion could not be saved on this device. The content and review history remain available. Restore local storage before retrying.",
+        "Deletion could not be kept in the current tab. The content and review history remain available; reconnect and retry.",
       stale: false,
     };
   });
@@ -410,6 +569,7 @@ export default function Home({
   const [areaTitle, setAreaTitle] = useState(demoArea?.title ?? "");
   const [front, setFront] = useState(demoCard?.front ?? "");
   const [back, setBack] = useState(demoCard?.back ?? "");
+  const [duplicateAcknowledgement, setDuplicateAcknowledgement] = useState<string | null>(null);
   const [cardKind, setCardKind] = useState<"basic" | "cloze">(demoCard?.cloze ? "cloze" : "basic");
   const [clozeText, setClozeText] = useState(demoCard?.cloze?.text ?? "");
   const [clozeIndex, setClozeIndex] = useState(String(demoCard?.cloze?.deletionIndex ?? 1));
@@ -419,6 +579,9 @@ export default function Home({
   const [cardTags, setCardTags] = useState(formatTagInput(demoCard?.tags ?? []));
   const [removedMediaIds, setRemovedMediaIds] = useState<readonly string[]>([]);
   const [showAreaSettings, setShowAreaSettings] = useState(demo?.areaSettings ?? false);
+  const [shareKnowledgeOpen, setShareKnowledgeOpen] = useState(Boolean(sharedRequest));
+  const [importExportOpen, setImportExportOpen] = useState(false);
+  const [reviewSettingsOpen, setReviewSettingsOpen] = useState(false);
   const [mediaFile, setMediaFile] = useState<File | null>(null);
   const [mediaPreviews, setMediaPreviews] = useState<
     readonly { readonly mimeType: string; readonly url: string }[]
@@ -570,16 +733,29 @@ export default function Home({
     setPendingContentImport(null);
     setSelectedId(request.area?.id ?? saved.right.areas[0]?.id ?? "");
     setShowAnswer(false);
-    setActiveView("Today");
+    setActiveView(DashboardView.Today);
     setImportNotice(request.message);
     return true;
   }
   const [deviceSettings, setDeviceSettings] = useState(false);
-  const [activeView, setActiveView] = useState(demo?.view ?? (sharedRequest ? "Explore" : "Today"));
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [accountPanelOpen, setAccountPanelOpen] = useState(false);
+  const [searchTarget, setSearchTarget] = useState<WorkspaceSearchResult | null>(null);
+  const [localActiveView, setLocalActiveView] = useState<DashboardViewValue>(
+    routeView ?? demo?.view ?? (sharedRequest ? DashboardView.Library : DashboardView.Today),
+  );
+  const activeView = routeView ?? localActiveView;
+  const setActiveView = useCallback(
+    (view: DashboardViewValue) => {
+      if (onViewChange) onViewChange(view);
+      else setLocalActiveView(view);
+    },
+    [onViewChange],
+  );
   useEffect(() => {
     if (demo) return;
-    return startDailyReminderRuntime(() => setActiveView("Today"));
-  }, [demo]);
+    return startDailyReminderRuntime(() => setActiveView(DashboardView.Today));
+  }, [demo, setActiveView]);
   const [now, setNow] = useState(() => new Date(demo ? "2026-10-03T09:00:00.000Z" : Date.now()));
 
   useEffect(() => {
@@ -594,7 +770,9 @@ export default function Home({
         let loaded: Workspace = starter;
         let canWriteCache = true;
         let cacheProblem: string | null = null;
-        if (Either.isLeft(loadResult)) {
+        if (!window.recallDesktop) {
+          loaded = starter;
+        } else if (Either.isLeft(loadResult)) {
           canWriteCache = false;
           cacheProblem = "Saved data could not be read. Changes will stay in this session.";
         } else if (loadResult.right._tag === "Loaded") {
@@ -658,14 +836,17 @@ export default function Home({
     const cleared = await Effect.runPromise(eraseLocalData());
     if (!cleared) {
       setImportNotice(
-        "This device is read-only because some local data could not be cleared. Retry clearing saved data before continuing.",
+        "This tab is read-only because its working copy could not be cleared. Retry clearing the tab before continuing.",
       );
       return;
     }
     window.location.reload();
   }
 
-  const area = workspace.areas.find((item) => item.id === selectedId) ?? workspace.areas[0];
+  const activeAreaId = practiceId ?? selectedId;
+  const area = practiceId
+    ? workspace.areas.find((item) => item.id === practiceId)
+    : (workspace.areas.find((item) => item.id === selectedId) ?? workspace.areas[0]);
   const publishingAreaDocument = useMemo(
     () => (area ? Effect.runSync(Effect.either(toKnowledgeArea(area, true, true))) : null),
     [area],
@@ -678,6 +859,26 @@ export default function Home({
         : null,
     [cardKind, clozeText, clozeIndex],
   );
+  const duplicateCandidates = useMemo(() => workspaceDuplicateCandidates(workspace), [workspace]);
+  const duplicateDraft = {
+    front: cardKind === "cloze" ? clozeText : front,
+    back,
+    ...(cardKind === "cloze" && clozePreview && Either.isRight(clozePreview)
+      ? { cloze: { text: clozeText, deletionIndex: Number(clozeIndex) } }
+      : {}),
+  };
+  const duplicateKey = cardDuplicateAcknowledgementKey(
+    duplicateDraft,
+    duplicateCandidates,
+    editingCardId ?? undefined,
+  );
+  const duplicateMatches = findCardDuplicates(
+    duplicateDraft,
+    duplicateCandidates,
+    editingCardId ? { excludeCardId: editingCardId } : {},
+  );
+  const duplicatesAccepted =
+    duplicateMatches.length === 0 || duplicateAcknowledgement === duplicateKey;
   const lineageAreaDocument = useMemo(
     () => (area ? Effect.runSync(Effect.either(toKnowledgeArea(area, false, true))) : null),
     [area],
@@ -731,17 +932,9 @@ export default function Home({
   }, [workspace.reviewEvents, now]);
   const studiedToday = practice.today.inWindow;
   const totalReviews = Math.max(workspace.reviews, practice.today.total);
-  const areaDue = area?.cards.filter((item) => dueNow(item, now)).length ?? 0;
   const objectiveGaps = useMemo(
     () => (area ? identifyObjectiveGaps(area, workspace.reviewEvents ?? [], now) : []),
     [area, now, workspace.reviewEvents],
-  );
-  const progress = useMemo(
-    () =>
-      allCards.length === 0
-        ? 0
-        : Math.round(((allCards.length - dueCount) / allCards.length) * 100),
-    [allCards.length, dueCount],
   );
   const reviewHistory = useMemo(() => {
     const events = workspace.reviewEvents ?? [];
@@ -968,8 +1161,8 @@ export default function Home({
     setSelectedId(id);
     setImportNotice(
       editingAreaId
-        ? `${title} updated and saved on this device.`
-        : `${title} created and saved on this device.`,
+        ? `${title} updated. Syncing to your account…`
+        : `${title} created. Syncing to your account…`,
     );
     closeAreaEditor();
   }
@@ -1043,7 +1236,7 @@ export default function Home({
       );
     setShowAnswer(false);
     setImportNotice(
-      `${request.label} was removed and saved on this device. Review history remains saved; sync to remove the content from your other devices.`,
+      `${request.label} was removed. Syncing the change and review history to your account…`,
     );
   }
 
@@ -1057,13 +1250,10 @@ export default function Home({
     }
     const command: DeletionCommand = { kind: "delete-area", areaId: latest.id };
     const baseline = workspaceAuthoringBaseline(current, command) ?? "";
-    if (
-      !window.confirm(
-        `Delete “${latest.title}” and its ${latest.cards.length} cards? Its review history will remain on this device.`,
-      )
-    )
-      return;
-    await commitDeletion({ command, baseline, label: latest.title, error: "", stale: false });
+    requestConfirmation(
+      `Delete “${latest.title}” and its ${latest.cards.length} cards? Its review history will be retained in your account.`,
+      () => commitDeletion({ command, baseline, label: latest.title, error: "", stale: false }),
+    );
   }
 
   async function retryDeletion() {
@@ -1149,14 +1339,180 @@ export default function Home({
         return {
           reason: "storage" as const,
           message:
-            "This change could not be saved on this device. Your draft or deletion request is preserved; restore local storage before retrying.",
+            "This change could not be kept in the current tab. Your draft or deletion request is preserved; reconnect and retry.",
         };
       }),
     );
 
+  async function restoreVersion(version: CardVersion, expectedBaseline: string | undefined) {
+    if (cardSavePending.current || libraryMutationPending.current) return false;
+    cardSavePending.current = true;
+    setCardSaving(true);
+    const current = workspaceRef.current;
+    const result = await Effect.runPromise(
+      Effect.either(
+        saveAuthoringCommand(
+          {
+            kind: "restore-card",
+            areaId: version.areaId,
+            cardId: version.cardId,
+            versionId: version.id,
+          },
+          expectedBaseline,
+        ),
+      ),
+    );
+    cardSavePending.current = false;
+    if (!cardEditorMounted.current) return false;
+    setCardSaving(false);
+    if (Either.isLeft(result)) {
+      setImportNotice(result.left.message);
+      return false;
+    }
+    const targetArea =
+      result.right.areas.find((item) => item.id === version.areaId) ??
+      result.right.areas.find((item) => !current.areas.some((previous) => previous.id === item.id));
+    if (targetArea) setSelectedId(targetArea.id);
+    setShowAnswer(false);
+    setImportNotice(
+      cardVersionRestoresAsCopy(current, version.areaId, version.cardId)
+        ? "Card restored as a new copy. Previous reviews are preserved."
+        : "Card restored.",
+    );
+    return true;
+  }
+
+  function openSearchResult(result: WorkspaceSearchResult) {
+    if (
+      reviewSaving ||
+      reviewSaveFailed ||
+      cardSavePending.current ||
+      libraryMutationPending.current ||
+      localWritesBlocked() ||
+      localSnapshotStale()
+    )
+      return;
+    const targetArea = workspaceRef.current.areas.find((item) => item.id === result.areaId);
+    if (!targetArea) {
+      setImportNotice("This search result is no longer available. Search again.");
+      return;
+    }
+    if (addingCard || addingArea) {
+      requestConfirmation("Discard the open draft and open this search result?", () => {
+        openSearchResultAfterConfirmation(result, targetArea);
+      });
+      return;
+    }
+    openSearchResultAfterConfirmation(result, targetArea);
+  }
+
+  function openSearchResultAfterConfirmation(
+    result: WorkspaceSearchResult,
+    targetArea: LearningArea,
+  ) {
+    closeCardEditor();
+    closeAreaEditor();
+    setSearchOpen(false);
+    setSelectedId(targetArea.id);
+    setShowAnswer(false);
+    setSearchTarget(result);
+    if (result.target.kind === "card") {
+      const targetId = result.target.cardId;
+      const targetCard = targetArea.cards.find((item) => item.id === targetId);
+      setActiveView(DashboardView.Library);
+      if (targetCard) editCard(targetCard);
+      else setImportNotice("This card is no longer available. Search again.");
+    } else if (result.target.kind === "area" || result.target.kind === "objective") {
+      setActiveView(DashboardView.Library);
+      setShowAreaSettings(result.target.kind === "objective");
+    } else setActiveView(DashboardView.Tutor);
+  }
+
+  async function applyCardRefinement(
+    result: CardRefinementResult,
+    mode: "wording" | "replace",
+  ): Promise<boolean> {
+    if (
+      !area ||
+      cardSavePending.current ||
+      mediaFile ||
+      localWritesBlocked() ||
+      localSnapshotStale()
+    )
+      return false;
+    const generation = cardEditor.current.generation;
+    const tags = parseTagInput(cardTags);
+    if (Either.isLeft(tags)) {
+      setCardEditorError(tags.left.message);
+      return false;
+    }
+    const metadata = {
+      tags: tags.right,
+      objectiveIds: cardObjectiveIds.map(createObjectiveId),
+      media: (cardEditor.current.sourceCard?.media ?? []).filter(
+        (item) => !removedMediaIds.includes(item.id),
+      ),
+    };
+    const converted = Effect.runSync(
+      Effect.either(Effect.all(result.cards.map((card) => refinementCardContent(card, metadata)))),
+    );
+    if (Either.isLeft(converted)) {
+      setCardEditorError(converted.left.message);
+      return false;
+    }
+    const first = converted.right[0];
+    if (!first) return false;
+    if (mode === "wording") {
+      if (
+        result.cards.length !== 1 ||
+        result.cards[0]?.meaningChanged !== false ||
+        first.kind !== cardKind
+      )
+        return false;
+      setFront(first.front);
+      setBack(first.back);
+      setCardKind(first.kind);
+      setClozeText(first.cloze?.text ?? "");
+      setClozeIndex(String(first.cloze?.deletionIndex ?? 1));
+      setCardObjectiveIds([...first.objectiveIds]);
+      setCardEditorError(
+        "Refinement applied to your draft. Save the card to keep this wording change.",
+      );
+      return true;
+    }
+    const cards = converted.right.map((content) => ({
+      cardId: createAssessmentId(crypto.randomUUID()),
+      content,
+    }));
+    const command: WorkspaceAuthoringCommand = editingCardId
+      ? { kind: "replace-card", areaId: area.id, cardId: createAssessmentId(editingCardId), cards }
+      : { kind: "create-cards", areaId: area.id, cards };
+    const expectedBaseline = editingCardId ? cardEditor.current.baseline : undefined;
+    cardSavePending.current = true;
+    setCardSaving(true);
+    setCardEditorError(null);
+    const saved = await Effect.runPromise(
+      Effect.either(saveAuthoringCommand(command, expectedBaseline)),
+    );
+    cardSavePending.current = false;
+    if (cardEditor.current.generation !== generation || !cardEditorMounted.current) return false;
+    setCardSaving(false);
+    if (Either.isLeft(saved)) {
+      setCardEditorError(saved.left.message);
+      return false;
+    }
+    closeCardEditor();
+    setShowAnswer(false);
+    return true;
+  }
+
   async function createCard(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!area || cardSavePending.current) return;
+    if (!duplicatesAccepted) {
+      setCardEditorError("Review the matching cards and choose Keep both before saving.");
+      return;
+    }
     const parsedTags = parseTagInput(cardTags);
     if (Either.isLeft(parsedTags)) {
       setCardEditorError(parsedTags.left.message);
@@ -1269,6 +1625,23 @@ export default function Home({
           return false;
         }
         const current = workspaceRef.current;
+        const latestCandidates = workspaceDuplicateCandidates(current);
+        if (
+          findCardDuplicates(
+            duplicateDraft,
+            latestCandidates,
+            editingCardId ? { excludeCardId: editingCardId } : {},
+          ).length > 0 &&
+          duplicateAcknowledgement !==
+            cardDuplicateAcknowledgementKey(
+              duplicateDraft,
+              latestCandidates,
+              editingCardId ?? undefined,
+            )
+        ) {
+          reject("The matching cards changed. Review them and choose Keep both before saving.");
+          return false;
+        }
         const prepared = Effect.runSync(
           Effect.either(
             applyWorkspaceAuthoringCommand(current, command(media), createdAt, expectedBaseline),
@@ -1294,7 +1667,7 @@ export default function Home({
             reject(
               saved.left.reason === "media-rollback"
                 ? "This card could not be saved and attachment cleanup failed. Your draft is preserved; restore local storage before retrying."
-                : "This card could not be saved on this device. Your draft is preserved; retry when local storage is available.",
+                : "This card could not be kept in the current tab. Your draft is preserved; reconnect and retry.",
             );
             return false;
           }
@@ -1323,8 +1696,9 @@ export default function Home({
     setShowAnswer(false);
   }
 
-  function editCard(target: StudyCard) {
+  function editCard(target: Assessment) {
     if (cardSavePending.current) return;
+    setDuplicateAcknowledgement(null);
     const latest = workspaceRef.current;
     const ownerArea = latest.areas.find((item) => item.cards.some((card) => card.id === target.id));
     if (!ownerArea) return;
@@ -1376,15 +1750,20 @@ export default function Home({
     setCardTags(formatTagInput([]));
     setRemovedMediaIds([]);
     setMediaFile(null);
+    setDuplicateAcknowledgement(null);
   }
 
   function addCard() {
     if (cardSavePending.current) return;
+    if (!area) {
+      addArea();
+      return;
+    }
     closeCardEditor();
     setAddingCard(true);
   }
 
-  async function deleteCard(target: StudyCard) {
+  async function deleteCard(target: Assessment) {
     if (libraryMutationPending.current || cardSavePending.current) return;
     const current = workspaceRef.current;
     const latestArea = current.areas.find((item) =>
@@ -1401,63 +1780,10 @@ export default function Home({
       cardId: latestCard.id,
     };
     const baseline = workspaceAuthoringBaseline(current, command) ?? "";
-    if (
-      !window.confirm(`Delete this study card from “${latestArea.title}”?
-
-${latestCard.front}
-
-Its review history will remain.`)
-    )
-      return;
-    await commitDeletion({ command, baseline, label: latestCard.front, error: "", stale: false });
-  }
-
-  function exportArea() {
-    if (!area) return;
-    const document = Effect.runSync(Effect.either(toKnowledgeArea(area)));
-    if (Either.isLeft(document)) {
-      setImportNotice(
-        document.left.reason === "media-requires-package"
-          ? "Use Export ZIP to include this area’s attached media."
-          : "This learning area could not be exported because its content is invalid.",
-      );
-      return;
-    }
-    const blob = new Blob([JSON.stringify(document.right, null, 2)], {
-      type: "application/json",
-    });
-    const objectUrl = URL.createObjectURL(blob);
-    const link = window.document.createElement("a");
-    link.href = objectUrl;
-    link.download = `${area.title.toLowerCase().replace(/[^a-z0-9]+/g, "-")}.knowledge-area.json`;
-    link.click();
-    URL.revokeObjectURL(objectUrl);
-    setImportNotice(`${area.title} exported. Personal reviews and schedules stay on this device.`);
-  }
-
-  async function exportAreaPackage() {
-    if (!area) return;
-    const result = await Effect.runPromise(
-      Effect.either(
-        Effect.flatMap(toKnowledgeArea(area, false, true), (document) =>
-          exportKnowledgeAreaPackage(document, browserMediaStore),
-        ),
-      ),
+    requestConfirmation(
+      `Delete this study card from “${latestArea.title}”?\n\n${latestCard.front}\n\nIts review history will remain.`,
+      () => commitDeletion({ command, baseline, label: latestCard.front, error: "", stale: false }),
     );
-    if (Either.isLeft(result)) {
-      setImportNotice("The package could not be exported. Check that all card media is saved.");
-      return;
-    }
-    const zipBuffer = new ArrayBuffer(result.right.byteLength);
-    new Uint8Array(zipBuffer).set(result.right);
-    const blob = new Blob([zipBuffer], { type: "application/zip" });
-    const objectUrl = URL.createObjectURL(blob);
-    const link = window.document.createElement("a");
-    link.href = objectUrl;
-    link.download = `${area.title.toLowerCase().replace(/[^a-z0-9]+/g, "-")}.knowledge-area.zip`;
-    link.click();
-    URL.revokeObjectURL(objectUrl);
-    setImportNotice(`${area.title} media package exported without personal review history.`);
   }
 
   function exportDelimited(delimiter: "," | "\t") {
@@ -1469,7 +1795,7 @@ Its review history will remain.`)
       exportDelimitedCards(area, delimiter),
       isTsv ? "text/tab-separated-values;charset=utf-8" : "text/csv;charset=utf-8",
     );
-    setImportNotice(`${area.title} exported as ${extension.toUpperCase()}.`);
+    toast.success(`${area.title} exported as ${extension.toUpperCase()}.`);
   }
 
   function exportWorkspaceSnapshot() {
@@ -1495,11 +1821,14 @@ Its review history will remain.`)
         }),
       ),
     );
-    setImportNotice(
-      Either.isLeft(exported)
-        ? "This tab's snapshot could not be downloaded. Try exporting again before reloading."
-        : "This tab's private JSON snapshot was exported with reviews and schedules. Attachment bytes are included only in ZIP backups.",
-    );
+    if (Either.isLeft(exported))
+      toast.error(
+        "This tab's snapshot could not be downloaded. Try exporting again before reloading.",
+      );
+    else
+      toast.success(
+        "This tab's private JSON snapshot was exported with reviews and schedules. Attachment bytes are included only in ZIP backups.",
+      );
   }
 
   async function exportWorkspaceBackup() {
@@ -1527,7 +1856,7 @@ Its review history will remain.`)
         "value" in saved &&
         saved.value === true
       ) {
-        setImportNotice(
+        toast.success(
           "Private backup exported with review history, schedules, and attached media.",
         );
       } else if (
@@ -1538,9 +1867,9 @@ Its review history will remain.`)
         "value" in saved &&
         saved.value === false
       ) {
-        setImportNotice("Backup export was canceled.");
+        toast.message("Backup export was canceled.");
       } else {
-        setImportNotice("The private backup could not be saved.");
+        toast.error("The private backup could not be saved.");
       }
       return;
     }
@@ -1550,7 +1879,7 @@ Its review history will remain.`)
     link.download = "recall-workspace-backup.zip";
     link.click();
     URL.revokeObjectURL(objectUrl);
-    setImportNotice("Private backup exported with review history, schedules, and attached media.");
+    toast.success("Private backup exported with review history, schedules, and attached media.");
   }
 
   async function restoreWorkspaceBackup(event: React.ChangeEvent<HTMLInputElement>) {
@@ -1580,17 +1909,18 @@ Its review history will remain.`)
         return;
       }
       if (!cardEditorMounted.current) return;
-      if (!window.confirm("Replace this device’s current workspace with the selected backup?")) {
-        failContentImport("Backup restore cancelled. Your workspace is unchanged.");
-        return;
-      }
       const prepared = prepareWorkspaceForSync(imported.right.workspace, () => crypto.randomUUID());
-      await commitContentImport({
-        replacement: prepared,
-        expectedWorkspace: workspaceRef.current,
-        media: imported.right.media,
-        message: "Private backup restored with review history, schedules, and media.",
-      });
+      requestConfirmation(
+        "Replace this tab’s current workspace with the selected backup?",
+        () =>
+          commitContentImport({
+            replacement: prepared,
+            expectedWorkspace: workspaceRef.current,
+            media: imported.right.media,
+            message: "Private backup restored with review history, schedules, and media.",
+          }),
+        () => failContentImport("Backup restore cancelled. Your workspace is unchanged."),
+      );
       return;
     }
     if (file.size > 10_000_000) {
@@ -1654,14 +1984,14 @@ Its review history will remain.`)
       );
       return;
     }
-    if (!window.confirm("Replace this device’s current workspace with the selected backup?"))
-      return;
     const prepared = prepareWorkspaceForSync(restoredResult.right, () => crypto.randomUUID());
-    if (!beginContentImport()) return;
-    await commitContentImport({
-      replacement: prepared,
-      expectedWorkspace: workspaceRef.current,
-      message: "Private workspace backup restored on this device.",
+    requestConfirmation("Replace this tab’s current workspace with the selected backup?", () => {
+      if (!beginContentImport()) return;
+      return commitContentImport({
+        replacement: prepared,
+        expectedWorkspace: workspaceRef.current,
+        message: "Backup loaded into this tab. Syncing it to your account…",
+      });
     });
   }
 
@@ -1761,658 +2091,531 @@ Its review history will remain.`)
     Effect.runFork(program);
   }
 
-  function importArea(event: React.ChangeEvent<HTMLInputElement>) {
-    const file = event.currentTarget.files?.[0];
-    event.currentTarget.value = "";
-    if (!file) return;
-    if (file.size > 2_000_000) {
-      setImportNotice("Knowledge Area JSON files must be 2 MB or smaller.");
-      return;
-    }
-
-    if (!beginContentImport()) return;
-
-    const program = Effect.tryPromise({
-      try: () => file.text(),
-      catch: () => ({ _tag: "KnowledgeAreaImportError", reason: "file-read-failed" }) as const,
-    }).pipe(
-      Effect.flatMap(parseKnowledgeAreaJson),
-      Effect.flatMap((document) =>
-        document.cards.some((item) => (item.media?.length ?? 0) > 0)
-          ? Effect.fail({
-              _tag: "KnowledgeAreaImportError",
-              reason: "media-requires-package",
-            } as const)
-          : Effect.succeed(document),
-      ),
-      Effect.flatMap((document) =>
-        fromKnowledgeArea(
-          document,
-          colors[workspace.areas.length % colors.length] ?? "#c4ed68",
-          false,
-          () => crypto.randomUUID(),
-          new Date(),
-        ),
-      ),
-      Effect.match({
-        onFailure: (error) => {
-          const message =
-            error.reason === "media-requires-package"
-              ? "This file references media. Import its ZIP package so the attachments can be verified."
-              : error.reason === "unsupported-card-type"
-                ? "This file contains cloze cards; this client currently imports basic cards."
-                : error.reason === "unknown-reference"
-                  ? "The file refers to a learning objective that is missing."
-                  : error.reason === "duplicate-id"
-                    ? "The file contains duplicate IDs."
-                    : "That file is not a valid Knowledge Area JSON document.";
-          failContentImport(message);
-        },
-        onSuccess: (imported) => {
-          void commitContentImport({
-            area: imported,
-            message: `${imported.title} imported. Review schedules were initialized for this learner.`,
-          });
-        },
-      }),
-    );
-    Effect.runFork(program);
-  }
-
-  function importAreaPackage(event: React.ChangeEvent<HTMLInputElement>) {
-    const file = event.currentTarget.files?.[0];
-    event.currentTarget.value = "";
-    if (!file) return;
-    if (file.size > MAX_KNOWLEDGE_AREA_PACKAGE_BYTES) {
-      setImportNotice("Knowledge Area media packages must be 25 MB or smaller.");
-      return;
-    }
-    if (!beginContentImport()) return;
-    const program = Effect.tryPromise({
-      try: () => file.arrayBuffer(),
-      catch: () => ({ _tag: "PackageReadFailure" }) as const,
-    }).pipe(
-      Effect.flatMap((buffer) => importKnowledgeAreaPackage(new Uint8Array(buffer))),
-      Effect.flatMap((pack) =>
-        fromKnowledgeArea(
-          pack.knowledgeArea,
-          colors[workspace.areas.length % colors.length] ?? "#c4ed68",
-          false,
-          () => crypto.randomUUID(),
-          new Date(),
-          true,
-        ).pipe(Effect.map((importedArea) => ({ importedArea, media: pack.media }))),
-      ),
-      Effect.match({
-        onFailure: () =>
-          failContentImport("That ZIP is invalid, too large, or contains unsupported media."),
-        onSuccess: ({ importedArea, media }) => {
-          void commitContentImport({
-            area: importedArea,
-            media,
-            message: `${importedArea.title} and its verified media were imported.`,
-          });
-        },
-      }),
-    );
-    Effect.runFork(program);
-  }
-
   return (
-    <main className="app-shell">
-      <aside className="sidebar">
-        <a className="brand" href="#today">
-          <span className="brand-mark">r</span>
-          <span>
-            recall<span className="brand-dot">.</span>
-          </span>
-        </a>
-        <div className="workspace-label">
-          YOUR WORKSPACE <span className="workspace-avatar">L</span>
-        </div>
-        <nav className="main-nav" aria-label="Main navigation">
-          {["Today", "Explore", "Insights"].map((label, index) => (
-            <button
-              key={label}
-              className={`nav-item ${activeView === label ? "active" : ""}`}
-              onClick={() => setActiveView(label)}
-            >
-              <span className="nav-icon">{["◷", "▤", "↗"][index]}</span>
-              {label}
-              {label === "Today" && <span className="nav-count">{dueCount}</span>}
-            </button>
-          ))}
-        </nav>
-        <div className="sidebar-section">
-          <div className="section-heading">
-            YOUR LEARNING AREAS{" "}
-            <button className="icon-button" aria-label="Add learning area" onClick={addArea}>
-              ＋
-            </button>
-          </div>
-          {workspace.areas.map((item) => (
-            <button
-              key={item.id}
-              disabled={reviewSaving || reviewSaveFailed}
-              onClick={() => {
-                setSelectedId(item.id);
-                setShowAnswer(false);
-                setActiveView("Today");
+    <>
+      <AlertDialog
+        open={pendingConfirmation !== null && workspaceUnlocked}
+        onOpenChange={(open) => {
+          if (!open && pendingConfirmation) {
+            const confirmation = pendingConfirmation;
+            setPendingConfirmation(null);
+            confirmation.onCancel?.();
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+            <AlertDialogDescription className="whitespace-pre-line">
+              {pendingConfirmation?.description}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(event) => {
+                event.preventDefault();
+                const confirmation = pendingConfirmation;
+                setPendingConfirmation(null);
+                if (confirmation) void confirmation.onConfirm();
               }}
-              className={`area-link ${selectedId === item.id ? "selected" : ""}`}
             >
-              <span className="area-dot" style={{ backgroundColor: item.color }} />
-              {item.title}
-              <span className="area-count">
-                {item.cards.filter((entry) => dueNow(entry, now)).length}
+              Confirm
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      <SidebarProvider className="min-h-screen">
+        <Sidebar>
+          <SidebarHeader className="flex-col items-center gap-2.5 px-3.5 pt-3 pb-0">
+            <SidebarTrigger className="group-data-[state=expanded]/sidebar:justify-start group-data-[state=expanded]/sidebar:px-[9px]">
+              <span className="group-data-[state=collapsed]/sidebar:hidden flex items-center gap-2.5">
+                <span className="inline-flex size-[27px] items-center justify-center rounded-[9px] bg-[var(--green)] font-serif text-[19px] font-bold text-[var(--paper)]">
+                  r
+                </span>
+                <span className="text-[21px] font-bold tracking-[-1px] text-[var(--ink)]">
+                  recall<span className="text-[var(--status-success-fg)]">.</span>
+                </span>
               </span>
-            </button>
-          ))}
-          <button className="add-area" onClick={addArea}>
-            ＋ Add a learning area
-          </button>
-        </div>
-        <div className="sidebar-bottom">
-          <div className="streak-card">
-            <span className="streak-icon">✳</span>
-            <div>
-              <strong>Keep your rhythm</strong>
-              <p>A little practice goes a long way.</p>
-            </div>
-          </div>
-          <button className="profile">
-            <span className="profile-avatar">L</span>
-            <span>
-              <strong>Learner</strong>
-              <small>Personal workspace</small>
-            </span>
-            <span className="profile-more">···</span>
-          </button>
-        </div>
-      </aside>
-
-      <section className="main-content" id="today">
-        <header className="topbar">
-          <div className="breadcrumb">
-            My learning <span>/</span> <strong>{activeView}</strong>
-          </div>
-          <div className="top-actions">
-            <Button variant="secondary" onClick={() => setDeviceSettings(true)}>
-              Device settings
-            </Button>
-            <AccountAction demo={Boolean(demo)} workspace={workspace} />
-            <WorkspaceSyncAction
-              demo={Boolean(demo)}
-              demoMissingReviewContent={demo?.missingReviewContent ?? false}
-              onMissingReviewContent={() => {
-                setMissingDeletedReviewContent(true);
-                setDeletedReviewProvisionCapacity(false);
-              }}
-              onReviewProvisionCapacity={() => {
-                setDeletedReviewProvisionCapacity(true);
-                setMissingDeletedReviewContent(false);
-              }}
-              {...(demo?.syncAccountState ? { demoAccountState: demo.syncAccountState } : {})}
-              onExportOffline={() => void exportWorkspaceBackup()}
-              onClearWorkspace={() => void discardSavedWorkspace()}
-              checkpoint={(candidate) =>
-                Effect.tryPromise({
-                  try: () =>
-                    enqueueWorkspaceSave(async () => {
-                      for (;;) {
-                        if (!ready || !cacheWritable || localWritesBlocked())
-                          return Either.left({ _tag: "WorkspaceSyncCheckpointFailure" } as const);
-                        const current = workspaceRef.current;
-                        const bound = await Effect.runPromise(
-                          Effect.either(
-                            bindWorkspaceOwner(
-                              current,
-                              candidate.syncOwnerId,
-                              workspaceHasRemoteSyncMetadata(candidate),
-                            ),
-                          ),
-                        );
-                        if (Either.isLeft(bound))
-                          return Either.left({ _tag: "WorkspaceSyncCheckpointFailure" } as const);
-                        const persisted = await Effect.runPromise(
-                          Effect.either(saveWorkspace(browserWorkspaceStore, bound.right)),
-                        );
-                        if (Either.isLeft(persisted))
-                          return Either.left({ _tag: "WorkspaceSyncCheckpointFailure" } as const);
-                        if (localWritesBlocked())
-                          return Either.left({ _tag: "WorkspaceSyncCheckpointFailure" } as const);
-                        if (workspaceRef.current !== current) continue;
-                        setWorkspace(bound.right);
-                        return Either.right(bound.right);
-                      }
-                    }),
-                  catch: (): WorkspaceSyncCheckpointFailure => ({
-                    _tag: "WorkspaceSyncCheckpointFailure",
-                  }),
-                }).pipe(Effect.flatMap((result) => result))
-              }
-              workspace={workspace}
-              onSynced={(
-                acceptedIds,
-                cursor,
-                pulledEvents,
-                pulledAreas,
-                deletedCardIds,
-                syncedAreaTombstoneIds,
-                pulledDeletedAreaIds,
-                contentHashes,
-                conflicts,
-                hasMore,
-                uploadDeferred,
-                baseline,
-              ) => {
-                if (localWritesBlocked()) return null;
-                const applied = Effect.runSync(
-                  Effect.either(
-                    applyWorkspaceSyncChanges(
-                      workspaceRef.current,
-                      {
-                        baseline,
-                        acceptedIds,
-                        cursor,
-                        pulledEvents,
-                        pulledAreas,
-                        deletedCardIds,
-                        syncedAreaTombstoneIds,
-                        pulledDeletedAreaIds,
-                        contentHashes,
-                        conflicts,
-                        hasMore,
-                        uploadDeferred,
-                      },
-                      () => crypto.randomUUID(),
-                    ),
-                  ),
-                );
-                if (Either.isLeft(applied)) {
-                  setImportNotice(
-                    "Synced changes could not be reconciled. Your latest local workspace was preserved.",
-                  );
-                  return null;
-                }
-                setWorkspace(applied.right);
-                setMissingDeletedReviewContent(false);
-                setDeletedReviewProvisionCapacity(false);
-                return applied.right;
-              }}
-              onContentConflict={(ownerId, remoteAreas, contentHashes, deletedAreaIds) => {
-                if (reviewingRef.current || pendingReviewRef.current) return false;
-                const preview = {
-                  ownerId,
-                  areas: remoteAreas,
-                  hashes: contentHashes,
-                  deletedAreaIds,
-                };
-                const preflight = Effect.runSync(
-                  Effect.either(applyWorkspaceContentConflict(workspace, preview)),
-                );
-                if (Either.isLeft(preflight)) return false;
-                setWorkspace((current) => {
-                  if (current === workspace) return preflight.right;
-                  const applied = Effect.runSync(
-                    Effect.either(applyWorkspaceContentConflict(current, preview)),
-                  );
-                  return Either.isRight(applied) ? applied.right : current;
-                });
-                return true;
-              }}
-            />
-            <label className="text-button import-control" htmlFor="knowledge-area-import">
-              Import JSON
-            </label>
-            <input
-              id="knowledge-area-import"
-              className="visually-hidden"
-              type="file"
-              accept="application/json,.json"
-              onChange={importArea}
-            />
-            <label className="text-button import-control" htmlFor="knowledge-area-package-import">
-              Import ZIP
-            </label>
-            <input
-              id="knowledge-area-package-import"
-              className="visually-hidden"
-              type="file"
-              accept="application/zip,.zip"
-              onChange={importAreaPackage}
-            />
-            <button className="text-button" onClick={exportArea} disabled={!area}>
-              Export JSON
-            </button>
-            <button
-              className="text-button"
-              onClick={() => void exportAreaPackage()}
-              disabled={!area}
-            >
-              Export ZIP
-            </button>
-            <span className="saved-state">
-              <i />{" "}
-              {erased || stale
-                ? "Read-only on this device"
-                : reviewSaving
-                  ? "Saving review…"
-                  : reviewSaveFailed
-                    ? "Review save needs retry"
-                    : "Saved on this device"}
-            </span>
-            <button className="help-button" aria-label="Help">
-              ?
-            </button>
-          </div>
-        </header>
-        {stale && !erased && (
-          <div className="notice-bar" role="alert">
-            Another tab saved a newer workspace. This tab is read-only; your unsaved changes are
-            still here. Export them before reloading the latest saved workspace.
-            <button className="notice-action" onClick={() => void exportWorkspaceBackup()}>
-              Export this tab backup
-            </button>
-            <button className="notice-action" onClick={() => exportWorkspaceSnapshot()}>
-              Export JSON snapshot
-            </button>
-            <button
-              className="notice-action"
-              onClick={() => {
-                if (!demo) window.location.reload();
-              }}
-            >
-              Reload latest saved workspace
-            </button>
-          </div>
-        )}
-        {(contentImportBusy || pendingContentImport) && (
-          <div className="notice-bar" role={contentImportBusy ? "status" : "alert"}>
-            {contentImportBusy
-              ? "Saving imported content…"
-              : "This import has not been confirmed saved. Its content is retained on this page."}
-            {!contentImportBusy && pendingContentImport && (
-              <>
+            </SidebarTrigger>
+          </SidebarHeader>
+          <SidebarContent className="gap-0 pt-1">
+            <SidebarGroup>
+              <SidebarGroupLabel className="mx-1">
+                <span className="group-data-[state=collapsed]/sidebar:invisible">
+                  YOUR WORKSPACE
+                </span>
                 <button
-                  className="notice-action"
-                  onClick={() => {
-                    if (
-                      !pendingContentImport.replacement ||
-                      window.confirm(
-                        "Replace the current workspace with this backup? Changes made since the earlier attempt will be replaced.",
-                      )
-                    )
-                      void commitContentImport({
-                        ...pendingContentImport,
-                        expectedWorkspace: workspaceRef.current,
-                      });
-                  }}
-                >
-                  Retry saving import
-                </button>
-                <button
-                  className="notice-action"
-                  onClick={() => {
-                    setPendingContentImport(null);
-                    setImportNotice("Import cancelled. Your current workspace remains available.");
-                  }}
-                >
-                  Cancel import
-                </button>
-              </>
-            )}
-          </div>
-        )}
-        {(importNotice || erased) && (
-          <div className="notice-bar" role="status">
-            {erased
-              ? "This device is read-only while local data is being cleared. Retry clearing saved data if cleanup fails."
-              : importNotice}
-            {cacheBlocked && !stale && (
-              <button className="notice-action" onClick={() => void discardSavedWorkspace()}>
-                Clear saved data
-              </button>
-            )}
-            <button aria-label="Dismiss notice" onClick={() => setImportNotice(null)}>
-              ×
-            </button>
-          </div>
-        )}
-        {reviewSaveFailed && (
-          <div className="notice-bar" role="alert">
-            This review has not been confirmed saved. The answer is still here; retry saving the
-            same review before continuing. Other saves are paused so a pending review cannot be
-            overwritten.
-            <button
-              className="notice-action"
-              disabled={erased || stale}
-              onClick={() => {
-                const rating = pendingReviewRef.current?.rating ?? "good";
-                void review(rating);
-              }}
-            >
-              Retry review save
-            </button>
-            <button className="notice-action" onClick={exportWorkspaceSnapshot}>
-              Export this tab snapshot
-            </button>
-            <button className="notice-action" onClick={() => void exportWorkspaceBackup()}>
-              Export saved attachments backup
-            </button>
-          </div>
-        )}
-
-        {(libraryMutation === "area-delete" || libraryMutation === "card-delete") && (
-          <div className="notice-bar" role="status">
-            Saving deletion on this device… The content remains available until saving completes.
-          </div>
-        )}
-        {deletionRequest && libraryMutation === null && (
-          <div className="notice-bar" role="alert">
-            <span>{deletionRequest.error}</span>
-            <button className="notice-action" onClick={() => void retryDeletion()}>
-              {deletionRequest.stale
-                ? "Review and confirm latest deletion"
-                : "Retry saved deletion request"}
-            </button>
-            <button className="notice-action" onClick={() => setDeletionRequest(null)}>
-              Cancel deletion request
-            </button>
-          </div>
-        )}
-
-        {activeView === "Today" ? (
-          <>
-            <div className="content-wrap" inert={reviewSaving || reviewSaveFailed}>
-              <div className="greeting-row">
-                <div>
-                  <p className="eyebrow">SATURDAY, OCTOBER 3</p>
-                  <h1>
-                    A good day to <em>remember.</em>
-                  </h1>
-                  <p className="subheading">Small steps today make a big difference tomorrow.</p>
-                </div>
-                <div className="daily-mark">✳</div>
-              </div>
-              <div className="summary-grid">
-                <div className="summary-card focus-card">
-                  <div className="summary-top">
-                    <span className="summary-icon green-icon">↗</span>
-                    <span className="summary-tag">YOUR FOCUS</span>
-                  </div>
-                  <strong>{dueCount}</strong>
-                  <p>cards ready to review</p>
-                  <div className="mini-bars">
-                    <i />
-                    <i />
-                    <i />
-                    <i />
-                    <i />
-                    <i />
-                    <i />
-                  </div>
-                </div>
-                <div className="summary-card">
-                  <div className="summary-top">
-                    <span className="summary-icon peach-icon">◷</span>
-                    <span className="summary-tag">IN YOUR AREAS</span>
-                  </div>
-                  <strong>{workspace.areas.length}</strong>
-                  <p>learning areas</p>
-                  <span className="summary-foot">{allCards.length} cards in your library</span>
-                </div>
-                <div className="summary-card">
-                  <div className="summary-top">
-                    <span className="summary-icon lilac-icon">✧</span>
-                    <span className="summary-tag">YOUR PRACTICE</span>
-                  </div>
-                  <strong>{studiedToday}</strong>
-                  <p>reviews completed today</p>
-                  <span className="summary-foot">{totalReviews} reviews all time</span>
-                </div>
-              </div>
-
-              <div className="section-title-row">
-                <div>
-                  <p className="eyebrow">PICK UP WHERE YOU LEFT OFF</p>
-                  <h2>Your learning areas</h2>
-                </div>
-                <div className="section-actions">
-                  {area && (
-                    <>
-                      <button className="text-button" onClick={() => editArea(area)}>
-                        Edit selected area
-                      </button>
-                      <button
-                        className="text-button"
-                        onClick={() => {
-                          setActiveView("Explore");
-                          setShowAreaSettings(true);
-                        }}
-                      >
-                        Learning goals & AI
-                      </button>
-                      <button
-                        className="text-button danger-text-button"
-                        onClick={() => void deleteArea(area)}
-                      >
-                        Delete selected area
-                      </button>
-                    </>
-                  )}
-                  <button className="text-button" onClick={addArea}>
-                    ＋ New area
-                  </button>
-                </div>
-              </div>
-              <div className="area-cards">
-                {workspace.areas.map((item) => {
-                  const pending = item.cards.filter((entry) => dueNow(entry, now)).length;
-                  return (
-                    <button
-                      className={`learning-card ${selectedId === item.id ? "learning-card-active" : ""}`}
-                      key={item.id}
-                      onClick={() => {
-                        setSelectedId(item.id);
-                        setShowAnswer(false);
-                      }}
-                    >
-                      <div className="learning-card-top">
-                        <span className="large-area-dot" style={{ backgroundColor: item.color }} />
-                        <span className="more-dots">···</span>
-                      </div>
-                      <h3>{item.title}</h3>
-                      <p>
-                        {item.cards.length} cards <span>·</span>{" "}
-                        {item.objectives?.length ??
-                          new Set(item.cards.map((entry) => entry.objective)).size}{" "}
-                        learning goals
-                      </p>
-                      <div className="learning-card-bottom">
-                        <span className="progress-track">
-                          <i
-                            style={{
-                              width: `${item.cards.length ? Math.max(10, ((item.cards.length - pending) / item.cards.length) * 100) : 0}%`,
-                              backgroundColor: item.color,
-                            }}
-                          />
-                        </span>
-                        <span className="due-label">
-                          {pending ? `${pending} due` : "All caught up"}
-                        </span>
-                      </div>
-                    </button>
-                  );
-                })}
-                <button className="new-learning-card" onClick={addArea}>
-                  <span>＋</span>
-                  <strong>Create a learning area</strong>
-                  <small>Start with a topic you care about</small>
-                </button>
-              </div>
-
-              <div className="section-title-row study-title">
-                <div>
-                  <p className="eyebrow">A FEW MINUTES, WELL SPENT</p>
-                  <h2>Today&apos;s study</h2>
-                </div>
-                <span className="due-pill">{areaDue} to review</span>
-              </div>
-              <div className="study-layout">
-                <ReviewCard
-                  area={area}
-                  card={card}
-                  mediaPreviews={mediaPreviews}
-                  showAnswer={showAnswer}
-                  keyboardActive={
-                    !addingArea &&
-                    !addingCard &&
-                    !showAreaSettings &&
-                    !reviewSaving &&
-                    !reviewSaveFailed &&
-                    !erased &&
-                    !stale
-                  }
+                  type="button"
+                  className="ml-auto grid size-[26px] shrink-0 place-items-center rounded-md text-muted-foreground hover:bg-[var(--surface-hover)] hover:text-[var(--ink)]"
+                  aria-label="Search"
+                  title="Search"
                   disabled={
+                    !workspaceUnlocked ||
                     reviewSaving ||
                     reviewSaveFailed ||
-                    erased ||
-                    stale ||
-                    (!demo && (!ready || !cacheMayWrite))
+                    addingCard ||
+                    addingArea
                   }
-                  saving={reviewSaving}
-                  onReveal={() => setShowAnswer(true)}
-                  onRate={(rating) => void review(rating)}
-                  onEdit={editCard}
-                  onDelete={(target) => void deleteCard(target)}
-                  onAddCard={addCard}
+                  onClick={() => setSearchOpen(true)}
+                >
+                  <Search aria-hidden="true" className="size-4" />
+                </button>
+              </SidebarGroupLabel>
+              <SidebarMenu aria-label="Main navigation">
+                {dashboardNavigationItems.map(({ view, label }) => {
+                  const Icon = {
+                    [DashboardView.Today]: CalendarDays,
+                    [DashboardView.Library]: BookOpen,
+                    [DashboardView.Tutor]: Sparkles,
+                    [DashboardView.Insights]: ChartNoAxesCombined,
+                  }[view];
+                  return (
+                    <SidebarMenuItem key={view}>
+                      <SidebarMenuButton
+                        isActive={activeView === view}
+                        tooltip={label}
+                        onClick={() => setActiveView(view)}
+                      >
+                        <Icon aria-hidden="true" />
+                        <span className="group-data-[state=collapsed]/sidebar:hidden overflow-hidden text-ellipsis whitespace-nowrap">
+                          {label}
+                        </span>
+                        {view === DashboardView.Today && workspaceUnlocked && (
+                          <SidebarMenuBadge className="group-data-[state=collapsed]/sidebar:hidden">
+                            {dueCount}
+                          </SidebarMenuBadge>
+                        )}
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  );
+                })}
+              </SidebarMenu>
+            </SidebarGroup>
+            {workspaceUnlocked && (
+              <SidebarGroup className="mt-0">
+                <SidebarGroupLabel>
+                  <span className="overflow-hidden text-ellipsis whitespace-nowrap group-data-[state=collapsed]/sidebar:invisible">
+                    YOUR LEARNING AREAS
+                  </span>
+                  <SidebarGroupAction
+                    className="static ml-auto grid size-[26px] shrink-0 translate-y-0 place-items-center rounded-md text-[var(--muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--ink)] group-data-[state=collapsed]/sidebar:invisible [&_svg]:size-[15px]"
+                    type="button"
+                    aria-label="Add learning area"
+                    onClick={addArea}
+                  >
+                    <Plus aria-hidden="true" />
+                  </SidebarGroupAction>
+                </SidebarGroupLabel>
+                <SidebarMenu>
+                  {workspace.areas.map((item) => (
+                    <SidebarMenuItem key={item.id}>
+                      <SidebarMenuButton
+                        isActive={selectedId === item.id && activeView === DashboardView.Today}
+                        tooltip={item.title}
+                        disabled={reviewSaving || reviewSaveFailed}
+                        onClick={() => {
+                          setSelectedId(item.id);
+                          setShowAnswer(false);
+                          setActiveView(DashboardView.Today);
+                        }}
+                      >
+                        <span
+                          aria-hidden="true"
+                          className="inline-flex size-5 shrink-0 items-center justify-center rounded-full text-[9px] font-semibold leading-none tabular-nums text-white"
+                          style={{ backgroundColor: item.color }}
+                        >
+                          {item.cards.filter((entry) => dueNow(entry, now)).length}
+                        </span>
+                        <span className="group-data-[state=collapsed]/sidebar:hidden overflow-hidden text-ellipsis whitespace-nowrap">
+                          {item.title}
+                        </span>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  ))}
+                </SidebarMenu>
+              </SidebarGroup>
+            )}
+          </SidebarContent>
+          <SidebarFooter>
+            {(workspaceUnlocked || accountStatus === "signed-in") && (
+              <div hidden={!workspaceUnlocked}>
+                <WorkspaceSyncAction
+                  autoSync={!demo}
+                  demo={Boolean(demo)}
+                  demoMissingReviewContent={demo?.missingReviewContent ?? false}
+                  onMissingReviewContent={() => {
+                    setMissingDeletedReviewContent(true);
+                    setDeletedReviewProvisionCapacity(false);
+                  }}
+                  onReviewProvisionCapacity={() => {
+                    setDeletedReviewProvisionCapacity(true);
+                    setMissingDeletedReviewContent(false);
+                  }}
+                  {...(demo?.syncAccountState ? { demoAccountState: demo.syncAccountState } : {})}
+                  onExportOffline={() => void exportWorkspaceBackup()}
+                  onClearWorkspace={() => void discardSavedWorkspace()}
+                  checkpoint={(candidate) =>
+                    Effect.tryPromise({
+                      try: () =>
+                        enqueueWorkspaceSave(async () => {
+                          for (;;) {
+                            if (!ready || !cacheWritable || localWritesBlocked())
+                              return Either.left({
+                                _tag: "WorkspaceSyncCheckpointFailure",
+                              } as const);
+                            const current = workspaceRef.current;
+                            const bound = await Effect.runPromise(
+                              Effect.either(
+                                bindWorkspaceOwner(
+                                  current,
+                                  candidate.syncOwnerId,
+                                  workspaceHasRemoteSyncMetadata(candidate),
+                                ),
+                              ),
+                            );
+                            if (Either.isLeft(bound))
+                              return Either.left({
+                                _tag: "WorkspaceSyncCheckpointFailure",
+                              } as const);
+                            const persisted = await Effect.runPromise(
+                              Effect.either(saveWorkspace(browserWorkspaceStore, bound.right)),
+                            );
+                            if (Either.isLeft(persisted))
+                              return Either.left({
+                                _tag: "WorkspaceSyncCheckpointFailure",
+                              } as const);
+                            if (localWritesBlocked())
+                              return Either.left({
+                                _tag: "WorkspaceSyncCheckpointFailure",
+                              } as const);
+                            if (workspaceRef.current !== current) continue;
+                            setWorkspace(bound.right);
+                            return Either.right(bound.right);
+                          }
+                        }),
+                      catch: (): WorkspaceSyncCheckpointFailure => ({
+                        _tag: "WorkspaceSyncCheckpointFailure",
+                      }),
+                    }).pipe(Effect.flatMap((result) => result))
+                  }
+                  workspace={workspace}
+                  onSynced={(
+                    acceptedIds,
+                    cursor,
+                    pulledEvents,
+                    pulledAreas,
+                    deletedCardIds,
+                    syncedAreaTombstoneIds,
+                    pulledDeletedAreaIds,
+                    contentHashes,
+                    conflicts,
+                    hasMore,
+                    uploadDeferred,
+                    baseline,
+                  ) => {
+                    if (localWritesBlocked()) return null;
+                    const applied = Effect.runSync(
+                      Effect.either(
+                        applyWorkspaceSyncChanges(
+                          workspaceRef.current,
+                          {
+                            baseline,
+                            acceptedIds,
+                            cursor,
+                            pulledEvents,
+                            pulledAreas,
+                            deletedCardIds,
+                            syncedAreaTombstoneIds,
+                            pulledDeletedAreaIds,
+                            contentHashes,
+                            conflicts,
+                            hasMore,
+                            uploadDeferred,
+                          },
+                          () => crypto.randomUUID(),
+                        ),
+                      ),
+                    );
+                    if (Either.isLeft(applied)) {
+                      setImportNotice(
+                        "Synced changes could not be reconciled. Your latest tab workspace was preserved.",
+                      );
+                      return null;
+                    }
+                    setCloudWorkspaceLoaded(true);
+                    setWorkspace(applied.right);
+                    setMissingDeletedReviewContent(false);
+                    setDeletedReviewProvisionCapacity(false);
+                    return applied.right;
+                  }}
+                  onContentConflict={(ownerId, remoteAreas, contentHashes, deletedAreaIds) => {
+                    if (reviewingRef.current || pendingReviewRef.current) return false;
+                    const preview = {
+                      ownerId,
+                      areas: remoteAreas,
+                      hashes: contentHashes,
+                      deletedAreaIds,
+                    };
+                    const preflight = Effect.runSync(
+                      Effect.either(applyWorkspaceContentConflict(workspace, preview)),
+                    );
+                    if (Either.isLeft(preflight)) return false;
+                    setWorkspace((current) => {
+                      if (current === workspace) return preflight.right;
+                      const applied = Effect.runSync(
+                        Effect.either(applyWorkspaceContentConflict(current, preview)),
+                      );
+                      return Either.isRight(applied) ? applied.right : current;
+                    });
+                    return true;
+                  }}
                 />
-                <div className="study-aside">
-                  <div className="aside-note">
-                    <span className="note-icon">✦</span>
-                    <h3>Make it yours.</h3>
-                    <p>Add your own questions to build a study set that fits the way you learn.</p>
-                    <button onClick={addCard}>＋ Add a card</button>
-                  </div>
-                  <div className="progress-note">
-                    <div className="progress-note-top">
-                      <span>YOUR LIBRARY</span>
-                      <strong>{progress}%</strong>
-                    </div>
-                    <div className="progress-track">
-                      <i style={{ width: `${progress}%` }} />
-                    </div>
-                    <p>
-                      {allCards.length - dueCount} of {allCards.length} cards are resting.
+              </div>
+            )}
+            {(erased || stale || reviewSaving || reviewSaveFailed) && (
+              <div role="status">
+                <i />{" "}
+                {erased || stale
+                  ? "Read-only in this tab"
+                  : reviewSaving
+                    ? "Saving review…"
+                    : "Review save needs retry"}
+              </div>
+            )}
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <Popover open={accountPanelOpen} onOpenChange={setAccountPanelOpen}>
+                  <PopoverTrigger asChild>
+                    <SidebarMenuButton
+                      keepMobileOpen
+                      tooltip="Account"
+                      isActive={accountPanelOpen}
+                      aria-expanded={accountPanelOpen}
+                    >
+                      <UserRound aria-hidden="true" />
+                      <span className="group-data-[state=collapsed]/sidebar:hidden flex min-w-0 flex-1 flex-col gap-0.5">
+                        <strong>Account</strong>
+                      </span>
+                      <ChevronDown
+                        className="group-data-[state=collapsed]/sidebar:hidden ml-auto text-[var(--muted)]"
+                        aria-hidden="true"
+                      />
+                    </SidebarMenuButton>
+                  </PopoverTrigger>
+                  <PopoverContent
+                    side="right"
+                    align="end"
+                    className="max-h-[min(80svh,40rem)] w-[min(20rem,calc(100vw-1rem))] overflow-y-auto p-3 [&_[data-slot=account-action]]:items-stretch [&_[data-slot=account-action]]:flex-col [&_[data-slot=account-action]]:gap-2"
+                  >
+                    <button
+                      type="button"
+                      className="mb-3 flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-accent"
+                      onClick={() => setDeviceSettings(true)}
+                    >
+                      <Settings2 aria-hidden="true" className="size-4" />
+                      Device settings
+                    </button>
+                    <AccountAction
+                      demo={Boolean(demo)}
+                      {...(workspaceUnlocked ? { workspace } : {})}
+                    />
+                  </PopoverContent>
+                </Popover>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarFooter>
+          <SidebarRail />
+        </Sidebar>
+
+        <SidebarInset className="min-w-0" id="today">
+          <div className="flex items-center gap-3 border-b px-4 py-2 md:hidden">
+            <SidebarTrigger
+              className="size-9 w-9"
+              aria-label="Open navigation"
+              title="Open navigation"
+            />
+            <a className="font-semibold text-foreground no-underline" href="#today">
+              Recall
+            </a>
+          </div>
+          {!workspaceUnlocked ? (
+            <main className="mx-auto grid min-h-[60vh] w-full max-w-2xl content-center gap-4 px-4 py-12 sm:px-8">
+              <div className="rounded-xl border bg-card p-6 shadow-sm">
+                <h1 className="text-2xl font-semibold tracking-tight">
+                  {accountStatus === "checking"
+                    ? "Checking your account…"
+                    : accountStatus === "unavailable"
+                      ? "Sign in to access your cards"
+                      : !webAccountConfigured
+                        ? "Sign in to access your cards"
+                        : accountStatus === "signed-in"
+                          ? "Loading your account workspace…"
+                          : "Sign in to access your cards"}
+                </h1>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  {accountStatus === "signed-in"
+                    ? "Your cards will appear here when the account workspace has loaded."
+                    : "Card creation, reading, and study require a signed-in account."}
+                </p>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {accountStatus === "signed-out" && webAccountConfigured && (
+                    <Button asChild>
+                      <a href="/sign-in">Sign in</a>
+                    </Button>
+                  )}
+                  {accountStatus === "unavailable" && <Button onClick={checkAccount}>Retry</Button>}
+                </div>
+              </div>
+            </main>
+          ) : (
+            <>
+              {stale && !erased && (
+                <Alert className="my-3 flex flex-wrap items-center gap-2" variant="destructive">
+                  Another tab saved a newer workspace. This tab is read-only; your unsaved changes
+                  are still here. Export them before reloading the latest saved workspace.
+                  <Button onClick={() => void exportWorkspaceBackup()}>
+                    Export this tab backup
+                  </Button>
+                  <Button onClick={() => exportWorkspaceSnapshot()}>Export JSON snapshot</Button>
+                  <Button
+                    onClick={() => {
+                      if (!demo) window.location.reload();
+                    }}
+                  >
+                    Reload latest saved workspace
+                  </Button>
+                </Alert>
+              )}
+              {(contentImportBusy || pendingContentImport) && (
+                <Alert
+                  className="my-3 flex flex-wrap items-center gap-2"
+                  role={contentImportBusy ? "status" : "alert"}
+                >
+                  {contentImportBusy
+                    ? "Saving imported content…"
+                    : "This import has not been confirmed saved. Its content is retained on this page."}
+                  {!contentImportBusy && pendingContentImport && (
+                    <>
+                      <Button
+                        onClick={() => {
+                          const retry = () =>
+                            void commitContentImport({
+                              ...pendingContentImport,
+                              expectedWorkspace: workspaceRef.current,
+                            });
+                          if (pendingContentImport.replacement)
+                            requestConfirmation(
+                              "Replace the current workspace with this backup? Changes made since the earlier attempt will be replaced.",
+                              retry,
+                            );
+                          else retry();
+                        }}
+                      >
+                        Retry saving import
+                      </Button>
+                      <Button
+                        onClick={() => {
+                          setPendingContentImport(null);
+                          setImportNotice(
+                            "Import cancelled. Your current workspace remains available.",
+                          );
+                        }}
+                      >
+                        Cancel import
+                      </Button>
+                    </>
+                  )}
+                </Alert>
+              )}
+              {(importNotice || erased) && (
+                <Alert className="my-3 flex flex-wrap items-center gap-2" role="status">
+                  {erased
+                    ? "This tab is read-only while its working copy is being cleared. Retry if cleanup fails."
+                    : importNotice}
+                  {cacheBlocked && !stale && (
+                    <Button onClick={() => void discardSavedWorkspace()}>Clear saved data</Button>
+                  )}
+                  <Button aria-label="Dismiss notice" onClick={() => setImportNotice(null)}>
+                    ×
+                  </Button>
+                </Alert>
+              )}
+              {reviewSaveFailed && (
+                <Alert className="my-3 flex flex-wrap items-center gap-2" variant="destructive">
+                  This review has not been confirmed saved. The answer is still here; retry saving
+                  the same review before continuing. Other saves are paused so a pending review
+                  cannot be overwritten.
+                  <Button
+                    disabled={erased || stale}
+                    onClick={() => {
+                      const rating = pendingReviewRef.current?.rating ?? "good";
+                      void review(rating);
+                    }}
+                  >
+                    Retry review save
+                  </Button>
+                  <Button onClick={exportWorkspaceSnapshot}>Export this tab snapshot</Button>
+                  <Button onClick={() => void exportWorkspaceBackup()}>
+                    Export saved attachments backup
+                  </Button>
+                </Alert>
+              )}
+
+              {(libraryMutation === "area-delete" || libraryMutation === "card-delete") && (
+                <Alert className="my-3 flex flex-wrap items-center gap-2" role="status">
+                  Saving deletion on this device… The content remains available until saving
+                  completes.
+                </Alert>
+              )}
+              {deletionRequest && libraryMutation === null && (
+                <Alert className="my-3 flex flex-wrap items-center gap-2" variant="destructive">
+                  <span>{deletionRequest.error}</span>
+                  <Button onClick={() => void retryDeletion()}>
+                    {deletionRequest.stale
+                      ? "Review and confirm latest deletion"
+                      : "Retry saved deletion request"}
+                  </Button>
+                  <Button onClick={() => setDeletionRequest(null)}>Cancel deletion request</Button>
+                </Alert>
+              )}
+
+              <div
+                className="mx-auto w-full max-w-[1080px] px-4 py-10 sm:px-8 lg:px-11"
+                hidden={activeView !== DashboardView.Tutor}
+                inert={reviewSaving || reviewSaveFailed}
+              >
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h1 className="text-3xl font-semibold tracking-tight">Tutor</h1>
+                    <p className="m-0 text-[12px] text-[var(--ink)]">
+                      Ask questions about your learning area
                     </p>
                   </div>
+                  {workspace.areas.length > 0 && (
+                    <label className="grid gap-1.5 text-[12px] text-[var(--ink)]">
+                      Study area
+                      <StudyAreaSelect
+                        areas={workspace.areas}
+                        value={selectedId ?? ""}
+                        disabled={reviewSaving || reviewSaveFailed}
+                        ariaLabel="Area"
+                        onValueChange={setSelectedId}
+                      />
+                    </label>
+                  )}
+                </div>
+                <div className="mt-7">
                   {!demo && area && tutorAreaDocument && Either.isRight(tutorAreaDocument) && (
                     <TutorPanel
                       key={area.id}
                       knowledgeArea={tutorAreaDocument.right}
+                      duplicateCandidates={duplicateCandidates}
+                      {...(searchTarget?.areaId === area.id
+                        ? { searchTarget: searchTarget.target }
+                        : {})}
                       reviewEvents={workspace.reviewEvents ?? []}
-                      onStartReview={() => setActiveView("Today")}
+                      onStartReview={() => setActiveView(DashboardView.Today)}
                       objectiveGaps={objectiveGaps}
                       onApprove={async (
                         proposal: CardProposal,
@@ -2450,9 +2653,7 @@ Its review history will remain.`)
                             }
                             if (workspaceRef.current !== current) continue;
                             setWorkspace(saved.right.workspace);
-                            setImportNotice(
-                              "AI card saved to your study queue. Approval can be retried without creating another card.",
-                            );
+                            setImportNotice("Card saved.");
                             return saved.right.proposal;
                           }
                         });
@@ -2460,771 +2661,1254 @@ Its review history will remain.`)
                     />
                   )}
                   {!demo && area && tutorAreaDocument && Either.isLeft(tutorAreaDocument) && (
-                    <p className="tutor-error" role="status">
+                    <p className="mt-2.5 text-[11px] text-[var(--status-warning-fg)]" role="status">
                       The AI tutor is unavailable because this learning area has invalid content.
                     </p>
                   )}
+
+                  {!area && <p>Add an area in Library to begin.</p>}
                 </div>
               </div>
-            </div>
-          </>
-        ) : (
-          <div className="content-wrap alternate-view" inert={reviewSaving || reviewSaveFailed}>
-            <p className="eyebrow">
-              {activeView === "Explore" ? "GROW YOUR LIBRARY" : "YOUR LEARNING, OVER TIME"}
-            </p>
-            <h1>
-              {activeView === "Explore" ? (
+              {activeView === DashboardView.Tutor ? null : activeView === DashboardView.Today ? (
                 <>
-                  Make room for <em>curiosity.</em>
+                  {!practiceId ? (
+                    <main className="mx-auto min-h-[80vh] w-full max-w-[1080px] px-4 py-10 sm:px-8 lg:px-11">
+                      <div className="mb-7">
+                        <h1 className="text-3xl font-semibold tracking-tight">Today</h1>
+                        <p className="m-0 text-sm text-[var(--muted)]">
+                          {dueCount} cards to review across {workspace.areas.length} learning areas
+                          · {studiedToday} reviewed today
+                        </p>
+                      </div>
+                      {workspace.areas.length === 0 ? (
+                        <p className="rounded-xl border border-[var(--line)] bg-[var(--surface)] p-6 text-sm text-[var(--muted)]">
+                          No learning areas yet. Add an area in Library to begin.
+                        </p>
+                      ) : (
+                        <div className="grid gap-3">
+                          {workspace.areas.map((item) => {
+                            const due = item.cards.filter((entry) => dueNow(entry, now)).length;
+                            return (
+                              <section
+                                key={item.id}
+                                className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-[var(--line)] bg-[var(--surface)] p-5"
+                              >
+                                <div className="flex min-w-0 items-center gap-3">
+                                  <span
+                                    className="size-3 shrink-0 rounded-full"
+                                    style={{ backgroundColor: item.color }}
+                                    aria-hidden="true"
+                                  />
+                                  <div className="min-w-0">
+                                    <h2 className="m-0 truncate text-lg font-semibold">
+                                      {item.title}
+                                    </h2>
+                                    <p className="m-0 text-sm text-[var(--muted)]">
+                                      {due > 0
+                                        ? `${due} ${due === 1 ? "card" : "cards"} to review`
+                                        : "Nothing due right now"}{" "}
+                                      · {item.cards.length} total
+                                    </p>
+                                  </div>
+                                </div>
+                                <Button
+                                  variant={due > 0 ? "default" : "secondary"}
+                                  disabled={due === 0}
+                                  onClick={() => onPracticeChange?.(item.id)}
+                                >
+                                  {due > 0 ? "Start practice" : "All caught up"}
+                                </Button>
+                              </section>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </main>
+                  ) : (
+                    <div
+                      className="mx-auto w-full max-w-[1080px] px-4 py-10 sm:px-8 lg:px-11"
+                      inert={reviewSaving || reviewSaveFailed}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <div>
+                            <h1 className="text-3xl font-semibold tracking-tight">
+                              {area?.title ?? "Practice"}
+                            </h1>
+                            <button
+                              type="button"
+                              className="mt-1 text-sm text-[var(--muted)] underline-offset-4 hover:underline"
+                              onClick={() => onViewChange?.(DashboardView.Today)}
+                            >
+                              Back to Today
+                            </button>
+                          </div>
+                          <p className="m-0 text-[12px] text-[var(--ink)]">
+                            {area?.cards.filter((entry) => dueNow(entry, now)).length ?? 0} due ·{" "}
+                            {studiedToday} reviewed today
+                          </p>
+                        </div>
+                        <label className="grid gap-1.5 text-[12px] text-[var(--ink)]">
+                          Study area
+                          <StudyAreaSelect
+                            areas={workspace.areas}
+                            value={selectedId ?? ""}
+                            disabled={reviewSaving || reviewSaveFailed}
+                            onValueChange={(value) => {
+                              setSelectedId(value);
+                              setShowAnswer(false);
+                              onPracticeChange?.(value);
+                            }}
+                            renderDetail={(item) => (
+                              <span className="shrink-0 text-muted-foreground">
+                                · {item.cards.filter((entry) => dueNow(entry, now)).length} due
+                              </span>
+                            )}
+                          />
+                        </label>
+                      </div>
+                      <div className="mt-7 block">
+                        {!area ? (
+                          <p className="rounded-xl border border-[var(--line)] bg-[var(--surface)] p-6 text-sm text-[var(--muted)]">
+                            This learning area is no longer available.{" "}
+                            <button
+                              type="button"
+                              className="underline"
+                              onClick={() => onViewChange?.(DashboardView.Today)}
+                            >
+                              Return to Today
+                            </button>
+                          </p>
+                        ) : (
+                          <ReviewCard
+                            area={area}
+                            card={card}
+                            mediaPreviews={mediaPreviews}
+                            showAnswer={showAnswer}
+                            keyboardActive={
+                              !addingArea &&
+                              !addingCard &&
+                              !showAreaSettings &&
+                              !reviewSaving &&
+                              !reviewSaveFailed &&
+                              !erased &&
+                              !stale
+                            }
+                            disabled={
+                              reviewSaving ||
+                              reviewSaveFailed ||
+                              erased ||
+                              stale ||
+                              (!demo && (!ready || !cacheMayWrite))
+                            }
+                            saving={reviewSaving}
+                            onReveal={() => setShowAnswer(true)}
+                            onRate={(rating) => void review(rating)}
+                            onEdit={editCard}
+                            onDelete={(target) => void deleteCard(target)}
+                            onAddCard={addCard}
+                          />
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </>
               ) : (
-                <>
-                  Progress that <em>adds up.</em>
-                </>
-              )}
-            </h1>
-            <p className="subheading">
-              {activeView === "Explore"
-                ? "Create a learning area for anything you want to understand."
-                : "Your practice history is stored privately on this device."}
-            </p>
-            {activeView === "Explore" ? (
-              <>
-                <Button size="small" className="primary-action" onClick={addArea}>
-                  ＋ Create a learning area
-                </Button>
-                {area && (
-                  <>
-                    <div className="section-title-row">
-                      <h2>{area.title}</h2>
-                      <button
-                        type="button"
-                        className="text-button"
-                        onClick={() => setShowAreaSettings((current) => !current)}
-                      >
-                        {showAreaSettings
-                          ? "Close area settings"
-                          : "Edit learning goals & AI instructions"}
-                      </button>
-                    </div>
-                    {showAreaSettings && (
-                      <KnowledgeAreaSettings
-                        key={area.id}
-                        area={area}
-                        readLatest={() =>
-                          workspaceRef.current.areas.find((item) => item.id === area.id) ?? null
-                        }
-                        onSave={(settings, expectedBaseline) =>
-                          saveAuthoringCommand(
-                            { kind: "update-area-settings", areaId: area.id, settings },
-                            expectedBaseline,
-                          ).pipe(
-                            Effect.flatMap((saved) => {
-                              const updated = saved.areas.find((item) => item.id === area.id);
-                              return updated
-                                ? Effect.succeed(updated)
-                                : Effect.fail({
-                                    reason: "unavailable" as const,
-                                    message:
-                                      "This knowledge area is no longer available. Your draft is preserved.",
-                                  });
-                            }),
-                            Effect.mapError((error) => ({
-                              ...error,
-                              _tag: "AreaSettingsSaveFailure" as const,
-                            })),
-                          )
-                        }
-                      />
+                <div
+                  className="mx-auto min-h-[80vh] w-full max-w-[1080px] px-4 py-10 sm:px-8 lg:px-11"
+                  inert={reviewSaving || reviewSaveFailed}
+                >
+                  <div className="flex items-center justify-between gap-4">
+                    <h1 className="text-3xl font-semibold tracking-tight">
+                      {activeView === DashboardView.Library ? "Library" : "Insights"}
+                    </h1>
+                    {activeView === DashboardView.Library && (
+                      <Button variant="secondary" onClick={() => setImportExportOpen(true)}>
+                        Import and export
+                      </Button>
                     )}
-                    <KnowledgeAreaCardLibrary
-                      key={area.id}
-                      area={area}
-                      onEdit={editCard}
-                      onDelete={(target) => void deleteCard(target)}
-                      onAdd={addCard}
+                    {activeView === DashboardView.Insights && (
+                      <Button variant="secondary" onClick={() => setReviewSettingsOpen(true)}>
+                        Review settings
+                      </Button>
+                    )}
+                  </div>
+                  {activeView === DashboardView.Library ? (
+                    <>
+                      <div className="mt-7 grid gap-7">
+                        <section
+                          aria-label="Learning areas"
+                          className="flex min-w-0 items-center gap-2"
+                        >
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <ShadcnButton
+                                type="button"
+                                variant="outline"
+                                className="min-w-0 flex-1 justify-between gap-2"
+                              >
+                                {area && (
+                                  <span
+                                    className="size-2.5 shrink-0 rounded-full"
+                                    style={{ backgroundColor: area.color }}
+                                    aria-hidden="true"
+                                  />
+                                )}
+                                <span className="min-w-0 flex-1 truncate text-left">
+                                  {area?.title ?? "Select a learning area"}
+                                </span>
+                                {area && (
+                                  <span className="shrink-0 text-xs text-[var(--muted)]">
+                                    {area.cards.filter((card) => dueNow(card, now)).length} due
+                                  </span>
+                                )}
+                                <ChevronDown className="size-4 shrink-0" aria-hidden="true" />
+                              </ShadcnButton>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="start" className="min-w-64">
+                              <DropdownMenuItem disabled={!area} onSelect={addCard}>
+                                <Plus aria-hidden="true" />
+                                Add a card
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              {workspace.areas.map((item) => (
+                                <DropdownMenuItem
+                                  key={item.id}
+                                  onSelect={() => {
+                                    setSelectedId(item.id);
+                                    setShowAnswer(false);
+                                  }}
+                                >
+                                  <span
+                                    className="size-2.5 shrink-0 rounded-full"
+                                    style={{ backgroundColor: item.color }}
+                                    aria-hidden="true"
+                                  />
+                                  <span className="min-w-0 flex-1 truncate">{item.title}</span>
+                                  <span className="shrink-0 text-xs tabular-nums text-[var(--muted)]">
+                                    {item.cards.filter((card) => dueNow(card, now)).length} due
+                                  </span>
+                                </DropdownMenuItem>
+                              ))}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                          <ShadcnButton
+                            type="button"
+                            variant="secondary"
+                            size="icon"
+                            className="size-9 shrink-0"
+                            aria-label="New area"
+                            onClick={addArea}
+                          >
+                            <Plus aria-hidden="true" />
+                          </ShadcnButton>
+                          {area && (
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <ShadcnButton
+                                  type="button"
+                                  variant="secondary"
+                                  size="icon"
+                                  className="size-9 shrink-0"
+                                  aria-label={`Actions for ${area.title}`}
+                                >
+                                  <Ellipsis aria-hidden="true" />
+                                </ShadcnButton>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem
+                                  onSelect={() => {
+                                    setShareKnowledgeOpen(true);
+                                  }}
+                                >
+                                  Share knowledge
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onSelect={() => editArea(area)}>
+                                  Rename
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onSelect={() => setShowAreaSettings(true)}>
+                                  Settings
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  variant="destructive"
+                                  onSelect={() => void deleteArea(area)}
+                                >
+                                  Delete
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          )}
+                        </section>
+                        <div className="min-w-0 pt-1">
+                          {area && (
+                            <>
+                              <Dialog
+                                open={showAreaSettings && workspaceUnlocked}
+                                onOpenChange={setShowAreaSettings}
+                              >
+                                <DialogContent className="max-h-[calc(100dvh-2rem)] gap-5 overflow-y-auto sm:max-w-3xl">
+                                  <DialogHeader>
+                                    <DialogTitle>Area settings</DialogTitle>
+                                    <DialogDescription>Update {area.title}.</DialogDescription>
+                                  </DialogHeader>
+                                  <KnowledgeAreaSettings
+                                    key={`area-settings-${area.id}`}
+                                    area={area}
+                                    readLatest={() =>
+                                      workspaceRef.current.areas.find(
+                                        (item) => item.id === area.id,
+                                      ) ?? null
+                                    }
+                                    onSave={(settings, expectedBaseline) =>
+                                      saveAuthoringCommand(
+                                        { kind: "update-area-settings", areaId: area.id, settings },
+                                        expectedBaseline,
+                                      ).pipe(
+                                        Effect.flatMap((saved) => {
+                                          const updated = saved.areas.find(
+                                            (item) => item.id === area.id,
+                                          );
+                                          return updated
+                                            ? Effect.succeed(updated)
+                                            : Effect.fail({
+                                                reason: "unavailable" as const,
+                                                message:
+                                                  "This knowledge area is no longer available. Your draft is preserved.",
+                                              });
+                                        }),
+                                        Effect.mapError((error) => ({
+                                          ...error,
+                                          _tag: "AreaSettingsSaveFailure" as const,
+                                        })),
+                                      )
+                                    }
+                                  />
+                                </DialogContent>
+                              </Dialog>
+                              <KnowledgeAreaCardLibrary
+                                key={`area-library-${area.id}`}
+                                area={area}
+                                onEdit={editCard}
+                                onDelete={(target) => void deleteCard(target)}
+                                onAdd={addCard}
+                                workspace={workspace}
+                                showDeletedRecovery={false}
+                                onRestoreVersion={restoreVersion}
+                                restoring={
+                                  cardSaving ||
+                                  libraryMutation !== null ||
+                                  reviewSaving ||
+                                  reviewSaveFailed
+                                }
+                                onOpenDuplicate={(candidate) => {
+                                  const existing = workspaceRef.current.areas
+                                    .flatMap((item) => item.cards)
+                                    .find((item) => item.id === candidate.id);
+                                  if (existing) editCard(existing);
+                                }}
+                              />
+                            </>
+                          )}
+                          <DeletedCardRecovery
+                            workspace={workspace}
+                            onRestoreVersion={restoreVersion}
+                            disabled={
+                              cardSaving ||
+                              libraryMutation !== null ||
+                              reviewSaving ||
+                              reviewSaveFailed
+                            }
+                          />
+                          <Dialog
+                            open={importExportOpen && workspaceUnlocked}
+                            onOpenChange={setImportExportOpen}
+                          >
+                            <DialogContent className="max-h-[calc(100dvh-2rem)] gap-5 overflow-y-auto sm:max-w-2xl">
+                              <DialogHeader>
+                                <DialogTitle>Import and export</DialogTitle>
+                                <DialogDescription>
+                                  Import cards or restore a workspace backup. Export cards or save a
+                                  backup.
+                                </DialogDescription>
+                              </DialogHeader>
+                              <div
+                                className="flex flex-wrap gap-2"
+                                aria-label="Import and export tools"
+                              >
+                                <AnkiImportAction
+                                  color={
+                                    colors[workspace.areas.length % colors.length] ?? "#c4ed68"
+                                  }
+                                  onAccept={(proposal) =>
+                                    Effect.tryPromise({
+                                      try: async () => {
+                                        if (
+                                          contentImportPending.current ||
+                                          (pendingContentImport &&
+                                            pendingContentImport.area?.id !== proposal.area.id)
+                                        )
+                                          return false;
+                                        return commitContentImport({
+                                          area: proposal.area,
+                                          media: proposal.media,
+                                          reviewEvents: proposal.reviewEvents,
+                                          message: `${proposal.area.cards.length} cards and ${proposal.reviewEvents.length} reviews imported from Anki. FSRS schedules were rebuilt from the review history.`,
+                                        });
+                                      },
+                                      catch: () =>
+                                        ({ _tag: "AnkiImportAcceptanceUnavailable" }) as const,
+                                    }).pipe(
+                                      Effect.flatMap((saved) =>
+                                        saved
+                                          ? Effect.void
+                                          : Effect.fail({ _tag: "AnkiImportNotSaved" } as const),
+                                      ),
+                                    )
+                                  }
+                                />
+                                <label
+                                  className="inline-flex min-h-8 cursor-pointer items-center rounded-md px-2 text-sm text-[var(--ink)] underline-offset-4 hover:bg-[var(--surface-hover)] hover:underline"
+                                  htmlFor="delimited-import"
+                                >
+                                  Import CSV/TSV
+                                </label>
+                                <input
+                                  id="delimited-import"
+                                  className="sr-only"
+                                  type="file"
+                                  accept=".csv,.tsv,text/csv,text/tab-separated-values"
+                                  onChange={importDelimited}
+                                />
+                                <Button
+                                  variant="secondary"
+                                  className="inline-flex min-h-8 items-center rounded-md px-2 text-sm text-[var(--ink)] underline-offset-4 hover:bg-[var(--surface-hover)] hover:underline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
+                                  onClick={() => exportDelimited(",")}
+                                  disabled={!area}
+                                >
+                                  Export CSV
+                                </Button>
+                                <Button
+                                  variant="secondary"
+                                  className="inline-flex min-h-8 items-center rounded-md px-2 text-sm text-[var(--ink)] underline-offset-4 hover:bg-[var(--surface-hover)] hover:underline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
+                                  onClick={() => exportDelimited("\t")}
+                                  disabled={!area}
+                                >
+                                  Export TSV
+                                </Button>
+                                <Button
+                                  variant="secondary"
+                                  className="inline-flex min-h-8 items-center rounded-md px-2 text-sm text-[var(--ink)] underline-offset-4 hover:bg-[var(--surface-hover)] hover:underline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
+                                  onClick={exportWorkspaceBackup}
+                                >
+                                  Backup workspace
+                                </Button>
+                                <label
+                                  className="inline-flex min-h-8 cursor-pointer items-center rounded-md px-2 text-sm text-[var(--ink)] underline-offset-4 hover:bg-[var(--surface-hover)] hover:underline"
+                                  htmlFor={
+                                    isDesktopRuntime() ? undefined : "workspace-backup-import"
+                                  }
+                                  onClick={
+                                    isDesktopRuntime() ? restoreDesktopWorkspaceBackup : undefined
+                                  }
+                                >
+                                  Restore backup
+                                </label>
+                                <input
+                                  id="workspace-backup-import"
+                                  className="sr-only"
+                                  type="file"
+                                  accept="application/zip,.zip,application/json,.json"
+                                  onChange={restoreWorkspaceBackup}
+                                />
+                              </div>
+                            </DialogContent>
+                          </Dialog>
+                          <Dialog
+                            open={shareKnowledgeOpen && workspaceUnlocked}
+                            onOpenChange={setShareKnowledgeOpen}
+                          >
+                            <DialogContent className="max-h-[calc(100dvh-2rem)] gap-5 overflow-y-auto sm:max-w-3xl">
+                              <DialogHeader>
+                                <DialogTitle id="publication-title">Share knowledge</DialogTitle>
+                                <DialogDescription>
+                                  Publish a learning area or receive one from a shared link.
+                                </DialogDescription>
+                              </DialogHeader>
+                              <KnowledgeAreaPublishing
+                                key={area?.id ?? "receive-shared-area"}
+                                embedded
+                                area={
+                                  publishingAreaDocument && Either.isRight(publishingAreaDocument)
+                                    ? publishingAreaDocument.right
+                                    : null
+                                }
+                                {...(lineageAreaDocument && Either.isRight(lineageAreaDocument)
+                                  ? { lineageArea: lineageAreaDocument.right }
+                                  : {})}
+                                {...(sharedRequest ? { initialRequest: sharedRequest } : {})}
+                                onFork={async (
+                                  document,
+                                  attribution,
+                                  license,
+                                  forkedFromVersionId,
+                                  contentHash,
+                                  assets,
+                                ) => {
+                                  if ((!cacheWritable || !ready || localWritesBlocked()) && !demo)
+                                    return false;
+                                  return enqueueWorkspaceSave(async () => {
+                                    for (;;) {
+                                      if (
+                                        localWritesBlocked() ||
+                                        localSnapshotStale() ||
+                                        pendingReviewRef.current
+                                      )
+                                        return false;
+                                      const current = workspaceRef.current;
+                                      const existing = current.areas.find(
+                                        (item) => item.id === document.id,
+                                      );
+                                      if (existing) {
+                                        if (existing.forkedFromVersionId !== forkedFromVersionId)
+                                          return false;
+                                        if (!demo) {
+                                          const requiredMedia = new Set(
+                                            existing.cards.flatMap((card) =>
+                                              (card.media ?? []).map((reference) => reference.id),
+                                            ),
+                                          );
+                                          const saved = await Effect.runPromise(
+                                            Effect.either(
+                                              saveWorkspaceWithMedia(
+                                                browserWorkspaceStore,
+                                                browserMediaStore,
+                                                current,
+                                                assets.filter((asset) =>
+                                                  requiredMedia.has(asset.reference.id),
+                                                ),
+                                              ),
+                                            ),
+                                          );
+                                          if (Either.isLeft(saved)) {
+                                            setImportNotice(
+                                              "Your cloud copy is saved, but local storage failed. Retry to receive the same copy.",
+                                            );
+                                            return false;
+                                          }
+                                        }
+                                        if (
+                                          localWritesBlocked() ||
+                                          localSnapshotStale() ||
+                                          pendingReviewRef.current
+                                        )
+                                          return false;
+                                        if (workspaceRef.current !== current) continue;
+                                        setSelectedId(existing.id);
+                                        setActiveView(DashboardView.Today);
+                                        return true;
+                                      }
+                                      const imported = Effect.runSync(
+                                        Effect.either(
+                                          fromKnowledgeArea(
+                                            {
+                                              ...document,
+                                              licence: license,
+                                              attribution,
+                                              forkedFromVersionId,
+                                            },
+                                            colors[current.areas.length % colors.length] ??
+                                              "#c4ed68",
+                                            true,
+                                            () => crypto.randomUUID(),
+                                            new Date(),
+                                            true,
+                                          ),
+                                        ),
+                                      );
+                                      if (Either.isLeft(imported)) return false;
+                                      const next = {
+                                        ...current,
+                                        areas: [...current.areas, imported.right],
+                                        syncContentHashes: {
+                                          ...(current.syncContentHashes ?? {}),
+                                          [imported.right.id]: contentHash,
+                                        },
+                                      };
+                                      if (!demo) {
+                                        const saved = await Effect.runPromise(
+                                          Effect.either(
+                                            saveWorkspaceWithMedia(
+                                              browserWorkspaceStore,
+                                              browserMediaStore,
+                                              next,
+                                              assets,
+                                            ),
+                                          ),
+                                        );
+                                        if (Either.isLeft(saved)) {
+                                          setImportNotice(
+                                            "Your cloud copy is saved, but local storage failed. Retry to receive the same copy.",
+                                          );
+                                          return false;
+                                        }
+                                      }
+                                      if (
+                                        localWritesBlocked() ||
+                                        localSnapshotStale() ||
+                                        pendingReviewRef.current
+                                      )
+                                        return false;
+                                      if (workspaceRef.current !== current) continue;
+                                      setWorkspace(next);
+                                      setSelectedId(imported.right.id);
+                                      setActiveView(DashboardView.Today);
+                                      setImportNotice(
+                                        `${imported.right.title} added as your copy. Attribution and license are preserved.`,
+                                      );
+                                      return true;
+                                    }
+                                  });
+                                }}
+                              />
+                            </DialogContent>
+                          </Dialog>
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="mt-[30px] grid gap-3 rounded-xl border border-[var(--line)] bg-[var(--surface)] p-6 sm:grid-cols-2">
+                        <div className="flex items-baseline gap-3 sm:col-span-2">
+                          <strong className="text-3xl font-semibold">{totalReviews}</strong>
+                          <span className="text-sm text-[var(--muted)]">
+                            reviews completed all time
+                          </span>
+                        </div>
+                        <p className="m-0 text-sm text-[var(--muted)]">
+                          {dueCount} cards are ready across {workspace.areas.length} learning areas.
+                        </p>
+                        <p className="m-0 text-sm text-[var(--muted)]">
+                          {studiedToday} today · {practice.week.inWindow} in the last 7 calendar
+                          days
+                        </p>
+                        <p className="m-0 text-sm text-[var(--muted)] sm:col-span-2">
+                          Last 7 days: {practice.week.ratings.again} Again ·{" "}
+                          {practice.week.ratings.hard} Hard · {practice.week.ratings.good} Good ·{" "}
+                          {practice.week.ratings.easy} Easy
+                        </p>
+                      </div>
+                      {(retainedCards > 0 ||
+                        missingDeletedReviewContent ||
+                        deletedReviewProvisionCapacity) && (
+                        <section
+                          className="mt-6 grid gap-3 rounded-xl border border-[var(--line)] bg-[var(--surface)] p-6"
+                          aria-labelledby="deleted-review-sync-title"
+                        >
+                          <h2 className="text-xl font-semibold" id="deleted-review-sync-title">
+                            Deleted content awaiting sync
+                          </h2>
+                          {retainedCards > 0 && (
+                            <>
+                              <p>
+                                {retainedCards} deleted card{retainedCards === 1 ? "" : "s"}
+                                {deletedRetainedAreas > 0
+                                  ? ` in ${deletedRetainedAreas} deleted area${deletedRetainedAreas === 1 ? "" : "s"}`
+                                  : ""}{" "}
+                                {retainedPendingReviews > 0
+                                  ? `retained privately for ${retainedPendingReviews} pending review${retainedPendingReviews === 1 ? "" : "s"}.`
+                                  : "retained privately until deletion acknowledgements arrive."}
+                              </p>
+                              <p>
+                                These cards stay out of your library and study queue. Sync preserves
+                                their reviews before confirming the deletions, then releases the
+                                retained content.
+                              </p>
+                            </>
+                          )}
+                          {missingDeletedReviewContent && (
+                            <Alert variant="destructive">
+                              This older workspace has a pending review whose deleted card is
+                              missing. Export this device&apos;s current private backup or review
+                              snapshot before replacing it with an older backup containing that
+                              card. Backups are not automatically merged; your review history
+                              remains saved.
+                            </Alert>
+                          )}
+                          {deletedReviewProvisionCapacity && (
+                            <Alert variant="destructive">
+                              Cloud content and pending deleted-review content exceed this
+                              area&apos;s card or objective limits. Local cards and reviews remain
+                              saved. Export a private backup before changing cloud content to free
+                              capacity.
+                            </Alert>
+                          )}
+                          <Button
+                            variant="secondary"
+                            className="inline-flex min-h-8 items-center rounded-md px-2 text-sm text-[var(--ink)] underline-offset-4 hover:bg-[var(--surface-hover)] hover:underline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
+                            onClick={exportWorkspaceSnapshot}
+                          >
+                            Export private recovery snapshot
+                          </Button>
+                          {missingDeletedReviewContent && (
+                            <Button
+                              variant="secondary"
+                              className="inline-flex min-h-8 items-center rounded-md px-2 text-sm text-[var(--ink)] underline-offset-4 hover:bg-[var(--surface-hover)] hover:underline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
+                              onClick={() => setActiveView(DashboardView.Library)}
+                            >
+                              Open backup restore tools
+                            </Button>
+                          )}
+                          {deletedReviewProvisionCapacity && (
+                            <>
+                              <Button
+                                variant="secondary"
+                                className="inline-flex min-h-8 items-center rounded-md px-2 text-sm text-[var(--ink)] underline-offset-4 hover:bg-[var(--surface-hover)] hover:underline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
+                                onClick={() => void exportWorkspaceBackup()}
+                              >
+                                Export private backup
+                              </Button>
+                              <Button
+                                variant="secondary"
+                                className="inline-flex min-h-8 items-center rounded-md px-2 text-sm text-[var(--ink)] underline-offset-4 hover:bg-[var(--surface-hover)] hover:underline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
+                                onClick={() => setActiveView(DashboardView.Library)}
+                              >
+                                Open area library
+                              </Button>
+                            </>
+                          )}
+                        </section>
+                      )}
+                      <section
+                        className="mt-8 max-w-[850px] overflow-hidden rounded-xl border border-[var(--line)] bg-[var(--surface)]"
+                        aria-labelledby="review-history-title"
+                      >
+                        <div className="flex items-center justify-between border-b border-[var(--line)] px-5 py-4">
+                          <div>
+                            <h2 className="text-lg font-semibold" id="review-history-title">
+                              Recent reviews
+                            </h2>
+                          </div>
+                          <span className="text-sm text-[var(--muted)]">
+                            {workspace.reviewEvents?.length ?? 0} total
+                          </span>
+                        </div>
+                        {reviewHistory.length ? (
+                          <ol className="divide-y divide-[var(--line)]">
+                            {reviewHistory.map((event) => (
+                              <li
+                                key={event.id}
+                                className="grid gap-x-4 gap-y-1.5 px-5 py-4 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-center"
+                              >
+                                <span
+                                  className={`w-fit rounded-full px-2.5 py-1 text-xs font-semibold capitalize ${event.rating === "again" ? "bg-[var(--surface-raised)] text-[var(--status-warning-fg)]" : "bg-[var(--surface-raised)] text-[var(--status-success-fg)]"}`}
+                                >
+                                  {event.rating}
+                                </span>
+                                <span className="min-w-0 truncate font-medium text-[var(--ink)]">
+                                  {event.question}
+                                </span>
+                                <span className="min-w-0 text-sm text-[var(--muted)] sm:col-start-2">
+                                  {event.areaTitle}
+                                  {(event.hasConcurrentBranch ||
+                                    event.needsSyncRetry ||
+                                    event.retainedForSync) && (
+                                    <span className="ml-2 text-[var(--status-warning-fg)]">
+                                      {event.retainedForSync
+                                        ? "Deleted · pending sync"
+                                        : event.needsSyncRetry
+                                          ? "Sync again"
+                                          : "Pending sync"}
+                                    </span>
+                                  )}
+                                </span>
+                                <time
+                                  className="text-sm text-[var(--muted)] sm:col-start-3 sm:row-span-2 sm:row-start-1"
+                                  dateTime={event.ratedAt}
+                                >
+                                  {new Date(event.ratedAt).toLocaleString("en-AU", {
+                                    dateStyle: "medium",
+                                    timeStyle: "short",
+                                    timeZone: "UTC",
+                                  })}
+                                </time>
+                              </li>
+                            ))}
+                          </ol>
+                        ) : (
+                          <EmptyState
+                            className="px-[22px] py-5 text-[var(--muted)]"
+                            title="No reviews yet"
+                            description="Your completed reviews will appear here."
+                          />
+                        )}
+                      </section>
+                    </>
+                  )}
+                  {activeView === DashboardView.Insights && (
+                    <Dialog
+                      open={reviewSettingsOpen && workspaceUnlocked}
+                      onOpenChange={setReviewSettingsOpen}
+                    >
+                      <DialogContent className="max-h-[calc(100dvh-2rem)] gap-5 overflow-y-auto sm:max-w-2xl">
+                        <DialogHeader>
+                          <DialogTitle>Review settings</DialogTitle>
+                          <DialogDescription>
+                            Adjust how reviews are scheduled for your workspace.
+                          </DialogDescription>
+                        </DialogHeader>
+                        <SchedulerSettings
+                          workspace={workspace}
+                          readLatest={() => workspaceRef.current}
+                          onSave={(settings, expectedBaseline) =>
+                            saveAuthoringCommand(
+                              { kind: "update-scheduler-settings", settings },
+                              expectedBaseline,
+                            ).pipe(
+                              Effect.mapError((error) => ({
+                                ...error,
+                                _tag: "SchedulerSettingsSaveFailure" as const,
+                              })),
+                            )
+                          }
+                        />
+                      </DialogContent>
+                    </Dialog>
+                  )}
+                </div>
+              )}
+            </>
+          )}
+        </SidebarInset>
+
+        <Dialog open={searchOpen && workspaceUnlocked} onOpenChange={setSearchOpen}>
+          <DialogContent className="gap-5 sm:max-w-2xl">
+            <DialogHeader>
+              <DialogTitle id="workspace-search-title">Search</DialogTitle>
+            </DialogHeader>
+            <WorkspaceSearchPanel
+              workspace={workspace}
+              ownershipKey={workspace.syncOwnerId ?? "local"}
+              onOpenResult={openSearchResult}
+              {...(demo ? { demoNotebooks: [] } : {})}
+            />
+            <DialogFooter>
+              <Button variant="secondary" onClick={() => setSearchOpen(false)}>
+                Close
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+        <Dialog open={deviceSettings} onOpenChange={setDeviceSettings}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle id="device-settings-title">Device settings</DialogTitle>
+            </DialogHeader>
+            <DailyReminderSettingsPanel desktop={isDesktopRuntime()} />
+            <DialogFooter>
+              <Button variant="secondary" onClick={() => setDeviceSettings(false)}>
+                Close
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+        <Dialog
+          open={addingArea && workspaceUnlocked}
+          onOpenChange={(open) => {
+            if (!open) closeAreaEditor();
+          }}
+        >
+          <DialogContent
+            className="max-h-[calc(100dvh-2.5rem)] overflow-y-auto p-0"
+            showCloseButton={false}
+          >
+            <form
+              className="grid max-h-[calc(100dvh-2.5rem)] gap-3 overflow-y-auto rounded-xl bg-[var(--surface)] p-6"
+              aria-busy={libraryMutation === "area-save"}
+              onSubmit={createArea}
+            >
+              <Button
+                type="button"
+                variant="secondary"
+                size="icon"
+                className="absolute top-4 right-4 size-8 text-[var(--muted)] hover:bg-[var(--surface-hover)]"
+                disabled={libraryMutation === "area-save"}
+                onClick={closeAreaEditor}
+                aria-label="Close area editor"
+              >
+                ×
+              </Button>
+              <DialogHeader className="pr-10">
+                <DialogTitle id="area-dialog-title">
+                  {editingAreaId ? "Edit area" : "New area"}
+                </DialogTitle>
+              </DialogHeader>
+              {areaEditorError && (
+                <Alert variant="destructive">
+                  <p>{areaEditorError}</p>
+                  {areaDraftStale && editingAreaId && (
+                    <Button
+                      type="button"
+                      className="inline-flex min-h-8 items-center rounded-md px-2 text-sm text-[var(--ink)] underline-offset-4 hover:bg-[var(--surface-hover)] hover:underline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
+                      disabled={libraryMutation !== null}
+                      onClick={() => {
+                        const latest = workspaceRef.current.areas.find(
+                          (item) => item.id === editingAreaId,
+                        );
+                        if (latest)
+                          requestConfirmation(
+                            "Replace this draft with the latest saved area name and color? Copy any text you want to keep first.",
+                            () => editArea(latest),
+                          );
+                      }}
+                    >
+                      Reopen latest saved area
+                    </Button>
+                  )}
+                </Alert>
+              )}
+              <fieldset
+                disabled={libraryMutation === "area-save"}
+                className="grid gap-3"
+                style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}
+              >
+                <label htmlFor="area-title">Area name</label>
+                <Input
+                  id="area-title"
+                  autoFocus
+                  value={areaTitle}
+                  onChange={(event) => setAreaTitle(event.target.value)}
+                  placeholder="e.g. Organic chemistry"
+                  maxLength={80}
+                />
+                <p>Area color</p>
+                <div className="flex items-center gap-2">
+                  <RadioGroup
+                    className="flex gap-2"
+                    aria-label="Area color"
+                    value={areaColor}
+                    onValueChange={setAreaColor}
+                  >
+                    {colors.map((color) => (
+                      <RadioGroupItem
+                        key={color}
+                        className={`size-8 rounded-full border border-[var(--line)] ${areaColor === color ? "ring-2 ring-[var(--primary)]" : ""}`}
+                        aria-label={`Choose ${color} color`}
+                        style={{ backgroundColor: color }}
+                        value={color}
+                      />
+                    ))}
+                  </RadioGroup>
+                  <label className="relative inline-flex size-8 cursor-pointer items-center justify-center rounded-full border border-[var(--line)] text-[var(--ink-muted)] hover:bg-[var(--surface-hover)]">
+                    <Pipette aria-hidden="true" className="size-4" />
+                    <input
+                      type="color"
+                      aria-label="Choose a custom area color"
+                      title="Choose a custom area color"
+                      value={areaColor}
+                      onChange={(event) => setAreaColor(event.target.value)}
+                      className="absolute inset-0 size-full cursor-pointer opacity-0"
+                    />
+                  </label>
+                </div>
+                <DialogFooter className="flex items-center justify-end gap-2">
+                  <Button
+                    size="small"
+                    type="button"
+                    onClick={() => {
+                      setAddingArea(false);
+                      setEditingAreaId(null);
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    size="small"
+                    type="submit"
+                    disabled={libraryMutation === "area-save" || !areaTitle.trim()}
+                  >
+                    {libraryMutation === "area-save"
+                      ? "Saving area…"
+                      : editingAreaId
+                        ? "Save changes"
+                        : "Create area"}
+                  </Button>
+                </DialogFooter>
+              </fieldset>
+            </form>
+          </DialogContent>
+        </Dialog>
+        <Dialog
+          open={addingCard && workspaceUnlocked}
+          onOpenChange={(open) => {
+            if (!open) closeCardEditor();
+          }}
+        >
+          <DialogContent
+            className="max-h-[calc(100dvh-2.5rem)] overflow-y-auto"
+            showCloseButton={false}
+          >
+            <form className="grid gap-3" onSubmit={createCard}>
+              <Button
+                type="button"
+                variant="secondary"
+                size="icon"
+                className="absolute top-4 right-4 size-8 text-[var(--muted)] hover:bg-[var(--surface-hover)]"
+                disabled={cardSaving}
+                onClick={closeCardEditor}
+                aria-label="Close card editor"
+              >
+                ×
+              </Button>
+              <DialogHeader className="pr-10">
+                <DialogTitle id="card-dialog-title">
+                  {editingCardId ? "Edit card" : "Add card"}
+                </DialogTitle>
+                <DialogDescription>{area?.title}</DialogDescription>
+              </DialogHeader>
+              {cardEditorError && (
+                <Alert variant="destructive">
+                  <p>{cardEditorError}</p>
+                  {cardDraftStale && editingCardId && (
+                    <Button
+                      type="button"
+                      className="inline-flex min-h-8 items-center rounded-md px-2 text-sm text-[var(--ink)] underline-offset-4 hover:bg-[var(--surface-hover)] hover:underline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
+                      disabled={cardSaving}
+                      onClick={() => {
+                        const latest = workspaceRef.current.areas
+                          .flatMap((item) => item.cards)
+                          .find((item) => item.id === editingCardId);
+                        if (latest)
+                          requestConfirmation(
+                            "Replace this draft with the latest saved card? Copy any text you want to keep first.",
+                            () => editCard(latest),
+                          );
+                      }}
+                    >
+                      Reopen latest saved card
+                    </Button>
+                  )}
+                </Alert>
+              )}
+              <fieldset
+                disabled={cardSaving}
+                className="grid gap-3"
+                style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}
+              >
+                <label htmlFor="card-kind">Card type</label>
+                <Select
+                  value={cardKind}
+                  onValueChange={(value) => setCardKind(value === "cloze" ? "cloze" : "basic")}
+                >
+                  <SelectTrigger id="card-kind" aria-label="Card type" className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="basic">Question and answer</SelectItem>
+                    <SelectItem value="cloze">Cloze · fill the gap</SelectItem>
+                  </SelectContent>
+                </Select>
+                {cardKind === "basic" ? (
+                  <>
+                    <label htmlFor="card-front">Question</label>
+                    <Textarea
+                      id="card-front"
+                      autoFocus
+                      value={front}
+                      onChange={(event) => setFront(event.target.value)}
+                      placeholder="What do you want to remember?"
+                      maxLength={500}
+                      rows={3}
+                    />
+                    <label htmlFor="card-back">Answer</label>
+                    <Textarea
+                      id="card-back"
+                      value={back}
+                      onChange={(event) => setBack(event.target.value)}
+                      placeholder="Write the answer in your own words…"
+                      maxLength={1500}
+                      rows={4}
                     />
                   </>
-                )}
-                <div className="interchange-tools" aria-label="Import and export tools">
-                  <AnkiImportAction
-                    color={colors[workspace.areas.length % colors.length] ?? "#c4ed68"}
-                    onAccept={(proposal) =>
-                      Effect.tryPromise({
-                        try: async () => {
-                          if (
-                            contentImportPending.current ||
-                            (pendingContentImport &&
-                              pendingContentImport.area?.id !== proposal.area.id)
-                          )
-                            return false;
-                          return commitContentImport({
-                            area: proposal.area,
-                            media: proposal.media,
-                            reviewEvents: proposal.reviewEvents,
-                            message: `${proposal.area.cards.length} cards and ${proposal.reviewEvents.length} reviews imported from Anki. FSRS schedules were rebuilt from the review history.`,
-                          });
-                        },
-                        catch: () => ({ _tag: "AnkiImportAcceptanceUnavailable" }) as const,
-                      }).pipe(
-                        Effect.flatMap((saved) =>
-                          saved
-                            ? Effect.void
-                            : Effect.fail({ _tag: "AnkiImportNotSaved" } as const),
-                        ),
-                      )
-                    }
-                  />
-                  <label className="text-button import-control" htmlFor="delimited-import">
-                    Import CSV/TSV
-                  </label>
-                  <input
-                    id="delimited-import"
-                    className="visually-hidden"
-                    type="file"
-                    accept=".csv,.tsv,text/csv,text/tab-separated-values"
-                    onChange={importDelimited}
-                  />
-                  <button
-                    className="text-button"
-                    onClick={() => exportDelimited(",")}
-                    disabled={!area}
-                  >
-                    Export CSV
-                  </button>
-                  <button
-                    className="text-button"
-                    onClick={() => exportDelimited("\t")}
-                    disabled={!area}
-                  >
-                    Export TSV
-                  </button>
-                  <button className="text-button" onClick={exportWorkspaceBackup}>
-                    Backup workspace
-                  </button>
-                  <label
-                    className="text-button import-control"
-                    htmlFor={isDesktopRuntime() ? undefined : "workspace-backup-import"}
-                    onClick={isDesktopRuntime() ? restoreDesktopWorkspaceBackup : undefined}
-                  >
-                    Restore backup
-                  </label>
-                  <input
-                    id="workspace-backup-import"
-                    className="visually-hidden"
-                    type="file"
-                    accept="application/zip,.zip,application/json,.json"
-                    onChange={restoreWorkspaceBackup}
-                  />
-                </div>
-                <KnowledgeAreaPublishing
-                  key={area?.id ?? "receive-shared-area"}
-                  area={
-                    publishingAreaDocument && Either.isRight(publishingAreaDocument)
-                      ? publishingAreaDocument.right
-                      : null
-                  }
-                  {...(lineageAreaDocument && Either.isRight(lineageAreaDocument)
-                    ? { lineageArea: lineageAreaDocument.right }
-                    : {})}
-                  {...(sharedRequest ? { initialRequest: sharedRequest } : {})}
-                  onFork={async (
-                    document,
-                    attribution,
-                    license,
-                    forkedFromVersionId,
-                    contentHash,
-                    assets,
-                  ) => {
-                    if ((!cacheWritable || !ready || localWritesBlocked()) && !demo) return false;
-                    return enqueueWorkspaceSave(async () => {
-                      for (;;) {
-                        if (
-                          localWritesBlocked() ||
-                          localSnapshotStale() ||
-                          pendingReviewRef.current
-                        )
-                          return false;
-                        const current = workspaceRef.current;
-                        const existing = current.areas.find((item) => item.id === document.id);
-                        if (existing) {
-                          if (existing.forkedFromVersionId !== forkedFromVersionId) return false;
-                          if (!demo) {
-                            const requiredMedia = new Set(
-                              existing.cards.flatMap((card) =>
-                                (card.media ?? []).map((reference) => reference.id),
-                              ),
-                            );
-                            const saved = await Effect.runPromise(
-                              Effect.either(
-                                saveWorkspaceWithMedia(
-                                  browserWorkspaceStore,
-                                  browserMediaStore,
-                                  current,
-                                  assets.filter((asset) => requiredMedia.has(asset.reference.id)),
-                                ),
-                              ),
-                            );
-                            if (Either.isLeft(saved)) {
-                              setImportNotice(
-                                "Your cloud copy is saved, but local storage failed. Retry to receive the same copy.",
-                              );
-                              return false;
-                            }
-                          }
-                          if (
-                            localWritesBlocked() ||
-                            localSnapshotStale() ||
-                            pendingReviewRef.current
-                          )
-                            return false;
-                          if (workspaceRef.current !== current) continue;
-                          setSelectedId(existing.id);
-                          setActiveView("Today");
-                          return true;
-                        }
-                        const imported = Effect.runSync(
-                          Effect.either(
-                            fromKnowledgeArea(
-                              { ...document, licence: license, attribution, forkedFromVersionId },
-                              colors[current.areas.length % colors.length] ?? "#c4ed68",
-                              true,
-                              () => crypto.randomUUID(),
-                              new Date(),
-                              true,
-                            ),
-                          ),
-                        );
-                        if (Either.isLeft(imported)) return false;
-                        const next = {
-                          ...current,
-                          areas: [...current.areas, imported.right],
-                          syncContentHashes: {
-                            ...(current.syncContentHashes ?? {}),
-                            [imported.right.id]: contentHash,
-                          },
-                        };
-                        if (!demo) {
-                          const saved = await Effect.runPromise(
-                            Effect.either(
-                              saveWorkspaceWithMedia(
-                                browserWorkspaceStore,
-                                browserMediaStore,
-                                next,
-                                assets,
-                              ),
-                            ),
-                          );
-                          if (Either.isLeft(saved)) {
-                            setImportNotice(
-                              "Your cloud copy is saved, but local storage failed. Retry to receive the same copy.",
-                            );
-                            return false;
-                          }
-                        }
-                        if (
-                          localWritesBlocked() ||
-                          localSnapshotStale() ||
-                          pendingReviewRef.current
-                        )
-                          return false;
-                        if (workspaceRef.current !== current) continue;
-                        setWorkspace(next);
-                        setSelectedId(imported.right.id);
-                        setActiveView("Today");
-                        setImportNotice(
-                          `${imported.right.title} added as your copy. Attribution and license are preserved.`,
-                        );
-                        return true;
-                      }
-                    });
-                  }}
-                />
-              </>
-            ) : (
-              <>
-                <div className="insight-panel">
-                  <strong>{totalReviews}</strong>
-                  <span>reviews completed all time</span>
-                  <p>
-                    {dueCount} cards are ready across {workspace.areas.length} learning areas.
-                  </p>
-                  <p>
-                    {studiedToday} today · {practice.week.inWindow} in the last 7 calendar days
-                  </p>
-                  <p>
-                    Last 7 days: {practice.week.ratings.again} Again · {practice.week.ratings.hard}{" "}
-                    Hard · {practice.week.ratings.good} Good · {practice.week.ratings.easy} Easy
-                  </p>
-                </div>
-                <SchedulerSettings
-                  workspace={workspace}
-                  readLatest={() => workspaceRef.current}
-                  onSave={(settings, expectedBaseline) =>
-                    saveAuthoringCommand(
-                      { kind: "update-scheduler-settings", settings },
-                      expectedBaseline,
-                    ).pipe(
-                      Effect.mapError((error) => ({
-                        ...error,
-                        _tag: "SchedulerSettingsSaveFailure" as const,
-                      })),
-                    )
-                  }
-                />
-                {(retainedCards > 0 ||
-                  missingDeletedReviewContent ||
-                  deletedReviewProvisionCapacity) && (
-                  <section className="insight-panel" aria-labelledby="deleted-review-sync-title">
-                    <h2 id="deleted-review-sync-title">Deleted content awaiting sync</h2>
-                    {retainedCards > 0 && (
-                      <>
-                        <p>
-                          {retainedCards} deleted card{retainedCards === 1 ? "" : "s"}
-                          {deletedRetainedAreas > 0
-                            ? ` in ${deletedRetainedAreas} deleted area${deletedRetainedAreas === 1 ? "" : "s"}`
-                            : ""}{" "}
-                          {retainedPendingReviews > 0
-                            ? `retained privately for ${retainedPendingReviews} pending review${retainedPendingReviews === 1 ? "" : "s"}.`
-                            : "retained privately until deletion acknowledgements arrive."}
-                        </p>
-                        <p>
-                          These cards stay out of your library and study queue. Sync preserves their
-                          reviews before confirming the deletions, then releases the retained
-                          content.
-                        </p>
-                      </>
-                    )}
-                    {missingDeletedReviewContent && (
-                      <p role="alert">
-                        This older workspace has a pending review whose deleted card is missing.
-                        Export this device&apos;s current private backup or review snapshot before
-                        replacing it with an older backup containing that card. Backups are not
-                        automatically merged; your review history remains saved.
-                      </p>
-                    )}
-                    {deletedReviewProvisionCapacity && (
-                      <p role="alert">
-                        Cloud content and pending deleted-review content exceed this area&apos;s
-                        card or objective limits. Local cards and reviews remain saved. Export a
-                        private backup before changing cloud content to free capacity.
-                      </p>
-                    )}
-                    <button className="text-button" onClick={exportWorkspaceSnapshot}>
-                      Export private recovery snapshot
-                    </button>
-                    {missingDeletedReviewContent && (
-                      <button className="text-button" onClick={() => setActiveView("Explore")}>
-                        Open backup restore tools
-                      </button>
-                    )}
-                    {deletedReviewProvisionCapacity && (
-                      <>
-                        <button
-                          className="text-button"
-                          onClick={() => void exportWorkspaceBackup()}
-                        >
-                          Export private backup
-                        </button>
-                        <button className="text-button" onClick={() => setActiveView("Explore")}>
-                          Open area library
-                        </button>
-                      </>
-                    )}
-                  </section>
-                )}
-                <section className="review-history" aria-labelledby="review-history-title">
-                  <div className="review-history-heading">
-                    <div>
-                      <p className="eyebrow">YOUR PRIVATE PRACTICE</p>
-                      <h2 id="review-history-title">Recent reviews</h2>
-                    </div>
-                    <span>{workspace.reviewEvents?.length ?? 0} total</span>
-                  </div>
-                  {reviewHistory.length ? (
-                    <ol>
-                      {reviewHistory.map((event) => (
-                        <li key={event.id}>
-                          <span className={`history-rating rating-${event.rating}`}>
-                            {event.rating}
-                          </span>
-                          <span className="history-question">{event.question}</span>
-                          <span className="history-area">
-                            {event.areaTitle}
-                            {event.hasConcurrentBranch && (
-                              <StatusBadge tone="warning">Offline branch</StatusBadge>
-                            )}
-                            {event.needsSyncRetry && (
-                              <StatusBadge tone="warning">Rebased · sync again</StatusBadge>
-                            )}
-                            {event.retainedForSync && (
-                              <StatusBadge tone="warning">Deleted · sync pending</StatusBadge>
-                            )}
-                          </span>
-                          <time dateTime={event.ratedAt}>
-                            {new Date(event.ratedAt).toLocaleString("en-AU", {
-                              dateStyle: "medium",
-                              timeStyle: "short",
-                              timeZone: "UTC",
-                            })}
-                          </time>
-                        </li>
-                      ))}
-                    </ol>
-                  ) : (
-                    <EmptyState
-                      className="history-empty"
-                      title="No reviews yet"
-                      description="Your completed reviews will appear here."
+                ) : (
+                  <>
+                    <label htmlFor="card-cloze-text">Cloze text</label>
+                    <Textarea
+                      id="card-cloze-text"
+                      autoFocus
+                      value={clozeText}
+                      onChange={(event) => setClozeText(event.target.value)}
+                      maxLength={10000}
+                      rows={5}
+                      placeholder="Mitochondria produce {{c1::ATP::energy molecule}}."
                     />
-                  )}
-                </section>
-              </>
-            )}
-            <div className="alternate-list">
-              {workspace.areas.map((item) => (
-                <button
-                  key={item.id}
-                  onClick={() => {
-                    setSelectedId(item.id);
-                    setShowAnswer(false);
-                    if (activeView !== "Explore") setActiveView("Today");
-                  }}
-                >
-                  <i style={{ backgroundColor: item.color }} />
-                  <span>{item.title}</span>
-                  <small>{item.cards.length} cards</small>
-                  <b>→</b>
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-      </section>
-
-      {deviceSettings && (
-        <Dialog labelledBy="device-settings-title" onClose={() => setDeviceSettings(false)}>
-          <h1 id="device-settings-title">Device settings</h1>
-          <DailyReminderSettingsPanel desktop={isDesktopRuntime()} />
-          <Button variant="secondary" onClick={() => setDeviceSettings(false)}>
-            Close
-          </Button>
-        </Dialog>
-      )}
-      {addingArea && (
-        <Dialog labelledBy="area-dialog-title" onClose={closeAreaEditor}>
-          <form className="modal" aria-busy={libraryMutation === "area-save"} onSubmit={createArea}>
-            <button
-              className="modal-close"
-              type="button"
-              disabled={libraryMutation === "area-save"}
-              onClick={closeAreaEditor}
-            >
-              ×
-            </button>
-            <p className="eyebrow">
-              {editingAreaId ? "SHAPE YOUR LIBRARY" : "START SOMETHING NEW"}
-            </p>
-            <h2 id="area-dialog-title">
-              {editingAreaId ? "Edit learning area" : "Create a learning area"}
-            </h2>
-            <p className="modal-copy">
-              {editingAreaId
-                ? "Update the name and color used for this topic."
-                : "Give your topic a name. You can add cards whenever you&apos;re ready."}
-            </p>
-            {areaEditorError && (
-              <div role="alert">
-                <p>{areaEditorError}</p>
-                {areaDraftStale && editingAreaId && (
-                  <button
-                    type="button"
-                    className="text-button"
-                    disabled={libraryMutation !== null}
-                    onClick={() => {
-                      const latest = workspaceRef.current.areas.find(
-                        (item) => item.id === editingAreaId,
-                      );
-                      if (
-                        latest &&
-                        window.confirm(
-                          "Replace this draft with the latest saved area name and color? Copy any text you want to keep first.",
-                        )
-                      )
-                        editArea(latest);
-                    }}
-                  >
-                    Reopen latest saved area
-                  </button>
-                )}
-              </div>
-            )}
-            <fieldset
-              disabled={libraryMutation === "area-save"}
-              style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}
-            >
-              <label htmlFor="area-title">Area name</label>
-              <input
-                id="area-title"
-                autoFocus
-                value={areaTitle}
-                onChange={(event) => setAreaTitle(event.target.value)}
-                placeholder="e.g. Organic chemistry"
-                maxLength={80}
-              />
-              <p className="area-color-label">Area color</p>
-              <div className="area-color-options" role="group" aria-label="Area color">
-                {colors.map((color) => (
-                  <button
-                    key={color}
-                    className={`area-color-option ${areaColor === color ? "selected" : ""}`}
-                    type="button"
-                    aria-label={`Choose ${color} color`}
-                    aria-pressed={areaColor === color}
-                    style={{ backgroundColor: color }}
-                    onClick={() => setAreaColor(color)}
-                  />
-                ))}
-              </div>
-              <div className="modal-actions">
-                <button
-                  type="button"
-                  className="cancel-button"
-                  onClick={() => {
-                    setAddingArea(false);
-                    setEditingAreaId(null);
-                  }}
-                >
-                  Cancel
-                </button>
-                <Button
-                  size="small"
-                  className="primary-action"
-                  type="submit"
-                  disabled={libraryMutation === "area-save" || !areaTitle.trim()}
-                >
-                  {libraryMutation === "area-save"
-                    ? "Saving area…"
-                    : editingAreaId
-                      ? "Save changes"
-                      : "Create area"}
-                </Button>
-              </div>
-            </fieldset>
-          </form>
-        </Dialog>
-      )}
-      {addingCard && (
-        <Dialog labelledBy="card-dialog-title" onClose={closeCardEditor}>
-          <form className="modal" onSubmit={createCard}>
-            <button
-              className="modal-close"
-              type="button"
-              disabled={cardSaving}
-              onClick={closeCardEditor}
-            >
-              ×
-            </button>
-            <p className="eyebrow">{area?.title ?? "YOUR LIBRARY"}</p>
-            <h2 id="card-dialog-title">{editingCardId ? "Edit study card" : "Add a study card"}</h2>
-            <p className="modal-copy">
-              {editingCardId
-                ? "Update the question or answer. Your review schedule stays intact."
-                : "Keep it focused: one useful question, one clear answer."}
-            </p>
-            {cardEditorError && (
-              <div role="alert">
-                <p>{cardEditorError}</p>
-                {cardDraftStale && editingCardId && (
-                  <button
-                    type="button"
-                    className="text-button"
-                    disabled={cardSaving}
-                    onClick={() => {
-                      const latest = workspaceRef.current.areas
-                        .flatMap((item) => item.cards)
-                        .find((item) => item.id === editingCardId);
-                      if (
-                        latest &&
-                        window.confirm(
-                          "Replace this draft with the latest saved card? Copy any text you want to keep first.",
-                        )
-                      )
-                        editCard(latest);
-                    }}
-                  >
-                    Reopen latest saved card
-                  </button>
-                )}
-              </div>
-            )}
-            <fieldset
-              disabled={cardSaving}
-              style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}
-            >
-              <label htmlFor="card-kind">Card type</label>
-              <select
-                id="card-kind"
-                value={cardKind}
-                onChange={(event) =>
-                  setCardKind(event.target.value === "cloze" ? "cloze" : "basic")
-                }
-              >
-                <option value="basic">Question and answer</option>
-                <option value="cloze">Cloze · fill the gap</option>
-              </select>
-              {cardKind === "basic" ? (
-                <>
-                  <label htmlFor="card-front">Question</label>
-                  <textarea
-                    id="card-front"
-                    autoFocus
-                    value={front}
-                    onChange={(event) => setFront(event.target.value)}
-                    placeholder="What do you want to remember?"
-                    maxLength={500}
-                    rows={3}
-                  />
-                  <label htmlFor="card-back">Answer</label>
-                  <textarea
-                    id="card-back"
-                    value={back}
-                    onChange={(event) => setBack(event.target.value)}
-                    placeholder="Write the answer in your own words…"
-                    maxLength={1500}
-                    rows={4}
-                  />
-                </>
-              ) : (
-                <>
-                  <label htmlFor="card-cloze-text">Cloze text</label>
-                  <textarea
-                    id="card-cloze-text"
-                    autoFocus
-                    value={clozeText}
-                    onChange={(event) => setClozeText(event.target.value)}
-                    maxLength={10000}
-                    rows={5}
-                    placeholder="Mitochondria produce {{c1::ATP::energy molecule}}."
-                  />
-                  <p className="modal-copy">
-                    Wrap an answer like {"{{c1::ATP::energy molecule}}"}. Matching numbers hide
-                    together; other numbers remain visible.
-                  </p>
-                  <label htmlFor="card-cloze-index">Deletion number to study</label>
-                  <input
-                    id="card-cloze-index"
-                    type="number"
-                    min={1}
-                    max={20}
-                    value={clozeIndex}
-                    onChange={(event) => setClozeIndex(event.target.value)}
-                  />
-                  {clozePreview && Either.isRight(clozePreview) ? (
-                    <section aria-label="Cloze card preview">
-                      <strong>Question preview</strong>
-                      <p style={{ whiteSpace: "pre-wrap" }}>{clozePreview.right.front}</p>
-                      <strong>Answer preview</strong>
-                      <p style={{ whiteSpace: "pre-wrap" }}>{clozePreview.right.back}</p>
-                    </section>
-                  ) : (
-                    <p role="status">
-                      Add a valid deletion matching the selected number to preview this card.
+                    <p>
+                      Wrap an answer like {"{{c1::ATP::energy molecule}}"}. Matching numbers hide
+                      together; other numbers remain visible.
                     </p>
-                  )}
-                </>
-              )}
-              {(area?.objectives?.length ?? 0) > 0 && (
-                <fieldset>
-                  <legend>Learning objectives</legend>
-                  {area?.objectives?.map((objective) => (
-                    <label
-                      key={objective.id}
-                      style={{ display: "flex", alignItems: "center", gap: 8 }}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={cardObjectiveIds.includes(objective.id)}
-                        onChange={(event) =>
-                          setCardObjectiveIds((current) =>
-                            event.target.checked
-                              ? [...current, objective.id]
-                              : current.filter((id) => id !== objective.id),
-                          )
+                    <label htmlFor="card-cloze-index">Deletion number to study</label>
+                    <Input
+                      id="card-cloze-index"
+                      type="number"
+                      min={1}
+                      max={20}
+                      value={clozeIndex}
+                      onChange={(event) => setClozeIndex(event.target.value)}
+                    />
+                    {clozePreview && Either.isRight(clozePreview) ? (
+                      <section aria-label="Cloze card preview">
+                        <strong>Question preview</strong>
+                        <p style={{ whiteSpace: "pre-wrap" }}>{clozePreview.right.front}</p>
+                        <strong>Answer preview</strong>
+                        <p style={{ whiteSpace: "pre-wrap" }}>{clozePreview.right.back}</p>
+                      </section>
+                    ) : (
+                      <p role="status">
+                        Add a valid deletion matching the selected number to preview this card.
+                      </p>
+                    )}
+                  </>
+                )}
+                {tutorAreaDocument && Either.isRight(tutorAreaDocument) && (
+                  <TutorPanel
+                    knowledgeArea={tutorAreaDocument.right}
+                    duplicateCandidates={duplicateCandidates}
+                    onApprove={async () => null}
+                    renderContent={(api) => (
+                      <CardAssistancePanel
+                        key={editingCardId ?? "new-card"}
+                        proposal={{
+                          front: cardKind === "cloze" ? clozeText : front,
+                          back,
+                          objectiveId: cardObjectiveIds[0] ?? null,
+                          rationale: "Improve this library card.",
+                        }}
+                        knowledgeArea={tutorAreaDocument.right}
+                        api={api}
+                        existingCard={Boolean(editingCardId)}
+                        duplicateCandidates={duplicateCandidates}
+                        {...(editingCardId ? { excludeCardId: editingCardId } : {})}
+                        onBusyChange={setCardSaving}
+                        disabled={
+                          cardSaving ||
+                          Boolean(mediaFile) ||
+                          cardDraftStale ||
+                          (!demo && (!ready || !cacheWritable))
                         }
+                        onApply={applyCardRefinement}
                       />
-                      {objective.title}
-                    </label>
-                  ))}
-                </fieldset>
-              )}
-              <label htmlFor="card-tags">Tags</label>
-              <textarea
-                rows={2}
-                id="card-tags"
-                aria-describedby="card-tags-help"
-                value={cardTags}
-                onChange={(event) => setCardTags(event.target.value)}
-                placeholder="e.g. exam, fundamentals"
-              />
-              <small id="card-tags-help">
-                Separate with commas; quote a tag containing commas, double embedded quotes.
-              </small>
-              {(cardEditor.current.sourceCard?.media ?? [])
-                .filter((reference) => !removedMediaIds.includes(reference.id))
-                .map((reference, index) => (
-                  <div
-                    key={reference.id}
-                    style={{ display: "flex", justifyContent: "space-between", gap: 12 }}
-                  >
-                    <span>
-                      Attachment {index + 1} · {reference.mimeType}
-                    </span>
-                    <button
-                      type="button"
-                      className="text-button"
-                      onClick={() => setRemovedMediaIds((current) => [...current, reference.id])}
-                    >
-                      Remove attachment
-                    </button>
-                  </div>
-                ))}
-              <label htmlFor="card-media">Attach image or audio (20 MB max)</label>
-              <input
-                id="card-media"
-                type="file"
-                accept="image/jpeg,image/png,image/gif,image/webp,audio/mpeg,audio/ogg,audio/wav"
-                onChange={(event) => setMediaFile(event.currentTarget.files?.[0] ?? null)}
-              />
-              {mediaFile && <MediaFilePreview file={mediaFile} />}
-              <div className="modal-actions">
-                <button type="button" className="cancel-button" onClick={closeCardEditor}>
-                  Cancel
-                </button>
-                <Button
-                  size="small"
-                  className="primary-action"
-                  type="submit"
-                  disabled={
-                    cardSaving ||
-                    (cardKind === "cloze"
-                      ? !clozePreview || Either.isLeft(clozePreview)
-                      : !front.trim() || !back.trim())
+                    )}
+                  />
+                )}
+                <CardDuplicateWarnings
+                  draft={duplicateDraft}
+                  candidates={duplicateCandidates}
+                  {...(editingCardId ? { excludeCardId: editingCardId } : {})}
+                  keepBoth={duplicateAcknowledgement === duplicateKey}
+                  onKeepBothChange={(value) =>
+                    setDuplicateAcknowledgement(value ? duplicateKey : null)
                   }
-                >
-                  {cardSaving ? "Saving card…" : editingCardId ? "Save changes" : "Add card"}
-                </Button>
-              </div>
-            </fieldset>
-          </form>
+                  disabled={cardSaving}
+                  onOpenCandidate={(candidate) => {
+                    const existing = workspaceRef.current.areas
+                      .flatMap((item) => item.cards)
+                      .find((item) => item.id === candidate.id);
+                    if (existing)
+                      requestConfirmation("Discard this draft and open the existing card?", () =>
+                        editCard(existing),
+                      );
+                  }}
+                />
+                <Accordion type="single" collapsible>
+                  <AccordionItem value="card-details">
+                    <AccordionTrigger>Card details</AccordionTrigger>
+                    <AccordionContent>
+                      {(area?.objectives?.length ?? 0) > 0 && (
+                        <fieldset>
+                          <legend>Learning objectives</legend>
+                          {area?.objectives?.map((objective) => (
+                            <label
+                              key={objective.id}
+                              style={{ display: "flex", alignItems: "center", gap: 8 }}
+                            >
+                              <Checkbox
+                                checked={cardObjectiveIds.includes(objective.id)}
+                                onCheckedChange={(checked) =>
+                                  setCardObjectiveIds((current) =>
+                                    checked === true
+                                      ? [...current, objective.id]
+                                      : current.filter((id) => id !== objective.id),
+                                  )
+                                }
+                              />
+                              {objective.title}
+                            </label>
+                          ))}
+                        </fieldset>
+                      )}
+                      <label htmlFor="card-tags">Tags</label>
+                      <Textarea
+                        rows={2}
+                        id="card-tags"
+                        aria-describedby="card-tags-help"
+                        value={cardTags}
+                        onChange={(event) => setCardTags(event.target.value)}
+                        placeholder="e.g. exam, fundamentals"
+                      />
+                      <small id="card-tags-help">Separate tags with commas.</small>
+                      {(cardEditor.current.sourceCard?.media ?? [])
+                        .filter((reference) => !removedMediaIds.includes(reference.id))
+                        .map((reference, index) => (
+                          <div
+                            key={reference.id}
+                            style={{ display: "flex", justifyContent: "space-between", gap: 12 }}
+                          >
+                            <span>
+                              Attachment {index + 1} · {reference.mimeType}
+                            </span>
+                            <Button
+                              type="button"
+                              className="inline-flex min-h-8 items-center rounded-md px-2 text-sm text-[var(--ink)] underline-offset-4 hover:bg-[var(--surface-hover)] hover:underline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
+                              onClick={() =>
+                                setRemovedMediaIds((current) => [...current, reference.id])
+                              }
+                            >
+                              Remove attachment
+                            </Button>
+                          </div>
+                        ))}
+                      <label htmlFor="card-media">Attach image or audio (20 MB max)</label>
+                      <input
+                        id="card-media"
+                        type="file"
+                        accept="image/jpeg,image/png,image/gif,image/webp,audio/mpeg,audio/ogg,audio/wav"
+                        onChange={(event) => setMediaFile(event.currentTarget.files?.[0] ?? null)}
+                      />
+                      {mediaFile && <MediaFilePreview file={mediaFile} />}
+                    </AccordionContent>
+                  </AccordionItem>
+                </Accordion>
+                <DialogFooter className="flex items-center justify-end gap-2">
+                  <Button size="small" type="button" onClick={closeCardEditor}>
+                    Cancel
+                  </Button>
+                  <Button
+                    size="small"
+                    type="submit"
+                    disabled={
+                      cardSaving ||
+                      (cardKind === "cloze"
+                        ? !clozePreview || Either.isLeft(clozePreview)
+                        : !front.trim() || !back.trim())
+                    }
+                  >
+                    {cardSaving ? "Saving card…" : editingCardId ? "Save changes" : "Add card"}
+                  </Button>
+                </DialogFooter>
+              </fieldset>
+            </form>
+          </DialogContent>
         </Dialog>
-      )}
-      <footer className="mobile-footer">
-        <span className="brand-mark">r</span>
-        <span>Recall, one card at a time.</span>
-        <span>Saved on this device</span>
-      </footer>
-    </main>
+      </SidebarProvider>
+    </>
   );
 }

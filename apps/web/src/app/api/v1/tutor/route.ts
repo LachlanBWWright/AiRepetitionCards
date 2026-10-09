@@ -33,6 +33,8 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createTutorApprovalAdmin } from "@/lib/supabase/tutor-approval-admin";
 import {
   loadTutorSession,
+  TutorMessageKind,
+  TutorMessageRole,
   readTutorObservationPayload,
   readTutorObservationHistory,
   readTutorProposal,
@@ -272,7 +274,13 @@ async function handlePOST(request: NextRequest): Promise<NextResponse> {
       reserveTutorCall(
         auth.client,
         aiCallId,
-        operation.action === "study-card" ? "propose-card" : operation.action,
+        operation.action === "study-card" ||
+          operation.action === "refine-card" ||
+          operation.action === "plan-study"
+          ? "propose-card"
+          : operation.action === "inspect-card"
+            ? "evaluate"
+            : operation.action,
         model,
       ),
     ),
@@ -332,13 +340,13 @@ async function handlePOST(request: NextRequest): Promise<NextResponse> {
         appendTutorMessage(auth.client, auth.userId, {
           id: crypto.randomUUID(),
           session_id: sessionId,
-          role: message.role === "assistant" ? "tutor" : "learner",
+          role: message.role === "assistant" ? TutorMessageRole.Tutor : TutorMessageRole.Learner,
           kind:
             message.role === "learner"
-              ? "answer"
+              ? TutorMessageKind.Answer
               : response.action === "question"
-                ? "question"
-                : "feedback",
+                ? TutorMessageKind.Question
+                : TutorMessageKind.Feedback,
           content: message.content,
         }),
       ))
@@ -404,7 +412,12 @@ async function handlePOST(request: NextRequest): Promise<NextResponse> {
       ))
     )
       return unavailable();
-  } else if (response.action === "study-card") {
+  } else if (
+    response.action === "study-card" ||
+    response.action === "refine-card" ||
+    response.action === "inspect-card" ||
+    response.action === "plan-study"
+  ) {
     // Source proposals are approved locally. Existing SQL proposals require learner
     // observations, which source extraction must never fabricate.
   } else {
@@ -431,8 +444,8 @@ async function handlePOST(request: NextRequest): Promise<NextResponse> {
         appendTutorMessage(auth.client, auth.userId, {
           id: crypto.randomUUID(),
           session_id: sessionId,
-          role: "tutor",
-          kind: "proposal",
+          role: TutorMessageRole.Tutor,
+          kind: TutorMessageKind.Proposal,
           content: response.result.front,
         }),
       ))

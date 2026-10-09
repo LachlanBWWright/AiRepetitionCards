@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { Effect, Either } from "effect";
-import { createAreaId, createCardId, type KnowledgeArea } from "@recall/domain";
+import { createAreaId, createAssessmentId, type KnowledgeArea } from "@recall/domain";
 import type { TutorActionResponse } from "@recall/ai-core";
 import { extractNativeStudyPaste } from "../../../apps/mobile/src/storage/native-study-material-extraction";
 import {
@@ -138,7 +138,7 @@ void test("a saved source card remains a proposal and balances the next batch ac
     resolveNotebookProposal(result.notebook, {
       id: id(5),
       status: "accepted",
-      cardId: createCardId(id(7)),
+      cardId: createAssessmentId(id(7)),
     }),
   );
   assert.equal(accepted.proposals[0]?.status, "accepted");

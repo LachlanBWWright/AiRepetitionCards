@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { connection } from "next/server";
 import { Geist, Geist_Mono } from "next/font/google";
+import { AppUiProvider } from "@/components/ui/AppUiProvider";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -20,14 +21,19 @@ export const metadata: Metadata = {
   description: "A calm, thoughtful space for spaced repetition and active learning.",
 };
 
-export const viewport: Viewport = { themeColor: "#29322b" };
+export const viewport: Viewport = { themeColor: "#0a1020" };
 
 export default async function RootLayout({ children }: LayoutProps<"/">) {
   // Next applies the proxy nonce while rendering each incoming request.
   await connection();
   return (
-    <html lang="en" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
-      <body className="min-h-full flex flex-col">{children}</body>
+    <html
+      lang="en"
+      className={`dark ${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+    >
+      <body className="min-h-full flex flex-col">
+        <AppUiProvider>{children}</AppUiProvider>
+      </body>
     </html>
   );
 }

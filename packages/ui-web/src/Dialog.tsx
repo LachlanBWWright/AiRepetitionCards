@@ -1,70 +1,33 @@
 "use client";
 
-import { useEffect, useRef, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
-
-const focusableSelector =
-  "input:not([disabled]), textarea:not([disabled]), select:not([disabled]), button:not([disabled]), [href], summary, [contenteditable='true'], [tabindex]:not([tabindex='-1'])";
+import type { ReactNode } from "react";
+import { Dialog as ShadcnDialog, DialogContent } from "./components/dialog";
 
 export function Dialog({
   labelledBy,
   onClose,
   children,
+  showCloseButton,
 }: {
-  labelledBy: string;
-  onClose: () => void;
-  children: ReactNode;
+  readonly labelledBy: string;
+  readonly onClose: () => void;
+  readonly children: ReactNode;
+  readonly showCloseButton?: boolean;
 }) {
-  const dialogRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const previouslyFocused = document.activeElement;
-    const initialFocus = dialogRef.current?.querySelector<HTMLElement>(focusableSelector);
-    (initialFocus ?? dialogRef.current)?.focus();
-    return () => {
-      if (previouslyFocused instanceof HTMLElement) previouslyFocused.focus();
-    };
-  }, []);
-
-  function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
-    if (event.key === "Escape") {
-      event.preventDefault();
-      onClose();
-      return;
-    }
-    if (event.key !== "Tab") return;
-    const focusable = dialogRef.current?.querySelectorAll<HTMLElement>(focusableSelector);
-    if (!focusable?.length) {
-      event.preventDefault();
-      dialogRef.current?.focus();
-      return;
-    }
-    const first = focusable[0];
-    const last = focusable[focusable.length - 1];
-    if (event.shiftKey && document.activeElement === first) {
-      event.preventDefault();
-      last?.focus();
-    } else if (!event.shiftKey && document.activeElement === last) {
-      event.preventDefault();
-      first?.focus();
-    }
-  }
-
-  function handleMouseDown(event: MouseEvent<HTMLDivElement>) {
-    if (event.target === event.currentTarget) onClose();
-  }
-
   return (
-    <div className="modal-backdrop" role="presentation" onMouseDown={handleMouseDown}>
-      <div
-        role="dialog"
-        aria-modal="true"
+    <ShadcnDialog
+      open
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+    >
+      <DialogContent
         aria-labelledby={labelledBy}
-        onKeyDown={handleKeyDown}
-        ref={dialogRef}
-        tabIndex={-1}
+        className="max-h-[calc(100dvh-2.5rem)] overflow-y-auto"
+        {...(showCloseButton === undefined ? {} : { showCloseButton })}
       >
         {children}
-      </div>
-    </div>
+      </DialogContent>
+    </ShadcnDialog>
   );
 }

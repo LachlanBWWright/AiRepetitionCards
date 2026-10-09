@@ -1,4 +1,3 @@
-import "./catalog.css";
 import type { Meta, StoryObj } from "@storybook/react";
 import { StatusBadge } from "./StatusBadge";
 
@@ -8,7 +7,7 @@ const meta = {
   parameters: { layout: "fullscreen" },
   decorators: [
     (Story) => (
-      <main className="component-catalog">
+      <main className="mx-auto min-h-screen max-w-5xl space-y-6 bg-background px-5 py-8 text-foreground sm:px-8 sm:py-16">
         <Story />
       </main>
     ),
@@ -32,12 +31,12 @@ export const FullScreenStates: Story = {
   name: "Full-screen · synchronization status",
   render: () => (
     <>
-      <p className="eyebrow">RECALL · SHARED UI</p>
+      <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">RECALL · SHARED UI</p>
       <h1>
         Your progress stays <em>visible.</em>
       </h1>
-      <p className="subheading">Each status uses a text label alongside its color.</p>
-      <div className="component-catalog-grid">
+      <p className="text-sm text-muted-foreground">Each status uses a text label alongside its color.</p>
+      <div className="mt-8 grid grid-cols-1 gap-3 sm:grid-cols-2 [&>section]:min-h-[150px] [&>section]:rounded-xl [&>section]:border [&>section]:bg-card [&>section]:p-5 [&>section>h2]:m-0 [&>section>h2]:text-sm [&>section>p]:my-2 [&>section>p]:text-xs [&>section>p]:text-muted-foreground">
         <section>
           <h2>Local workspace</h2>
           <p>Biology · 24 cards</p>

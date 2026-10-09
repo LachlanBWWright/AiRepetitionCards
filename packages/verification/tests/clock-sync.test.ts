@@ -6,7 +6,7 @@ import { Effect, Either, Schema } from "effect";
 import {
   AccountIdSchema,
   createAreaId,
-  createCardId,
+  createAssessmentId,
   createDeviceId,
   createObjectiveId,
   createReviewEventId,
@@ -24,7 +24,7 @@ import {
 
 const time = "2026-10-03T12:00:00.000Z";
 const areaId = createAreaId("00000000-0000-4000-8000-000000000001");
-const cardId = createCardId("00000000-0000-4000-8000-000000000002");
+const cardId = createAssessmentId("00000000-0000-4000-8000-000000000002");
 const deviceId = createDeviceId("00000000-0000-4000-8000-000000000003");
 const owner = Schema.decodeUnknownSync(AccountIdSchema)("00000000-0000-4000-8000-000000000004");
 const objectiveId = createObjectiveId("00000000-0000-4000-8000-000000000005");
@@ -210,7 +210,7 @@ await test("same-ID canonical receipts change derived time while preserving raw 
   const collisions: readonly ReviewEvent[] = [
     { ...canonical, rating: "again" },
     { ...canonical, areaId: createAreaId("other-area") },
-    { ...canonical, cardId: createCardId("other-card") },
+    { ...canonical, cardId: createAssessmentId("other-card") },
     { ...canonical, deviceId: createDeviceId("other-device") },
     { ...canonical, deviceSequence: 2 },
     { ...canonical, baseReviewEventId: createReviewEventId("other-parent") },

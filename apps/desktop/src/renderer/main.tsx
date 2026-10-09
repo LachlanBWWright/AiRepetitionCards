@@ -1,12 +1,15 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import RecallDashboard from "@/features/dashboard/RecallDashboard";
+import DesktopDashboardRoutes from "./DesktopDashboardRoutes";
+import { AppUiProvider } from "@/components/ui/AppUiProvider";
 import "@/app/globals.css";
 
 const root = document.getElementById("root");
 if (root)
   createRoot(root).render(
     <StrictMode>
-      <RecallDashboard />
+      <AppUiProvider>
+        <DesktopDashboardRoutes />
+      </AppUiProvider>
     </StrictMode>,
   );

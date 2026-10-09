@@ -2,13 +2,13 @@
 export function openAiSignInMessage(status: unknown): string | undefined {
   switch (status) {
     case "cancelled":
-      return "ChatGPT sign-in was cancelled. You can try again or use an email link.";
+      return "ChatGPT authorization was cancelled. You can try again.";
     case "unavailable":
-      return "ChatGPT sign-in is not available on this deployment yet. You can use an email link.";
+      return "ChatGPT sign-in is not available on this deployment yet.";
     case "temporarily-unavailable":
-      return "ChatGPT sign-in is temporarily unavailable. Please start again shortly or use an email link.";
+      return "ChatGPT authorization is temporarily unavailable. Please try again shortly.";
     case "expired":
-      return "This ChatGPT sign-in attempt expired. Please start again.";
+      return "This ChatGPT authorization attempt expired. Please try again.";
     case "identity-conflict":
       return "This ChatGPT identity belongs to another Recall account. Sign in to that account or choose a different ChatGPT account.";
     case "linked":
@@ -16,7 +16,7 @@ export function openAiSignInMessage(status: unknown): string | undefined {
     case "sign-in-required":
       return "Sign in to your Recall account before linking ChatGPT.";
     case "failed":
-      return "ChatGPT sign-in could not be completed. Try again or use an email link.";
+      return "ChatGPT authorization could not be completed. Try again.";
     default:
       return undefined;
   }

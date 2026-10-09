@@ -6,7 +6,7 @@ import { Decompress } from "fzstd";
 import {
   LearningAreaSchema,
   createAreaId,
-  createCardId,
+  createAssessmentId,
   createObjectiveId,
   createReviewEventId,
   MediaReferenceSchema,
@@ -707,7 +707,7 @@ export function importAnkiApkg(
           return yield* Effect.fail(MISSING("invalid-media"));
         if (!first || !second) return yield* Effect.fail(MISSING("invalid-note"));
         for (const ref of [...first.references, ...second.references]) usedRefs.set(ref.id, ref);
-        const importedCardId = createCardId((options.createId ?? defaultId)());
+        const importedCardId = createAssessmentId((options.createId ?? defaultId)());
         cardIdsByAnkiId.set(card.id, importedCardId);
         cards.push({
           id: importedCardId,
@@ -743,7 +743,7 @@ export function importAnkiApkg(
           return yield* Effect.fail(MISSING("invalid-media"));
         if (!front || !back) return yield* Effect.fail(MISSING("invalid-note"));
         for (const ref of [...front.references, ...back.references]) usedRefs.set(ref.id, ref);
-        const importedCardId = createCardId((options.createId ?? defaultId)());
+        const importedCardId = createAssessmentId((options.createId ?? defaultId)());
         cardIdsByAnkiId.set(card.id, importedCardId);
         cards.push({
           id: importedCardId,

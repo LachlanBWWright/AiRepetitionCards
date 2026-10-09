@@ -5,7 +5,12 @@ import {
   type KnowledgeNotebook,
   type NotebookEvidence,
 } from "@recall/application";
-import { createAreaId, createCardId, createObjectiveId, type KnowledgeArea } from "@recall/domain";
+import {
+  createAreaId,
+  createAssessmentId,
+  createObjectiveId,
+  type KnowledgeArea,
+} from "@recall/domain";
 import { cardIdForTutorProposal, type CardProposal, type TutorQuestion } from "@recall/ai-core";
 import { KnowledgeNotebookPanel } from "./KnowledgeNotebookPanel";
 import { tutorApi } from "@/lib/tutor-api";
@@ -122,7 +127,9 @@ const proposals: KnowledgeNotebook = {
     },
   ],
 };
-const savedCardId = createCardId(cardIdForTutorProposal(proposalId) ?? "storybook-approved-card");
+const savedCardId = createAssessmentId(
+  cardIdForTutorProposal(proposalId) ?? "storybook-approved-card",
+);
 const finished: KnowledgeNotebook = {
   ...proposals,
   evidence: [{ ...evidence, linkedCardIds: [savedCardId] }],
@@ -176,9 +183,9 @@ const meta = {
   parameters: { layout: "fullscreen" },
   decorators: [
     (Story) => (
-      <main className="component-catalog tutor-story">
+      <main className="mx-auto min-h-screen max-w-5xl space-y-6 bg-background p-8">
         <div>
-          <p className="eyebrow">RECALL · GO PROGRAMMING · MOCK DATA</p>
+          <p className="mb-1 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">RECALL · GO PROGRAMMING · MOCK DATA</p>
           <h1>Turn uncertain understanding into a useful deck.</h1>
           <Story />
         </div>
@@ -210,9 +217,9 @@ export const Gaps: Story = {
 };
 export const Proposals: Story = {
   name: "Notebook · editable card proposals",
-  args: { initialNotebook: proposals },
+  args: { initialNotebook: proposals, initialActivity: "suggestions" },
 };
 export const Finished: Story = {
   name: "Notebook · finished and ready to review",
-  args: { initialNotebook: finished },
+  args: { initialNotebook: finished, initialActivity: "suggestions" },
 };

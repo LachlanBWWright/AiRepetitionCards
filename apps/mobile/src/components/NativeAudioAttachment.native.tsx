@@ -1,9 +1,6 @@
 import { useState } from "react";
-import { Pressable, StyleSheet, Text } from "react-native";
+import { Pressable, Text } from "react-native";
 import { useAudioPlayer } from "expo-audio";
-import { designTokens } from "@recall/design-tokens";
-
-const palette = designTokens.color;
 
 export function NativeAudioAttachment({ uri }: { readonly uri: string }) {
   const player = useAudioPlayer(uri);
@@ -17,14 +14,11 @@ export function NativeAudioAttachment({ uri }: { readonly uri: string }) {
         else player.play();
         setPlaying(!playing);
       }}
-      style={styles.attachment}
+      className={"rounded-[12px] bg-recall-green p-[14px] my-[14px]"}
     >
-      <Text style={styles.label}>{playing ? "Ⅱ  Pause audio" : "▶  Play audio"}</Text>
+      <Text className={"text-recall-darkGreen text-[12px] font-bold"}>
+        {playing ? "Ⅱ  Pause audio" : "▶  Play audio"}
+      </Text>
     </Pressable>
   );
 }
-
-const styles = StyleSheet.create({
-  attachment: { borderRadius: 12, backgroundColor: palette.green, padding: 14, marginVertical: 14 },
-  label: { color: palette.darkGreen, fontSize: 12, fontWeight: "700" },
-});

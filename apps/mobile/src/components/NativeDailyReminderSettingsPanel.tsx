@@ -1,7 +1,8 @@
+import { NativeButton } from "./ui/NativeButton";
 import { useCallback, useEffect, useState } from "react";
-import { AppState, Linking, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { AppState, Linking, Platform, Pressable, Text, View } from "react-native";
 import { Effect, Either } from "effect";
-import { designTokens } from "@recall/design-tokens";
+import { NativeTimePicker } from "@recall/ui-native";
 import {
   defaultNativeDailyReminderSettings,
   installNativeDailyReminderResponses,
@@ -11,7 +12,6 @@ import {
   type NativeDailyReminderFailure,
 } from "../storage/native-daily-reminders";
 
-const palette = designTokens.color;
 function errorMessage(error: NativeDailyReminderFailure): string {
   switch (error.reason) {
     case "permission-denied":
@@ -65,7 +65,7 @@ export function useNativeDailyReminders(onOpenToday: () => void) {
     );
     if (Either.isRight(result)) {
       setSettings(result.right);
-      setNotice(enabled ? "Daily reminder scheduled on this device." : "Daily reminder disabled.");
+      setNotice(enabled ? "Reminder saved." : "Daily reminder disabled.");
     } else {
       setNotice(errorMessage(result.left));
       const stored = await Effect.runPromise(Effect.either(readNativeDailyReminderSettings));
@@ -75,7 +75,7 @@ export function useNativeDailyReminders(onOpenToday: () => void) {
   }, []);
   const markCleared = useCallback(() => {
     setSettings(defaultNativeDailyReminderSettings);
-    setNotice("Daily reminder disabled and preferences cleared.");
+    setNotice("Reminder disabled.");
   }, []);
   return { settings, ready, busy, notice, save, markCleared };
 }
@@ -85,29 +85,19 @@ export function NativeDailyReminderSettingsPanel({
   readonly controller: ReturnType<typeof useNativeDailyReminders>;
 }) {
   const { settings, ready, busy, notice, save } = controller;
-  const [draft, setDraft] = useState<{ readonly hour: string; readonly minute: string } | null>(
-    null,
-  );
-  const hour = draft?.hour ?? String(settings.hour).padStart(2, "0");
-  const minute = draft?.minute ?? String(settings.minute).padStart(2, "0");
+  const [detailsVisible, setDetailsVisible] = useState(false);
+  const [draftTime, setDraftTime] = useState<Date | null>(null);
+  const [timePickerVisible, setTimePickerVisible] = useState(false);
+  const selectedTime = draftTime ?? new Date(2000, 0, 1, settings.hour, settings.minute);
   const [inputNotice, setInputNotice] = useState<string | null>(null);
   const apply = async (enabled: boolean) => {
-    if (
-      enabled &&
-      (!/^\d{1,2}$/.test(hour) ||
-        !/^\d{1,2}$/.test(minute) ||
-        Number(hour) > 23 ||
-        Number(minute) > 59)
-    ) {
-      setInputNotice("Use an hour from 00–23 and a minute from 00–59.");
-      return;
-    }
     setInputNotice(null);
     await save(
       enabled,
-      enabled ? Number(hour) : settings.hour,
-      enabled ? Number(minute) : settings.minute,
+      enabled ? selectedTime.getHours() : settings.hour,
+      enabled ? selectedTime.getMinutes() : settings.minute,
     );
+    setTimePickerVisible(false);
   };
   const openSettings = async () => {
     const result = await Effect.runPromise(
@@ -124,91 +114,75 @@ export function NativeDailyReminderSettingsPanel({
       );
   };
   return (
-    <View style={styles.panel}>
-      <Text style={styles.title}>Daily study reminder</Text>
-      <Text style={styles.text}>
-        One local reminder each day, even when the app is closed. Tap it to open Today. No server or
-        sign-in required.
+    <View className={"p-[20px] gap-[12px]"}>
+      <Text className={"text-[22px] font-bold text-recall-ink"}>Daily reminder</Text>
+      <Text className={"text-recall-ink text-[14px] leading-[21px]"}>
+        Remind me to study each day, even when the app is closed.
       </Text>
-      <Text style={styles.text}>
+      <Text className={"text-recall-ink text-[14px] leading-[21px]"}>
         Status: {!ready ? "Loading…" : settings.enabled ? "Enabled" : "Disabled"}
       </Text>
-      <View style={styles.row}>
-        <TextInput
-          accessibilityLabel="Reminder hour, 24-hour clock"
-          keyboardType="number-pad"
-          maxLength={2}
-          value={hour}
-          onChangeText={(value) => setDraft({ hour: value, minute })}
-          style={styles.input}
-          editable={!busy && ready}
-        />
-        <Text style={styles.text}>:</Text>
-        <TextInput
-          accessibilityLabel="Reminder minute"
-          keyboardType="number-pad"
-          maxLength={2}
-          value={minute}
-          onChangeText={(value) => setDraft({ hour, minute: value })}
-          style={styles.input}
-          editable={!busy && ready}
-        />
-        <Text style={styles.text}>local time</Text>
-      </View>
-      <Pressable
-        accessibilityRole="button"
+      <NativeButton
+        label={`Reminder time · ${selectedTime.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`}
+        tone="soft"
         disabled={!ready || busy}
-        style={styles.button}
-        onPress={() => {
-          void apply(true);
-        }}
-      >
-        <Text>
-          {busy ? "Saving…" : settings.enabled ? "Save reminder time" : "Enable daily reminder"}
-        </Text>
-      </Pressable>
-      <Pressable
-        accessibilityRole="button"
+        onPress={() => setTimePickerVisible(true)}
+      />
+      {timePickerVisible ? (
+        <NativeTimePicker
+          value={selectedTime}
+          onValueChange={(time) => {
+            setDraftTime(time);
+            if (Platform.OS === "android") setTimePickerVisible(false);
+          }}
+          onDismiss={() => setTimePickerVisible(false)}
+        />
+      ) : null}
+      <NativeButton
+        label={busy ? "Saving…" : settings.enabled ? "Save reminder time" : "Enable daily reminder"}
         disabled={!ready || busy}
-        style={styles.button}
-        onPress={() => {
-          void apply(false);
-        }}
-      >
-        <Text>Disable reminder</Text>
-      </Pressable>
+        onPress={() => void apply(true)}
+      />
+      {settings.enabled ? (
+        <NativeButton
+          label="Disable reminder"
+          tone="soft"
+          disabled={!ready || busy}
+          onPress={() => void apply(false)}
+        />
+      ) : null}
       <Pressable
         accessibilityRole="button"
-        style={styles.button}
-        onPress={() => {
-          void openSettings();
-        }}
+        className={"py-[12px]"}
+        onPress={() => setDetailsVisible(!detailsVisible)}
       >
-        <Text>Open notification permissions</Text>
+        <Text>{detailsVisible ? "Hide notification details" : "Notification permissions"}</Text>
       </Pressable>
-      <Text style={styles.text}>
-        Uses your device’s current timezone. Focus modes, battery restrictions and Android alarm
-        settings can delay delivery.
-      </Text>
+      {detailsVisible ? (
+        <View className={"gap-[8px]"}>
+          <Pressable
+            accessibilityRole="button"
+            className={"py-[12px]"}
+            onPress={() => {
+              void openSettings();
+            }}
+          >
+            <Text>Open notification permissions</Text>
+          </Pressable>
+          <Text className={"text-recall-ink text-[14px] leading-[21px]"}>
+            Uses your device’s current timezone. Focus modes, battery restrictions and Android alarm
+            settings can delay delivery.
+          </Text>
+        </View>
+      ) : null}
       {(inputNotice ?? notice) && (
-        <Text accessibilityLiveRegion="polite" style={styles.text}>
+        <Text
+          accessibilityLiveRegion="polite"
+          className={"text-recall-ink text-[14px] leading-[21px]"}
+        >
           {inputNotice ?? notice}
         </Text>
       )}
     </View>
   );
 }
-const styles = StyleSheet.create({
-  panel: { padding: 20, gap: 12, backgroundColor: palette.surface, borderRadius: 20 },
-  title: { fontSize: 22, fontWeight: "700", color: palette.ink },
-  text: { color: palette.ink, fontSize: 14, lineHeight: 21 },
-  row: { flexDirection: "row", alignItems: "center", gap: 8 },
-  input: {
-    backgroundColor: palette.paper,
-    color: palette.ink,
-    padding: 12,
-    borderRadius: 8,
-    minWidth: 58,
-  },
-  button: { padding: 12, borderRadius: 10, backgroundColor: palette.green },
-});

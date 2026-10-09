@@ -1,5 +1,6 @@
+import { NativeButton } from "./src/components/ui/NativeButton";
 import { useCallback, useEffect, useMemo, useRef, useState, type SetStateAction } from "react";
-import { Alert } from "react-native";
+import { Alert, View } from "react-native";
 import { Effect, Either, Schema } from "effect";
 import * as Crypto from "expo-crypto";
 import * as Linking from "expo-linking";
@@ -20,15 +21,17 @@ import {
   verifyMediaAsset,
   fromKnowledgeArea,
   toKnowledgeArea,
+  workspaceDuplicateCandidates,
+  type WorkspaceSearchResult,
 } from "@recall/application";
 import type {
   AnkiImportProposal,
   WorkspaceMediaCommitFailure,
   WorkspaceMediaClearResult,
 } from "@recall/application";
-import { newSchedule, type ReviewRating } from "@recall/scheduler";
-import type { StudyCard, Workspace } from "@recall/domain";
-import { createAreaId, createCardId, createObjectiveId } from "@recall/domain";
+import { type ReviewRating } from "@recall/scheduler";
+import type { Assessment, Workspace } from "@recall/domain";
+import { createAreaId } from "@recall/domain";
 import type { MediaStore, WorkspaceStore, StoredMediaAsset } from "@recall/local-store";
 import {
   openSqliteMediaStore,
@@ -49,8 +52,10 @@ import {
   shareWorkspaceBackup,
 } from "./src/storage/native-interchange";
 import { NativeWorkspaceAuthoringPanel } from "./src/components/NativeWorkspaceAuthoringPanel";
+import { NativeWorkspaceSearchPanel } from "./src/components/NativeWorkspaceSearchPanel";
 import { NativeTodayScreen } from "./src/components/NativeTodayScreen";
 import { NativeAppShell } from "./src/components/NativeAppShell";
+import { NativeAppTab as AppTab, type NativeAppTab } from "./src/navigation";
 import {
   NativeDailyReminderSettingsPanel,
   useNativeDailyReminders,
@@ -97,60 +102,16 @@ const nativePublishingClients = makeNativePublishingClients(
   },
 );
 
-function createStarterWorkspace(): Workspace {
-  const areaId = createAreaId(Crypto.randomUUID());
+function createEmptyWorkspace(): Workspace {
   return {
     schemaVersion: 1,
     reviews: 0,
     reviewEvents: [],
-    areas: [
-      {
-        id: areaId,
-        title: "Cell biology",
-        color: palette.green,
-        objectives: [
-          {
-            id: createObjectiveId(Crypto.randomUUID()),
-            title: "Cell structures",
-            description: null,
-            prerequisiteIds: [],
-          },
-          {
-            id: createObjectiveId(Crypto.randomUUID()),
-            title: "Gene expression",
-            description: null,
-            prerequisiteIds: [],
-          },
-        ],
-        cards: [
-          {
-            id: createCardId(Crypto.randomUUID()),
-            front: "What is the main role of mitochondria?",
-            back: "They produce most of the cell’s usable ATP through cellular respiration.",
-            objective: "Cell structures",
-            schedule: newSchedule(new Date()),
-          },
-          {
-            id: createCardId(Crypto.randomUUID()),
-            front: "Where does transcription happen in a eukaryotic cell?",
-            back: "In the nucleus, where DNA is used to make RNA.",
-            objective: "Gene expression",
-            schedule: newSchedule(new Date()),
-          },
-          {
-            id: createCardId(Crypto.randomUUID()),
-            front: "What does the cell membrane regulate?",
-            back: "The movement of substances into and out of the cell.",
-            objective: "Cell structures",
-            schedule: newSchedule(new Date()),
-          },
-        ],
-      },
-    ],
+    areas: [],
   };
 }
 
-function dueNow(card: StudyCard, now: number): boolean {
+function dueNow(card: Assessment, now: number): boolean {
   return Date.parse(card.schedule.due) <= now;
 }
 
@@ -197,6 +158,8 @@ export default function App() {
   );
   function invalidateWorkspaceOperations() {
     setSyncOwnershipIssue(null);
+    setSearchOpen(false);
+    setSearchTarget(null);
     setOperationGeneration(workspaceLifetime.invalidate());
   }
   const setWorkspace = useCallback(
@@ -296,12 +259,12 @@ export default function App() {
   const [now, setNow] = useState(() => Date.now());
   const reviewInProgress = useRef(false);
   const [reviewPending, setReviewPending] = useState(false);
-  const [activeTab, setActiveTab] = useState<"Today" | "Library" | "Tutor" | "Sharing" | "Account">(
-    "Today",
-  );
-  const openReminderToday = useCallback(() => setActiveTab("Today"), [setActiveTab]);
+  const [activeTab, setActiveTab] = useState<NativeAppTab>(AppTab.Today);
+  const openReminderToday = useCallback(() => setActiveTab(AppTab.Today), [setActiveTab]);
   const dailyReminders = useNativeDailyReminders(openReminderToday);
   const [activeAreaId, setActiveAreaId] = useState<string | null>(null);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchTarget, setSearchTarget] = useState<WorkspaceSearchResult | null>(null);
   const [syncConflictWorkspace, setSyncConflictWorkspace] = useState<Workspace | null>(null);
   const [nativeTutorSessionIds, setNativeTutorSessionIds] = useState<
     Readonly<Record<string, string | null>>
@@ -435,8 +398,10 @@ export default function App() {
     void Effect.runPromise(Effect.either(openSqliteWorkspaceStore())).then(async (opened) => {
       if (!mounted) return;
       if (Either.isLeft(opened)) {
-        setWorkspace(createStarterWorkspace());
-        setMessage("Local database is unavailable. Study changes will stay in this session.");
+        setWorkspace(createEmptyWorkspace());
+        setMessage(
+          "Couldn’t open this app’s local storage. Study changes won’t be saved if you continue.",
+        );
         setReady(true);
         return;
       }
@@ -517,7 +482,7 @@ export default function App() {
       if (!mounted) return;
       setStore(localStore);
       if (Either.isLeft(loaded)) {
-        setWorkspace(createStarterWorkspace());
+        setWorkspace(createEmptyWorkspace());
         setMessage("Saved cards could not be read. Existing data was left untouched.");
         setReady(true);
         return;
@@ -527,14 +492,16 @@ export default function App() {
         setWorkspace(loaded.right.workspace);
         setCacheWritable(true);
       } else if (loaded.right._tag === "Empty") {
-        const starter = createStarterWorkspace();
-        const saved = await Effect.runPromise(Effect.either(saveWorkspace(localStore, starter)));
-        setWorkspace(starter);
+        const emptyWorkspace = createEmptyWorkspace();
+        const saved = await Effect.runPromise(
+          Effect.either(saveWorkspace(localStore, emptyWorkspace)),
+        );
+        setWorkspace(emptyWorkspace);
         setCacheWritable(Either.isRight(saved));
         if (Either.isLeft(saved))
-          setMessage("Starter cards are temporary because the database is read-only.");
+          setMessage("Local storage is read-only. Changes won’t be saved after you leave.");
       } else {
-        setWorkspace(createStarterWorkspace());
+        setWorkspace(createEmptyWorkspace());
         setMessage(
           "Saved cards use an invalid or newer format. The original data was left untouched.",
         );
@@ -705,14 +672,14 @@ export default function App() {
         return;
       }
       workspaceLifetime.resumeWrites();
-      const starter = createStarterWorkspace();
-      setWorkspace(starter);
-      void Effect.runPromise(Effect.either(saveWorkspace(store, starter))).then((saved) => {
-        setActiveAreaId(starter.areas[0]?.id ?? null);
+      const emptyWorkspace = createEmptyWorkspace();
+      setWorkspace(emptyWorkspace);
+      void Effect.runPromise(Effect.either(saveWorkspace(store, emptyWorkspace))).then((saved) => {
+        setActiveAreaId(emptyWorkspace.areas[0]?.id ?? null);
         setCacheWritable(Either.isRight(saved));
         setShowAnswer(false);
         setMessage(
-          Either.isRight(saved) ? "Fresh sample cards are ready." : "Fresh cards are temporary.",
+          Either.isRight(saved) ? "Your library is empty." : "Local storage is unavailable.",
         );
       });
     });
@@ -1407,23 +1374,61 @@ export default function App() {
           : undefined;
 
   const authoringPanel = (
-    <NativeWorkspaceAuthoringPanel
-      workspace={workspace}
-      activeAreaId={activeAreaId}
-      disabled={authoringDisabledReason !== undefined}
-      {...(authoringDisabledReason === undefined
-        ? {}
-        : { disabledReason: authoringDisabledReason })}
-      createId={Crypto.randomUUID}
-      onPickAttachment={pickNativeMedia}
-      onCommand={applyAuthoringCommand}
-    />
+    <View className="gap-4">
+      <NativeButton
+        tone="soft"
+        label={searchOpen ? "Close search" : "Search everything"}
+        disabled={!ready || reviewPending || workspaceLifetime.isBlocked()}
+        onPress={() => setSearchOpen((value) => !value)}
+      />
+      {searchOpen && (
+        <NativeWorkspaceSearchPanel
+          key={`${operationGeneration}:${workspace?.syncOwnerId ?? "local"}`}
+          workspace={workspace}
+          disabled={!ready || reviewPending || workspaceLifetime.isBlocked()}
+          onNavigate={(result) => {
+            if (
+              workspaceLifetime.isBlocked() ||
+              reviewPending ||
+              !workspaceRef.current?.areas.some((item) => item.id === result.areaId)
+            )
+              return;
+            setActiveAreaId(result.areaId);
+            setSearchTarget(result);
+            setShowAnswer(false);
+            setSearchOpen(false);
+            setActiveTab(
+              ["area", "card", "objective"].includes(result.target.kind)
+                ? AppTab.Library
+                : AppTab.Tutor,
+            );
+          }}
+        />
+      )}
+      <NativeWorkspaceAuthoringPanel
+        workspace={workspace}
+        activeAreaId={activeAreaId}
+        tutorApi={tutorApi}
+        disabled={authoringDisabledReason !== undefined}
+        {...(authoringDisabledReason === undefined
+          ? {}
+          : { disabledReason: authoringDisabledReason })}
+        createId={Crypto.randomUUID}
+        onPickAttachment={pickNativeMedia}
+        onCommand={applyAuthoringCommand}
+        searchTarget={searchTarget}
+      />
+    </View>
   );
   const tutorPanel =
     activePublishingArea && Either.isRight(activePublishingArea) ? (
       <NativeTutorPanel
         key={activeArea?.id ?? "no-area"}
         area={activePublishingArea.right}
+        duplicateCandidates={workspace ? workspaceDuplicateCandidates(workspace) : []}
+        {...(searchTarget && searchTarget.areaId === activeArea?.id
+          ? { searchTarget: searchTarget.target }
+          : {})}
         reviewEvents={workspace?.reviewEvents ?? []}
         mayWrite={() =>
           !workspaceLifetime.isBlocked() &&
@@ -1462,7 +1467,7 @@ export default function App() {
         onStartReview={() => {
           setNow(Date.now());
           setShowAnswer(false);
-          setActiveTab("Today");
+          setActiveTab(AppTab.Today);
         }}
       />
     ) : null;
@@ -1480,6 +1485,7 @@ export default function App() {
       }}
       today={
         <NativeTodayScreen
+          onOpenLibrary={() => setActiveTab(AppTab.Library)}
           ready={ready}
           workspace={workspace}
           activeAreaId={activeAreaId}

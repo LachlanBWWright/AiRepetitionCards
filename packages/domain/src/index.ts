@@ -1,7 +1,7 @@
 import { Effect, Either, Schema } from "effect";
 import {
   AreaIdSchema,
-  CardIdSchema,
+  AssessmentIdSchema,
   DeviceIdSchema,
   MediaIdSchema,
   ObjectiveIdSchema,
@@ -32,7 +32,7 @@ export const MediaReferenceSchema = Schema.Struct({
 });
 export type MediaReference = typeof MediaReferenceSchema.Type;
 
-const CardSchedule = Schema.Struct({
+const AssessmentSchedule = Schema.Struct({
   due: Schema.String,
   stability: Schema.Number,
   difficulty: Schema.Number,
@@ -44,7 +44,7 @@ const CardSchedule = Schema.Struct({
   state: Schema.Union(Schema.Literal(0), Schema.Literal(1), Schema.Literal(2), Schema.Literal(3)),
   last_review: Schema.optional(Schema.NullOr(Schema.String)),
 });
-export type CardSchedule = typeof CardSchedule.Type;
+export type AssessmentSchedule = typeof AssessmentSchedule.Type;
 
 export const LearningObjectiveSchema = Schema.Struct({
   id: ObjectiveIdSchema,
@@ -60,12 +60,13 @@ export const ClozeContentSchema = Schema.Struct({
 });
 export type ClozeContent = typeof ClozeContentSchema.Type;
 
-export const StudyCardSchema = Schema.Struct({
-  id: CardIdSchema,
+/** A scheduled learning exercise; the current representation supports flashcards and cloze. */
+export const AssessmentSchema = Schema.Struct({
+  id: AssessmentIdSchema,
   front: Schema.String.pipe(Schema.minLength(1)),
   back: Schema.String.pipe(Schema.minLength(1)),
   objective: Schema.String.pipe(Schema.minLength(1)),
-  schedule: CardSchedule,
+  schedule: AssessmentSchedule,
   cloze: Schema.optional(ClozeContentSchema),
   objectiveIds: Schema.optional(Schema.Array(ObjectiveIdSchema)),
   media: Schema.optional(Schema.Array(MediaReferenceSchema).pipe(Schema.maxItems(20))),
@@ -84,7 +85,7 @@ export const LearningAreaSchema = Schema.Struct({
   id: AreaIdSchema,
   title: Schema.String.pipe(Schema.minLength(1), Schema.maxLength(80)),
   color: Schema.String.pipe(Schema.pattern(/^#[0-9a-fA-F]{6}$/)),
-  cards: Schema.Array(StudyCardSchema),
+  cards: Schema.Array(AssessmentSchema),
   objectives: Schema.optional(Schema.Array(LearningObjectiveSchema)),
   description: Schema.optional(Schema.NullOr(Schema.String)),
   language: Schema.optional(Schema.String),
@@ -102,37 +103,42 @@ export const LearningAreaSchema = Schema.Struct({
   sourceId: Schema.optional(Schema.String),
 });
 
-const CardOriginSchema = Schema.Union(
+const AssessmentOriginSchema = Schema.Union(
   Schema.Literal("authored"),
   Schema.Literal("imported"),
   Schema.Literal("ai-generated"),
 );
 
-const BasicKnowledgeCardSchema = Schema.Struct({
+export const FlashcardAssessmentContentSchema = Schema.Struct({
   kind: Schema.Literal("basic"),
-  id: CardIdSchema,
+  id: AssessmentIdSchema,
   front: Schema.String.pipe(Schema.minLength(1)),
   back: Schema.String.pipe(Schema.minLength(1)),
   objectiveIds: Schema.Array(ObjectiveIdSchema),
   media: Schema.optional(Schema.Array(MediaReferenceSchema).pipe(Schema.maxItems(20))),
   tags: Schema.Array(Schema.String),
-  origin: CardOriginSchema,
+  origin: AssessmentOriginSchema,
   sourceId: Schema.optional(Schema.String),
 });
 
-const ClozeKnowledgeCardSchema = Schema.Struct({
+export const ClozeAssessmentContentSchema = Schema.Struct({
   kind: Schema.Literal("cloze"),
-  id: CardIdSchema,
+  id: AssessmentIdSchema,
   text: Schema.String.pipe(Schema.minLength(1), Schema.maxLength(20_000)),
   deletionIndex: Schema.optional(Schema.Number.pipe(Schema.int(), Schema.between(1, 20))),
   objectiveIds: Schema.Array(ObjectiveIdSchema),
   media: Schema.optional(Schema.Array(MediaReferenceSchema).pipe(Schema.maxItems(20))),
   tags: Schema.Array(Schema.String),
-  origin: CardOriginSchema,
+  origin: AssessmentOriginSchema,
   sourceId: Schema.optional(Schema.String),
 });
 
-const KnowledgeCardSchema = Schema.Union(BasicKnowledgeCardSchema, ClozeKnowledgeCardSchema);
+/** Portable exercise content, separate from its review schedule and history. */
+export const AssessmentContentSchema = Schema.Union(
+  FlashcardAssessmentContentSchema,
+  ClozeAssessmentContentSchema,
+);
+export type AssessmentContent = typeof AssessmentContentSchema.Type;
 
 const KnowledgeObjectiveSchema = Schema.Struct({
   id: ObjectiveIdSchema,
@@ -157,7 +163,7 @@ export const KnowledgeAreaSchema = Schema.Struct({
     quizInstructions: Schema.NullOr(Schema.String.pipe(Schema.maxLength(2_000))),
     cardGenerationInstructions: Schema.NullOr(Schema.String.pipe(Schema.maxLength(2_000))),
   }),
-  cards: Schema.Array(KnowledgeCardSchema).pipe(Schema.maxItems(500)),
+  cards: Schema.Array(AssessmentContentSchema).pipe(Schema.maxItems(500)),
   tags: Schema.Array(Schema.String),
   licence: Schema.NullOr(Schema.String),
   attribution: Schema.optional(Schema.NullOr(Schema.String.pipe(Schema.maxLength(500)))),
@@ -173,7 +179,7 @@ const KnowledgeAreaV0_9Schema = Schema.Struct({
   objectives: Schema.Array(KnowledgeObjectiveSchema).pipe(Schema.maxItems(200)),
   cards: Schema.Array(
     Schema.Struct({
-      id: CardIdSchema,
+      id: AssessmentIdSchema,
       front: Schema.String.pipe(Schema.minLength(1)),
       back: Schema.String.pipe(Schema.minLength(1)),
       objectiveIds: Schema.Array(ObjectiveIdSchema),
@@ -184,7 +190,7 @@ const KnowledgeAreaV0_9Schema = Schema.Struct({
 export const ReviewEventSchema = Schema.Struct({
   id: ReviewEventIdSchema,
   areaId: AreaIdSchema,
-  cardId: CardIdSchema,
+  cardId: AssessmentIdSchema,
   ratedAt: Schema.String.pipe(Schema.minLength(1)),
   rating: Schema.Union(
     Schema.Literal("again"),
@@ -224,7 +230,32 @@ export const AccountIdSchema = Schema.transform(AccountUuidSchema, AccountUuidSc
   encode: (value) => value.toLowerCase(),
 });
 
+/** Private append-only authored snapshots; never included in a shared KnowledgeArea. */
+export const CardVersionSchema = Schema.Struct({
+  id: Schema.String.pipe(Schema.minLength(1)),
+  areaId: AreaIdSchema,
+  cardId: AssessmentIdSchema,
+  recordedAt: Schema.String.pipe(Schema.minLength(1)),
+  reason: Schema.Literal("edit", "delete", "replace", "restore"),
+  card: AssessmentSchema,
+  area: LearningAreaSchema,
+}).pipe(
+  Schema.filter(
+    (version) =>
+      version.area.cards.length === 0 &&
+      version.card.id === version.cardId &&
+      version.area.id === version.areaId &&
+      Number.isFinite(Date.parse(version.recordedAt)),
+    {
+      message: () =>
+        "A card version must contain matching identities, an empty area card list and a valid timestamp.",
+    },
+  ),
+);
+export type CardVersion = typeof CardVersionSchema.Type;
+
 export const WorkspaceSchema = Schema.Struct({
+  cardVersions: Schema.optional(Schema.Array(CardVersionSchema)),
   retainedReviewAreas: Schema.optional(Schema.Array(LearningAreaSchema)),
   schemaVersion: Schema.Literal(1),
   areas: Schema.Array(LearningAreaSchema),
@@ -236,7 +267,7 @@ export const WorkspaceSchema = Schema.Struct({
   pendingReviewEventIds: Schema.optional(Schema.Array(ReviewEventIdSchema)),
   reviewConflictIds: Schema.optional(Schema.Array(ReviewEventIdSchema)),
   deletedCards: Schema.optional(
-    Schema.Array(Schema.Struct({ areaId: AreaIdSchema, cardId: CardIdSchema })),
+    Schema.Array(Schema.Struct({ areaId: AreaIdSchema, cardId: AssessmentIdSchema })),
   ),
   deletedAreas: Schema.optional(
     Schema.Array(
@@ -293,7 +324,7 @@ export const WorkspaceSchema = Schema.Struct({
   ),
 );
 
-export type StudyCard = typeof StudyCardSchema.Type;
+export type Assessment = typeof AssessmentSchema.Type;
 export type LearningArea = typeof LearningAreaSchema.Type;
 export type ReviewEvent = typeof ReviewEventSchema.Type;
 export type Workspace = typeof WorkspaceSchema.Type;

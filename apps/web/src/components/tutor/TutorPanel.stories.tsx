@@ -3,7 +3,13 @@ import type { JSX } from "react";
 import { Effect } from "effect";
 import { createTutorApi, createTutorPrivacyApi, tutorApiFailureMessage } from "@recall/application";
 import { TutorPanel } from "./TutorPanel";
-import type { AreaId, CardId, KnowledgeArea, LearningArea, ObjectiveId } from "@recall/domain";
+import type {
+  AreaId,
+  AssessmentId,
+  KnowledgeArea,
+  LearningArea,
+  ObjectiveId,
+} from "@recall/domain";
 import { createObjectiveId } from "@recall/domain";
 import { newSchedule } from "@recall/scheduler";
 import {
@@ -35,7 +41,7 @@ const knowledgeArea: KnowledgeArea = {
   cards: [
     {
       kind: "basic",
-      id: "mitochondria-card" as CardId,
+      id: "mitochondria-card" as AssessmentId,
       front: "What is the main role of mitochondria?",
       back: "They produce ATP through cellular respiration.",
       objectiveIds: ["objective-cell-structures" as ObjectiveId],
@@ -93,9 +99,9 @@ const meta = {
   },
   decorators: [
     (Story: () => JSX.Element) => (
-      <main className="component-catalog tutor-story">
+      <main className="mx-auto min-h-screen max-w-5xl space-y-6 bg-background p-8">
         <div>
-          <p className="eyebrow">RECALL · CELL BIOLOGY</p>
+          <p className="mb-1 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">RECALL · CELL BIOLOGY</p>
           <h1>Learn through a conversation.</h1>
           <p>AI feedback stays evidence-based, and proposed cards wait for your approval.</p>
           <Story />
@@ -422,7 +428,7 @@ export const LargeAreaContext: Story = {
       ...knowledgeArea,
       cards: Array.from({ length: 500 }, (_, index) => ({
         kind: "basic" as const,
-        id: `large-area-card-${String(index).padStart(3, "0")}` as CardId,
+        id: `large-area-card-${String(index).padStart(3, "0")}` as AssessmentId,
         front: `Cell biology practice ${index + 1}: explain selective permeability.`,
         back: "The cell membrane controls transport through its lipid bilayer and specific proteins. ".repeat(
           8,

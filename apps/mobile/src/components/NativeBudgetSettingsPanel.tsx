@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
-import { Pressable, Text, TextInput, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
 import { Effect, Either } from "effect";
 import { parseLocalBudgetLimit, type LocalAiUsageSnapshot } from "@recall/application";
+import { NativeTextField } from "./ui/NativeTextField";
 import { nativeLocalBudget } from "../storage/native-local-ai-budget";
 
 export function NativeBudgetSettingsPanel({ accountId }: { readonly accountId: string }) {
+  const [detailsVisible, setDetailsVisible] = useState(false);
   const [snapshot, setSnapshot] = useState<LocalAiUsageSnapshot | null>(null);
   const [fields, setFields] = useState<readonly string[]>(["", "", ""]);
   const [message, setMessage] = useState<string | null>(null);
@@ -57,17 +59,13 @@ export function NativeBudgetSettingsPanel({ accountId }: { readonly accountId: s
     setBusy(false);
     if (Either.isRight(result)) {
       publish(result.right);
-      setMessage("Limits saved; usage history retained.");
+      setMessage("Saved.");
     } else setMessage(result.left.message);
   }
   return (
-    <View style={{ gap: 10, padding: 14 }}>
-      <Text style={{ fontWeight: "700" }}>AI budget settings</Text>
-      <Text>
-        Account limits on this device only; not your remaining ChatGPT balance or a monetary cap.
-        Days reset at midnight UTC; weeks on Monday. Failed and pending requests count. Blank is
-        unlimited; 0 blocks requests.
-      </Text>
+    <View className="gap-[10px] p-[14px]">
+      <Text className="font-bold">AI usage limits</Text>
+      <Text>Request limits for this account on this device. Leave blank for unlimited.</Text>
       <Pressable accessibilityRole="button" disabled={busy} onPress={() => void refresh()}>
         <Text>Refresh usage</Text>
       </Pressable>
@@ -77,30 +75,41 @@ export function NativeBudgetSettingsPanel({ accountId }: { readonly accountId: s
             Today: {snapshot.summary.daily.requests} · Week: {snapshot.summary.weekly.requests}{" "}
             requests
           </Text>
-          <Text>
-            Completed: {snapshot.summary.daily.completed} · Failed: {snapshot.summary.daily.failed}{" "}
-            · Pending: {snapshot.summary.daily.pending}
-          </Text>
-          <Text>
-            Known tokens: {snapshot.summary.daily.inputTokens} input /{" "}
-            {snapshot.summary.daily.outputTokens} output. Unknown usage:{" "}
-            {snapshot.summary.daily.unknownUsageRequests} requests.
-          </Text>
-          {["Daily requests", "Weekly requests", "Daily research requests"].map((label, index) => (
-            <View key={label}>
-              <Text>{label}</Text>
-              <TextInput
-                accessibilityLabel={label}
-                keyboardType="number-pad"
-                editable={!busy}
-                value={fields[index] ?? ""}
-                placeholder="Unlimited"
-                onChangeText={(text) => {
-                  setFields(fields.map((value, position) => (position === index ? text : value)));
-                }}
-                style={{ minHeight: 44, borderWidth: 1, padding: 8 }}
-              />
+          <Pressable accessibilityRole="button" onPress={() => setDetailsVisible(!detailsVisible)}>
+            <Text>{detailsVisible ? "Hide usage details" : "Usage details and reset times"}</Text>
+          </Pressable>
+          {detailsVisible ? (
+            <View className="gap-2">
+              <Text>
+                {snapshot.summary.daily.completed} completed · {snapshot.summary.daily.failed}{" "}
+                failed · {snapshot.summary.daily.pending} pending.
+              </Text>
+              <Text>
+                Known tokens: {snapshot.summary.daily.inputTokens} input ·{" "}
+                {snapshot.summary.daily.outputTokens} output. Usage unavailable for{" "}
+                {snapshot.summary.daily.unknownUsageRequests} requests.
+              </Text>
+              <Text>
+                Days reset at midnight UTC; weeks on Monday. Failed and pending requests count. A
+                limit of 0 blocks requests.
+              </Text>
+              <Text>
+                These limits do not show remaining ChatGPT allowance or set a spending cap.
+              </Text>
             </View>
+          ) : null}
+          {["Daily requests", "Weekly requests", "Daily research requests"].map((label, index) => (
+            <NativeTextField
+              key={label}
+              label={label}
+              keyboardType="number-pad"
+              editable={!busy}
+              value={fields[index] ?? ""}
+              placeholder="Unlimited"
+              onChangeText={(text) => {
+                setFields(fields.map((value, position) => (position === index ? text : value)));
+              }}
+            />
           ))}
           <Pressable accessibilityRole="button" disabled={busy} onPress={() => void save()}>
             <Text>{busy ? "Saving…" : "Save limits"}</Text>

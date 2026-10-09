@@ -5,7 +5,7 @@ import { Deferred, Effect, Either, Schema } from "effect";
 import {
   MediaIdSchema,
   createAreaId,
-  createCardId,
+  createAssessmentId,
   parseWorkspaceJson,
   type Workspace,
 } from "@recall/domain";
@@ -40,7 +40,7 @@ function workspace(assets: readonly Asset[] = [added]): Workspace {
         color: "#123456",
         cards: [
           {
-            id: createCardId("00000000-0000-4000-8000-000000000002"),
+            id: createAssessmentId("00000000-0000-4000-8000-000000000002"),
             front: "Question",
             back: "Answer",
             objective: "Media",

@@ -11,7 +11,7 @@ import { authenticatedApiRateLimit } from "@/lib/http/api-rate-limit";
 import { ReviewEventSchema } from "@recall/domain";
 import {
   AreaIdSchema,
-  CardIdSchema,
+  AssessmentIdSchema,
   DeviceIdSchema,
   ReviewEventIdSchema,
   SyncReviewOperationSchema,
@@ -65,7 +65,7 @@ const StoredSyncChangeCommon = {
 };
 const StoredReviewEventPayloadSchema = Schema.Struct({
   id: ReviewEventIdSchema,
-  card_id: CardIdSchema,
+  card_id: AssessmentIdSchema,
   device_id: DeviceIdSchema,
   device_sequence: Schema.Number.pipe(Schema.int(), Schema.positive()),
   base_review_event_id: Schema.NullOr(ReviewEventIdSchema),
@@ -94,10 +94,10 @@ const StoredSyncChangeSchema = Schema.Union(
   Schema.Struct({
     ...StoredSyncChangeCommon,
     entity_type: Schema.Literal("card"),
-    entity_id: CardIdSchema,
+    entity_id: AssessmentIdSchema,
     operation: Schema.Literal("tombstone"),
     payload: Schema.Struct({
-      id: CardIdSchema,
+      id: AssessmentIdSchema,
       areaId: AreaIdSchema,
       deletedAt: StoredTimestampSchema,
     }),
@@ -291,7 +291,7 @@ async function handlePOST(request: NextRequest): Promise<NextResponse> {
   if (Either.isLeft(acceptedCards))
     return privateJson({ error: "sync-read-failed" }, { status: 502 });
   const cardIdentities = Schema.decodeUnknownEither(
-    Schema.Array(Schema.Struct({ id: CardIdSchema, knowledge_area_id: AreaIdSchema })),
+    Schema.Array(Schema.Struct({ id: AssessmentIdSchema, knowledge_area_id: AreaIdSchema })),
   )(acceptedCards.right);
   if (Either.isLeft(cardIdentities))
     return privateJson({ error: "sync-response-invalid" }, { status: 502 });
@@ -375,7 +375,7 @@ async function handleGET(request: NextRequest): Promise<NextResponse> {
     return privateJson({ error: "sync-read-failed" }, { status: 502 });
   const cardRows: unknown = cardsResult.right;
   const decodedCards = Schema.decodeUnknownEither(
-    Schema.Array(Schema.Struct({ id: CardIdSchema, knowledge_area_id: AreaIdSchema })),
+    Schema.Array(Schema.Struct({ id: AssessmentIdSchema, knowledge_area_id: AreaIdSchema })),
   )(cardRows);
   if (Either.isLeft(decodedCards)) {
     return privateJson({ error: "sync-response-invalid" }, { status: 502 });

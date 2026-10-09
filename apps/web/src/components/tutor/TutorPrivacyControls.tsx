@@ -1,8 +1,9 @@
 "use client";
 
+import { Alert, AlertDescription } from "@recall/ui-web/components/alert";
 import { useEffect, useState } from "react";
 import { Effect, Fiber } from "effect";
-import { Dialog } from "@recall/ui-web";
+import { Button, Dialog } from "@recall/ui-web";
 import { tutorPrivacyApi } from "@/lib/tutor-privacy-api";
 
 type Policy = {
@@ -35,7 +36,7 @@ export function TutorPrivacyView({
   const retention = state.policy?.retentionDays;
   return (
     <section aria-label="Tutor privacy">
-      <h3>Tutor privacy</h3>
+      <h3 className="text-base font-semibold">Tutor privacy</h3>
       <p>
         Tutoring sends the selected learning area, your answers and relevant conversation to OpenAI.
         {local
@@ -53,21 +54,27 @@ export function TutorPrivacyView({
           and review history stay saved. This does not delete data retained by OpenAI.
         </p>
       )}
-      <button
-        className="text-button"
+      <Button
+        variant="outline"
         type="button"
         disabled={disabled || state.busy || !state.policy?.deletionAvailable}
         onClick={onRequest}
       >
         Clear tutor history
-      </button>
-      {state.message && !state.confirming && <p role="status">{state.message}</p>}
+      </Button>
+      {state.message && !state.confirming && (
+        <Alert role="status">
+          <AlertDescription>{state.message}</AlertDescription>
+        </Alert>
+      )}
       {state.confirming && (
         <Dialog
           labelledBy="clear-tutor-history-title"
           onClose={state.busy ? () => undefined : onCancel}
         >
-          <h2 id="clear-tutor-history-title">Clear tutor history?</h2>
+          <h2 className="text-lg font-semibold" id="clear-tutor-history-title">
+            Clear tutor history?
+          </h2>
           <p>
             This removes all{" "}
             {local
@@ -76,18 +83,22 @@ export function TutorPrivacyView({
             , including saved conversations, quizzes and unapproved proposals. Your cards and
             reviews stay saved. This cannot be undone.
           </p>
-          {state.message && <p role="status">{state.message}</p>}
-          <button type="button" className="text-button" disabled={state.busy} onClick={onCancel}>
+          {state.message && (
+            <Alert role="status">
+              <AlertDescription>{state.message}</AlertDescription>
+            </Alert>
+          )}
+          <Button type="button" variant="outline" disabled={state.busy} onClick={onCancel}>
             Cancel
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
-            className="text-button"
+            variant="destructive"
             disabled={state.busy || disabled}
             onClick={onDelete}
           >
             {state.busy ? "Clearing…" : "Clear tutor history"}
-          </button>
+          </Button>
         </Dialog>
       )}
     </section>

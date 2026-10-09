@@ -36,8 +36,8 @@ const eslintConfig = defineConfig([
     },
   },
   {
-    files: ["pwa/image.tsx"],
-    // The cached shell bundles images without an image optimization server.
+    files: ["pwa/image.tsx", "src/components/ui/InlineImage.tsx"],
+    // Cached and user-provided images are local data and have no image optimization server.
     rules: { "@next/next/no-img-element": "off" },
   },
   prettier,
