@@ -1,7 +1,9 @@
-export function getAssetByID(_assetId: number) {
+export function getAssetByID(assetId: number) {
+  void assetId;
   return null;
 }
 
-export function registerAsset(_asset: unknown) {
+export function registerAsset(asset: unknown) {
+  void asset;
   return 0;
 }

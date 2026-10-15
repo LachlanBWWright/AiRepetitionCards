@@ -8,6 +8,7 @@
     "tests/**/*.ts",
     "integration/**/*.ts",
     "local-integration/**/*.ts",
+    "code-runner/**/*.ts",
     "../../apps/web/src/lib/desktop-api.ts"
   ]
 }

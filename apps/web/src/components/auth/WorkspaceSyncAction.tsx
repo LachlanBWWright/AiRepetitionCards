@@ -300,7 +300,7 @@ export function WorkspaceSyncAction({
                 ? provisionCapacityMessage
                 : error._tag === "WorkspaceSyncFailure" &&
                     (error.reason === "content" || error.reason === "media")
-                  ? "Knowledge Areas could not sync. Changes remain only in this tab until the server confirms them."
+                  ? "Decks could not sync. Changes remain only in this tab until the server confirms them."
                   : "Sync failed. Changes exist only in this tab until the server confirms them; retry before leaving.",
           );
         },
@@ -315,7 +315,7 @@ export function WorkspaceSyncAction({
               deletedAreaIds: result.deletedAreaIds,
             });
             setMessage(
-              "A Knowledge Area changed on another device. Review the server version before continuing.",
+              "A deck changed on another device. Review the server version before continuing.",
             );
             return;
           }
@@ -397,7 +397,9 @@ export function WorkspaceSyncAction({
     Effect.runFork(program);
   }
 
-  syncRef.current = () => sync();
+  useEffect(() => {
+    syncRef.current = () => sync();
+  });
 
   useEffect(() => {
     if (!autoSync || !ownerId || demo || demoAccountState || demoMissingReviewContent) return;
@@ -475,7 +477,7 @@ export function WorkspaceSyncAction({
                 checked={clearConfirmed}
                 onCheckedChange={(checked) => setClearConfirmed(checked === true)}
               />{" "}
-              Clear this tab's working copy and attachments to continue with this account.
+              Clear this tab’s working copy and attachments to continue with this account.
             </label>
             <Button type="button" disabled={busy || !clearConfirmed} onClick={onClearWorkspace}>
               Clear tab workspace

@@ -17,6 +17,7 @@ const config: StorybookConfig = {
   staticDirs: ["../public"],
   async viteFinal(config) {
     const merged = mergeConfig(config, {
+      define: { "process.env": {} },
       optimizeDeps: {
         include: [
           "react",
@@ -25,11 +26,24 @@ const config: StorybookConfig = {
           "react-dom",
           "react-dom/client",
           "react-native-web",
+          "sql.js",
         ],
         noDiscovery: true,
       },
       root: path.resolve(configDirectory, ".."),
       resolve: {
+        extensions: [
+          ".web.mjs",
+          ".mjs",
+          ".web.js",
+          ".js",
+          ".web.ts",
+          ".ts",
+          ".web.tsx",
+          ".tsx",
+          ".jsx",
+          ".json",
+        ],
         dedupe: ["react", "react-dom", "react-native-web"],
       },
       plugins: [
@@ -63,6 +77,10 @@ const config: StorybookConfig = {
       {
         find: /^expo$/,
         replacement: path.resolve(configDirectory, "ExpoUiMocks.tsx"),
+      },
+      {
+        find: /^expo-(?:file-system|sharing)(?:\/.*)?$/,
+        replacement: path.resolve(configDirectory, "NativePlatformServiceMocks.ts"),
       },
       {
         find: /^expo-modules-core(?:\/.*)?$/,

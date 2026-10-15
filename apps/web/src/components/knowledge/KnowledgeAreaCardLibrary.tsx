@@ -7,9 +7,22 @@ import {
   workspaceAuthoringBaseline,
   workspaceDuplicateCandidates,
   type CardDuplicateCandidate,
+  type WorkspaceAuthoringCommand,
+  parseTagInput,
 } from "@recall/application";
 import type { CardVersion, LearningArea, Assessment, Workspace } from "@recall/domain";
-import { useId, useMemo, useState } from "react";
+import { WorkspaceAuthoringCommandSchema } from "@recall/application";
+import { Effect, Either, Schema } from "effect";
+import { Checkbox } from "@recall/ui-web/components/checkbox";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@recall/ui-web/components/dialog";
+import { useId, useMemo, useRef, useState } from "react";
 import { ChevronDown, Ellipsis } from "lucide-react";
 import {
   Button,
@@ -36,6 +49,14 @@ import { EmptyState } from "../ui/EmptyState";
 import { CardVersionHistory } from "./CardVersionHistory";
 
 type KnowledgeAreaCardLibraryProps = {
+  readonly flaggedOnly?: boolean;
+  readonly onFlaggedFilterChange?: (value: boolean) => void;
+  readonly flaggedCardIds?: readonly string[];
+  readonly onFlag?: (id: string) => void;
+  readonly onBulk?: (
+    command: WorkspaceAuthoringCommand,
+    baseline: string | undefined,
+  ) => Promise<{ readonly ok: boolean; readonly message?: string }>;
   readonly area: LearningArea;
   readonly onEdit: (card: Assessment) => void;
   readonly onDelete: (card: Assessment) => void;
@@ -52,6 +73,11 @@ type KnowledgeAreaCardLibraryProps = {
 
 export function KnowledgeAreaCardLibrary({
   area,
+  flaggedCardIds = [],
+  flaggedOnly: requestedFlaggedOnly,
+  onFlaggedFilterChange,
+  onFlag,
+  onBulk,
   onEdit,
   onDelete,
   onAdd,
@@ -61,6 +87,127 @@ export function KnowledgeAreaCardLibrary({
   showDeletedRecovery = true,
   onOpenDuplicate,
 }: KnowledgeAreaCardLibraryProps) {
+  const [selected, setSelected] = useState<readonly string[]>([]);
+  const [localFlaggedOnly, setLocalFlaggedOnly] = useState(false);
+  const flaggedOnly = requestedFlaggedOnly ?? localFlaggedOnly;
+  const setFlaggedOnly = (value: boolean) => {
+    setLocalFlaggedOnly(value);
+    onFlaggedFilterChange?.(value);
+  };
+  const [bulkAction, setBulkAction] = useState<"tags" | "move" | "delete" | null>(null);
+  const [bulkTags, setBulkTags] = useState("");
+  const [destination, setDestination] = useState("");
+  const [bulkPending, setBulkPending] = useState(false);
+  const [bulkError, setBulkError] = useState<string | null>(null);
+  const bulkGuard = useRef(false);
+  const bulkSnapshot = useRef(workspace);
+  const selectedIds = selected.filter((id) => area.cards.some((card) => card.id === id));
+  const [bulkRequest, setBulkRequest] = useState<{
+    readonly command: WorkspaceAuthoringCommand;
+    readonly baseline: string | undefined;
+  } | null>(null);
+  function beginBulk(action: "tags" | "move" | "delete") {
+    bulkSnapshot.current = workspace;
+    setBulkError(null);
+    setBulkRequest(null);
+    setBulkAction(action);
+    if (action === "delete" && workspace) {
+      const command: WorkspaceAuthoringCommand = {
+        kind: "bulk-delete-cards",
+        areaId: area.id,
+        cardIds: area.cards.filter((card) => selectedIds.includes(card.id)).map((card) => card.id),
+      };
+      setBulkRequest({
+        command,
+        baseline: workspaceAuthoringBaseline(bulkSnapshot.current ?? workspace, command),
+      });
+    }
+  }
+  async function submitBulk() {
+    if (!workspace || !onBulk || bulkGuard.current) return;
+    let request = bulkRequest;
+    if (!request) {
+      const cards = area.cards.filter((card) => selectedIds.includes(card.id));
+      if (bulkAction === "tags") {
+        const tags = parseTagInput(bulkTags);
+        if (Either.isLeft(tags) || (Either.isRight(tags) && tags.right.length === 0)) {
+          setBulkError(Either.isLeft(tags) ? tags.left.message : "Enter at least one tag.");
+          return;
+        }
+        const command: WorkspaceAuthoringCommand = {
+          kind: "bulk-tag-cards",
+          areaId: area.id,
+          cardIds: cards.map((card) => card.id),
+          tags: tags.right,
+        };
+        request = {
+          command,
+          baseline: workspaceAuthoringBaseline(bulkSnapshot.current ?? workspace, command),
+        };
+      } else if (bulkAction === "move") {
+        const target = workspace.areas.find((item) => item.id === destination);
+        if (!target || target.id === area.id) {
+          setBulkError("Choose a different destination deck.");
+          return;
+        }
+        const ids = Effect.runSync(
+          Effect.either(
+            Effect.try({
+              try: () => cards.map((card) => ({ cardId: card.id, newCardId: crypto.randomUUID() })),
+              catch: () => ({ message: "Card identifiers could not be created. Try again." }),
+            }),
+          ),
+        );
+        if (Either.isLeft(ids)) {
+          setBulkError(ids.left.message);
+          return;
+        }
+        const commandInput: unknown = {
+          kind: "bulk-move-cards",
+          areaId: area.id,
+          targetAreaId: target.id,
+          cards: ids.right,
+        };
+        const command = Effect.runSync(
+          Effect.either(Schema.decodeUnknown(WorkspaceAuthoringCommandSchema)(commandInput)),
+        );
+        if (Either.isLeft(command)) {
+          setBulkError("This move could not be validated.");
+          return;
+        }
+        request = {
+          command: command.right,
+          baseline: workspaceAuthoringBaseline(bulkSnapshot.current ?? workspace, command.right),
+        };
+      }
+    }
+    if (!request) return;
+    setBulkRequest(request);
+    bulkGuard.current = true;
+    setBulkPending(true);
+    const outcome = await Effect.runPromise(
+      Effect.either(
+        Effect.tryPromise({
+          try: () => onBulk(request.command, request.baseline),
+          catch: () => ({ message: "The selection wasn’t saved. It is still available; retry." }),
+        }),
+      ),
+    );
+    bulkGuard.current = false;
+    setBulkPending(false);
+    if (Either.isLeft(outcome) || !outcome.right.ok) {
+      setBulkError(
+        Either.isLeft(outcome)
+          ? outcome.left.message
+          : (outcome.right.message ??
+              "Save not confirmed. The selection is still here. Retry saving or cancel to review it."),
+      );
+      return;
+    }
+    setSelected([]);
+    setBulkAction(null);
+    setBulkRequest(null);
+  }
   const fieldId = useId();
   const [duplicateScope, setDuplicateScope] = useState<"area" | "workspace">("area");
   const [scanDuplicates, setScanDuplicates] = useState(false);
@@ -124,11 +271,159 @@ export function KnowledgeAreaCardLibrary({
           ((card.objectiveIds ?? []).includes(objective.id) || card.objective === objective.title),
       ) ||
       `title:${card.objective}` === objectiveFilter;
-    return matchesQuery && matchesObjective;
+    return matchesQuery && matchesObjective && (!flaggedOnly || flaggedCardIds.includes(card.id));
   });
 
   return (
     <section aria-label="Card library" className="mt-0">
+      {onFlag && (
+        <Button
+          variant="secondary"
+          onClick={() => setFlaggedOnly(!flaggedOnly)}
+          aria-pressed={flaggedOnly}
+        >
+          {flaggedOnly
+            ? "Show all cards"
+            : `Flagged for editing (${area.cards.filter((card) => flaggedCardIds.includes(card.id)).length})`}
+        </Button>
+      )}
+      {onBulk && (
+        <div className="my-3 flex flex-wrap items-center gap-2" aria-label="Bulk card actions">
+          <Button
+            variant="secondary"
+            disabled={restoring || bulkPending || filteredCards.length === 0}
+            onClick={() =>
+              setSelected([...new Set([...selectedIds, ...filteredCards.map((card) => card.id)])])
+            }
+          >
+            Select visible cards
+          </Button>
+          <span className="text-sm" role="status">
+            {selectedIds.length} selected
+          </span>
+          {selectedIds.length > 0 && (
+            <>
+              <Button
+                variant="secondary"
+                disabled={restoring || bulkPending}
+                onClick={() => beginBulk("tags")}
+              >
+                Add tags
+              </Button>
+              <Button
+                variant="secondary"
+                disabled={restoring || bulkPending || (workspace?.areas.length ?? 0) < 2}
+                onClick={() => beginBulk("move")}
+              >
+                Move cards
+              </Button>
+              <Button
+                variant="secondary"
+                disabled={restoring || bulkPending}
+                onClick={() => beginBulk("delete")}
+              >
+                Delete selected
+              </Button>
+              <Button variant="secondary" disabled={bulkPending} onClick={() => setSelected([])}>
+                Clear selection
+              </Button>
+            </>
+          )}
+        </div>
+      )}
+      <Dialog
+        open={bulkAction !== null}
+        onOpenChange={(open) => {
+          if (!open && !bulkPending) {
+            setBulkAction(null);
+            setBulkRequest(null);
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {bulkAction === "tags"
+                ? "Add tags"
+                : bulkAction === "move"
+                  ? "Move selected cards"
+                  : "Delete selected cards"}
+            </DialogTitle>
+            <DialogDescription>
+              {selectedIds.length} selected cards.{" "}
+              {bulkAction === "move"
+                ? "Cards receive fresh schedules in the destination. Original reviews stay in Deleted cards; matching objectives are linked by title. Attachments and tags are retained."
+                : bulkAction === "delete"
+                  ? "Review history is preserved. Recover these cards from Deleted cards."
+                  : "New tags are added without changing schedules or review history."}
+            </DialogDescription>
+          </DialogHeader>
+          {bulkAction === "tags" && (
+            <label>
+              Tags (comma separated)
+              <Input
+                value={bulkTags}
+                disabled={bulkPending || Boolean(bulkRequest)}
+                onChange={(event) => setBulkTags(event.target.value)}
+              />
+            </label>
+          )}
+          {bulkAction === "move" && (
+            <label>
+              Destination deck
+              <Select
+                value={destination}
+                onValueChange={setDestination}
+                disabled={bulkPending || Boolean(bulkRequest)}
+              >
+                <SelectTrigger aria-label="Destination deck">
+                  <SelectValue placeholder="Choose a deck" />
+                </SelectTrigger>
+                <SelectContent>
+                  {workspace?.areas
+                    .filter((item) => item.id !== area.id)
+                    .map((item) => (
+                      <SelectItem key={item.id} value={item.id}>
+                        {item.title}
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+            </label>
+          )}
+          {bulkError && (
+            <p role="alert" className="text-sm text-destructive">
+              {bulkError}
+            </p>
+          )}
+          <DialogFooter>
+            <Button
+              variant="secondary"
+              disabled={bulkPending}
+              onClick={() => {
+                setBulkAction(null);
+                setBulkRequest(null);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              disabled={bulkPending || restoring || selectedIds.length === 0}
+              onClick={() => void submitBulk()}
+            >
+              {bulkPending
+                ? "Saving selection…"
+                : bulkRequest && bulkError
+                  ? "Retry selection"
+                  : bulkAction === "delete"
+                    ? "Confirm deletion"
+                    : bulkAction === "move"
+                      ? "Confirm move"
+                      : "Save tags"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       {showDeletedRecovery && deletedVersions.length > 0 && (
         <Collapsible className="py-4">
           <CollapsibleTrigger asChild>
@@ -292,6 +587,11 @@ export function KnowledgeAreaCardLibrary({
           <table className="w-full min-w-[420px] border-collapse text-sm" aria-label="Cards">
             <thead className="border-b border-[var(--line)] bg-[var(--surface-hover)]/50 text-left text-xs font-medium text-[var(--muted)]">
               <tr>
+                {onBulk && (
+                  <th scope="col" className="w-12 px-3 py-3">
+                    Select
+                  </th>
+                )}
                 <th className="px-4 py-3" scope="col">
                   Question
                 </th>
@@ -312,6 +612,22 @@ export function KnowledgeAreaCardLibrary({
             <tbody className="divide-y divide-[var(--line)]">
               {filteredCards.map((card) => (
                 <tr key={card.id} className="transition-colors hover:bg-[var(--surface-hover)]">
+                  {onBulk && (
+                    <td className="px-3 py-3">
+                      <Checkbox
+                        checked={selectedIds.includes(card.id)}
+                        disabled={restoring || bulkPending}
+                        aria-label={`Select card: ${card.front}`}
+                        onCheckedChange={(checked) =>
+                          setSelected((current) =>
+                            checked === true
+                              ? [...new Set([...current, card.id])]
+                              : current.filter((id) => id !== card.id),
+                          )
+                        }
+                      />
+                    </td>
+                  )}
                   <th className="max-w-0 px-4 py-3 text-left font-medium" scope="row">
                     <Collapsible>
                       <CollapsibleTrigger asChild>
@@ -324,6 +640,11 @@ export function KnowledgeAreaCardLibrary({
                             style={{ whiteSpace: "pre-wrap" }}
                           >
                             {card.front}
+                            {flaggedCardIds.includes(card.id) && (
+                              <span className="ml-2 text-xs text-muted-foreground">
+                                Flagged for editing
+                              </span>
+                            )}
                           </span>
                           <ChevronDown
                             className="mt-0.5 size-4 shrink-0 text-[var(--muted)] transition-transform group-data-[state=open]:rotate-180"
@@ -380,6 +701,13 @@ export function KnowledgeAreaCardLibrary({
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
                         <DropdownMenuItem onSelect={() => onEdit(card)}>Edit card</DropdownMenuItem>
+                        {onFlag && (
+                          <DropdownMenuItem onSelect={() => onFlag(card.id)}>
+                            {flaggedCardIds.includes(card.id)
+                              ? "Remove editing flag"
+                              : "Improve later"}
+                          </DropdownMenuItem>
+                        )}
                         <DropdownMenuItem variant="destructive" onSelect={() => onDelete(card)}>
                           Delete card
                         </DropdownMenuItem>
@@ -411,6 +739,7 @@ export function KnowledgeAreaCardLibrary({
                 onClick={() => {
                   setSearch("");
                   setObjectiveFilter("");
+                  setFlaggedOnly(false);
                 }}
               >
                 Clear filters

@@ -1,4 +1,5 @@
 import { normalizeReviewTimestamp } from "./review-timestamp";
+import { ActivityLibrarySchema } from "@recall/domain";
 import * as Schema from "effect/Schema";
 
 const DatabaseRowSchema = Schema.Record({ key: Schema.String, value: Schema.Unknown });
@@ -42,6 +43,7 @@ export const AccountExportResponseSchema = Schema.Struct({
     aiObservations: DatabaseRowsSchema,
     generatedCardProposals: DatabaseRowsSchema,
     aiUsage: DatabaseRowsSchema,
+    learningActivities: Schema.optional(ActivityLibrarySchema),
   }),
 });
 

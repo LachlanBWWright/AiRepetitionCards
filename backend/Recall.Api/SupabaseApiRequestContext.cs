@@ -14,12 +14,13 @@ internal sealed record SupabaseApiRequestContext(
     {
         var projectUrl = (configuration["SUPABASE_URL"] ?? configuration["NEXT_PUBLIC_SUPABASE_URL"])?.Trim();
         var publishableKey = (configuration["SUPABASE_PUBLISHABLE_KEY"] ?? configuration["NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY"])?.Trim();
-        if (!Uri.TryCreate(projectUrl, UriKind.Absolute, out var projectUri) ||
-            string.IsNullOrWhiteSpace(publishableKey) ||
-            (projectUri.Scheme != Uri.UriSchemeHttps && projectUri.Host != "localhost"))
+        if (!Uri.TryCreate(projectUrl, UriKind.Absolute, out var projectUri) || projectUri is null ||
+            string.IsNullOrWhiteSpace(publishableKey))
         {
             return new SupabaseApiRequestResult.Unavailable();
         }
+        if (projectUri.Scheme != Uri.UriSchemeHttps && !projectUri.IsLoopback)
+            return new SupabaseApiRequestResult.Unavailable();
 
         AuthenticateResult authentication;
         try

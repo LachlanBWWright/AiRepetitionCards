@@ -36,7 +36,8 @@
     "test:local-integration": "pnpm --filter @recall/verification test:local-integration",
     "test:e2e": "pnpm --filter web test:e2e",
     "check:pure": "pnpm test && pnpm test:local-integration && pnpm check:static",
-    "check": "pnpm test && pnpm test:local-integration && pnpm test:integration && pnpm check:static"
+    "check": "pnpm test && pnpm test:local-integration && pnpm test:integration && pnpm check:static",
+    "test:code-runner": "pnpm --filter @recall/verification test:code-runner"
   },
   "devDependencies": {
     "eslint": "^9.39.5",

@@ -20,6 +20,7 @@ export function NativeSelect({
     <View style={{ gap: 4 }}>
       <Text>{label}</Text>
       <select
+        aria-label={label}
         value={value}
         disabled={disabled}
         onChange={(event) => onValueChange(event.target.value)}
@@ -57,3 +58,5 @@ export function NativeTimePicker({
     />
   );
 }
+
+export { NativeTextField } from "../../../packages/ui-native/src/NativeTextField";

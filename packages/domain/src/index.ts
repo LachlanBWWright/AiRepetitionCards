@@ -1,3 +1,4 @@
+import { ActivityLibrarySchema, LearningActivitySchema } from "./learning-activities";
 import { Effect, Either, Schema } from "effect";
 import {
   AreaIdSchema,
@@ -168,7 +169,16 @@ export const KnowledgeAreaSchema = Schema.Struct({
   licence: Schema.NullOr(Schema.String),
   attribution: Schema.optional(Schema.NullOr(Schema.String.pipe(Schema.maxLength(500)))),
   forkedFromVersionId: Schema.optional(Schema.String.pipe(Schema.maxLength(80))),
-});
+  /** Portable authored definitions only. Private attempts, drafts and evidence remain in Workspace. */
+  activities: Schema.optional(Schema.Array(LearningActivitySchema).pipe(Schema.maxItems(500))),
+}).pipe(
+  Schema.filter(
+    (area) =>
+      area.activities === undefined ||
+      (area.activities.every((activity) => activity.areaId === area.id) &&
+        new Set(area.activities.map((activity) => activity.id)).size === area.activities.length),
+  ),
+);
 
 /** The first portable Knowledge Area shape, before language, AI policy, and card metadata. */
 const KnowledgeAreaV0_9Schema = Schema.Struct({
@@ -255,6 +265,7 @@ export const CardVersionSchema = Schema.Struct({
 export type CardVersion = typeof CardVersionSchema.Type;
 
 export const WorkspaceSchema = Schema.Struct({
+  activityLibrary: Schema.optional(ActivityLibrarySchema),
   cardVersions: Schema.optional(Schema.Array(CardVersionSchema)),
   retainedReviewAreas: Schema.optional(Schema.Array(LearningAreaSchema)),
   schemaVersion: Schema.Literal(1),
@@ -485,3 +496,5 @@ export const parseKnowledgeAreaJson = (raw: string) =>
       return Effect.succeed(area);
     }),
   );
+
+export * from "./learning-activities";

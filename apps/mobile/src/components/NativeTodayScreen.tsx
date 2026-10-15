@@ -4,10 +4,11 @@ import { ActivityIndicator, Image, Pressable, ScrollView, Text, View } from "rea
 import { SafeAreaView } from "react-native-safe-area-context";
 import { designTokens } from "@recall/design-tokens";
 import { NativeAudioAttachment } from "./NativeAudioAttachment";
-import type { Workspace, Assessment } from "@recall/domain";
-import type { ReviewRating } from "@recall/scheduler";
+import type { Workspace, Assessment, ReviewEvent } from "@recall/domain";
+import { previewReviewSchedules, type ReviewRating } from "@recall/scheduler";
+import { Effect, Either } from "effect";
 import { useState, type ReactNode } from "react";
-import { summarizeReviews } from "@recall/application";
+import { summarizeReviews, summarizeStudySession, formatReviewDelay } from "@recall/application";
 
 const palette = designTokens.color;
 
@@ -16,6 +17,12 @@ function dueNow(card: Assessment, now: number): boolean {
 }
 
 export type NativeTodayScreenProps = {
+  readonly deepPractice?: ReactNode;
+  readonly flaggedCardIds?: readonly string[];
+  readonly onFlag?: (id: string) => void;
+  readonly onEditFlagged?: () => void;
+  readonly sessionEvents?: readonly ReviewEvent[];
+  readonly onNextDeck?: () => void;
   readonly ready: boolean;
   readonly workspace: Workspace | null;
   readonly activeAreaId: string | null;
@@ -38,6 +45,12 @@ export type NativeTodayScreenProps = {
 };
 
 export function NativeTodayScreen({
+  deepPractice,
+  sessionEvents = [],
+  flaggedCardIds = [],
+  onFlag,
+  onEditFlagged,
+  onNextDeck,
   ready,
   workspace,
   activeAreaId,
@@ -74,6 +87,17 @@ export function NativeTodayScreen({
   const activeArea = workspace.areas.find((area) => area.id === activeAreaId) ?? workspace.areas[0];
   const dueCards = activeArea?.cards.filter((item) => dueNow(item, now)) ?? [];
   const card = dueCards[0];
+  const session = activeArea ? summarizeStudySession(activeArea, sessionEvents, now) : null;
+  const preview = card
+    ? Effect.runSync(
+        Effect.either(
+          previewReviewSchedules(card.schedule, new Date(now), workspace.schedulerSettings),
+        ),
+      )
+    : null;
+  const nextDeck = workspace.areas.find(
+    (area) => area.id !== activeArea?.id && area.cards.some((item) => dueNow(item, now)),
+  );
   const totalDue = activeArea?.cards.filter((item) => dueNow(item, now)).length ?? 0;
   const date = new Date(now);
   const totalReviews = summarizeReviews(
@@ -106,7 +130,7 @@ export function NativeTodayScreen({
           <View className={"mb-[8px]"}>
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel={`Study area: ${activeArea?.title ?? "Choose area"}`}
+              accessibilityLabel={`Deck: ${activeArea?.title ?? "Choose deck"}`}
               accessibilityState={{ expanded: choosingArea, disabled: reviewPending }}
               disabled={reviewPending}
               onPress={() => setChoosingArea((value) => !value)}
@@ -115,7 +139,7 @@ export function NativeTodayScreen({
               }
             >
               <Text className={"text-recall-ink text-[13px] font-semibold"}>
-                {activeArea?.title ?? "Choose area"}
+                {activeArea?.title ?? "Choose deck"}
               </Text>
               <Text className={"text-recall-muted text-[24px] mt-[-3px]"}>
                 {choosingArea ? "⌃" : "⌄"}
@@ -149,9 +173,18 @@ export function NativeTodayScreen({
           </View>
         )}
         <Text className={"text-recall-muted text-[14px] mb-[8px]"}>
-          {totalDue} due · {totalReviews} reviewed today
+          {session
+            ? `${session.reviewed} reviewed this session · ${session.remaining} remaining`
+            : `${totalDue} due`}{" "}
+          · {totalReviews} reviewed today
         </Text>
 
+        {session && card && (
+          <Text className="text-sm text-recall-muted">
+            {session.newCards} new · {session.learningCards} learning ·{" "}
+            {session.remaining - session.newCards - session.learningCards} review
+          </Text>
+        )}
         {message && (
           <Text
             accessibilityRole="alert"
@@ -169,6 +202,14 @@ export function NativeTodayScreen({
               <Text className={"text-recall-ink text-[17px] font-bold tracking-[-0.3px]"}>
                 {activeArea?.title ?? "Study"}
               </Text>
+            )}
+            {onFlag && (
+              <NativeButton
+                label={flaggedCardIds.includes(card.id) ? "Flagged for editing" : "Improve later"}
+                tone="soft"
+                disabled={reviewPending}
+                onPress={() => onFlag(card.id)}
+              />
             )}
             <Card
               className={
@@ -205,27 +246,38 @@ export function NativeTodayScreen({
                 </Text>
               )}
               {showAnswer ? (
-                <View className={"flex-row flex-wrap gap-[8px]"}>
-                  {(
-                    [
-                      ["again", "Again", palette.coral],
-                      ["hard", "Hard", palette.amber],
-                      ["good", "Good", palette.green],
-                      ["easy", "Easy", palette.violet],
-                    ] as const
-                  ).map(([rating, label, color]) => (
-                    <Pressable
-                      key={rating}
-                      accessibilityRole="button"
-                      disabled={reviewPending}
-                      accessibilityState={{ disabled: reviewPending, busy: reviewPending }}
-                      onPress={() => onReview(rating)}
-                      className={`${"grow basis-[45%] items-center justify-center min-h-[47px] rounded-[14px]"}`}
-                      style={[{ backgroundColor: color, opacity: reviewPending ? 0.5 : 1 }]}
-                    >
-                      <Text className={"text-recall-ink text-[13px] font-bold"}>{label}</Text>
-                    </Pressable>
-                  ))}
+                <View className="gap-3">
+                  <Text className="text-sm text-recall-muted">
+                    Again: forgot · Hard: recalled with difficulty · Good: recalled · Easy:
+                    effortless
+                  </Text>
+                  <View className={"flex-row flex-wrap gap-[8px]"}>
+                    {(
+                      [
+                        ["again", "Again", palette.coral],
+                        ["hard", "Hard", palette.amber],
+                        ["good", "Good", palette.green],
+                        ["easy", "Easy", palette.violet],
+                      ] as const
+                    ).map(([rating, label, color]) => (
+                      <Pressable
+                        key={rating}
+                        accessibilityRole="button"
+                        disabled={reviewPending}
+                        accessibilityState={{ disabled: reviewPending, busy: reviewPending }}
+                        onPress={() => onReview(rating)}
+                        className={`${"grow basis-[45%] items-center justify-center min-h-[47px] rounded-[14px]"}`}
+                        style={[{ backgroundColor: color, opacity: reviewPending ? 0.5 : 1 }]}
+                      >
+                        <Text className={"text-recall-ink text-[15px] font-bold"}>{label}</Text>
+                        {preview && Either.isRight(preview) && (
+                          <Text className="text-sm text-recall-ink">
+                            {formatReviewDelay(preview.right[rating].due, now)}
+                          </Text>
+                        )}
+                      </Pressable>
+                    ))}
+                  </View>
                 </View>
               ) : (
                 <NativeButton
@@ -237,18 +289,54 @@ export function NativeTodayScreen({
             </Card>
           </View>
         ) : (
-          <Text
-            accessibilityLiveRegion="polite"
-            className={"text-recall-muted text-[15px] mt-[20px] mb-[12px]"}
-          >
-            {activeArea
-              ? "You’re all caught up."
-              : "Create a learning area in Library to get started."}
-          </Text>
+          <Card className="mt-5 gap-3 p-5">
+            <Text accessibilityLiveRegion="polite" className="text-xl font-bold text-recall-ink">
+              {!activeArea
+                ? "Create your first deck"
+                : activeArea.cards.length === 0
+                  ? "Build your deck"
+                  : session && session.reviewed > 0
+                    ? `You’re caught up in ${activeArea.title}`
+                    : "Already caught up"}
+            </Text>
+            <Text className="text-sm text-recall-muted">
+              {!activeArea || activeArea.cards.length === 0
+                ? "Add cards in Library to start studying."
+                : session && session.reviewed > 0
+                  ? `${session.reviewed} ${session.reviewed === 1 ? "review" : "reviews"} this session · ${session.recalled} recalled.`
+                  : "No cards due right now."}
+            </Text>
+            {session?.nextReviewAt && (
+              <Text className="text-sm text-recall-muted">
+                Next review: {new Date(session.nextReviewAt).toLocaleString()}
+              </Text>
+            )}
+            {activeArea &&
+              onEditFlagged &&
+              activeArea.cards.some((entry) => flaggedCardIds.includes(entry.id)) && (
+                <NativeButton
+                  label={`Edit flagged cards (${activeArea.cards.filter((entry) => flaggedCardIds.includes(entry.id)).length})`}
+                  tone="soft"
+                  onPress={onEditFlagged}
+                />
+              )}
+            {nextDeck && onNextDeck && (
+              <NativeButton
+                label={`Review next deck · ${nextDeck.title}`}
+                disabled={reviewPending}
+                onPress={onNextDeck}
+              />
+            )}
+          </Card>
         )}
 
+        {deepPractice}
         {onOpenLibrary ? (
-          <NativeButton label="Open Library" tone="soft" onPress={onOpenLibrary} />
+          <NativeButton
+            label={activeArea?.cards.length ? "Back to Library" : "Add cards in Library"}
+            tone="soft"
+            onPress={onOpenLibrary}
+          />
         ) : (
           <>
             {authoringPanel}
@@ -257,7 +345,7 @@ export function NativeTodayScreen({
             <View className={"mt-[31px]"}>
               <View className={"flex-row justify-between items-center mb-[13px]"}>
                 <Text className={"text-recall-ink text-[17px] font-bold tracking-[-0.3px]"}>
-                  Learning areas
+                  Decks
                 </Text>
                 <Text className={"text-recall-muted text-[9px] font-extrabold tracking-[1.1px]"}>
                   {workspace?.areas.length ?? 0} AREAS

@@ -2,7 +2,8 @@ import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { Either, Schema } from "effect";
 import { WorkspaceSchema } from "@recall/domain";
 import { NativeTodayScreen } from "../../../mobile/src/components/NativeTodayScreen";
-import { mockWorkspace } from "../features/workspace/mock-data";
+import { NativePreviewProvider } from "../../../mobile/src/storybook/NativePreviewProvider";
+import { mockWorkspace, caughtUpWorkspace } from "../features/workspace/mock-data";
 import {
   deletedCardPendingWorkspace,
   deletedAreaPendingWorkspace,
@@ -13,6 +14,13 @@ const meta = {
   title: "Screens/Mobile Client",
   component: NativeTodayScreen,
   args: { onOpenLibrary: () => undefined },
+  decorators: [
+    (Story) => (
+      <NativePreviewProvider>
+        <Story />
+      </NativePreviewProvider>
+    ),
+  ],
   parameters: {
     layout: "fullscreen",
     docs: {
@@ -85,9 +93,9 @@ export const StudyCardWithMedia: Story = {
   },
 };
 
-export const CaughtUp: Story = {
+export const EmptyDeck: Story = {
   ...OfflineStudy,
-  name: "Study · caught up (native)",
+  name: "Study · empty deck (native)",
   args: {
     ...OfflineStudy.args,
     workspace: {
@@ -95,6 +103,17 @@ export const CaughtUp: Story = {
       areas: mockWorkspace.areas.map((area) => ({ ...area, cards: [] })),
     },
   },
+};
+
+export const CaughtUp: Story = {
+  ...OfflineStudy,
+  name: "Study · already caught up (native)",
+  args: { ...OfflineStudy.args, workspace: caughtUpWorkspace },
+};
+export const SessionFinished: Story = {
+  ...CaughtUp,
+  name: "Study · session finished (native)",
+  args: { ...CaughtUp.args, sessionEvents: mockWorkspace.reviewEvents ?? [] },
 };
 
 export const ReviewSaving: Story = {

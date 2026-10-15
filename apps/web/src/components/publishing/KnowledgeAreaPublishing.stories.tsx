@@ -101,7 +101,11 @@ function PublishingStory({
 }) {
   const selectedResult = media ? mediaAreaResult : areaResult;
   if (Either.isLeft(selectedResult))
-    return <main className="mx-auto mt-12 w-full max-w-5xl rounded-xl border bg-card p-5 shadow-sm sm:p-8">Story data could not be prepared.</main>;
+    return (
+      <main className="mx-auto mt-12 w-full max-w-5xl rounded-xl border bg-card p-5 shadow-sm sm:p-8">
+        Story data could not be prepared.
+      </main>
+    );
   const area =
     rights === "inherited"
       ? {
@@ -255,7 +259,7 @@ function mockPublicationResponse(request: PublishingHttpRequest, area: Knowledge
 }
 
 const meta = {
-  title: "Screens/Knowledge Area Sharing",
+  title: "Screens/Deck Sharing",
   component: PublishingStory,
   parameters: {
     layout: "fullscreen",

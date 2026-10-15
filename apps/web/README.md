@@ -5,3 +5,5 @@ The web app shell and navigation are available without an account. Reading, crea
 From the repository root, run `pnpm dev:api:next` to start the ASP.NET API, Next.js client, and local Supabase stack when needed. Web sign-in supports Apple and Google, with direct ChatGPT sign-in available when its SIWC configuration is enabled. Configure the OAuth provider credentials you use in Supabase. See the root [README](../../README.md#supabase-and-account-sign-in) for setup details.
 
 Mobile and Electron are the clients for local-only study. They keep their workspace in SQLite and can be used without an account.
+
+Deck reports can be reviewed at `/moderation`. The API enforces operator access for the moderation queue and all changes; the web client does not assign moderation roles.

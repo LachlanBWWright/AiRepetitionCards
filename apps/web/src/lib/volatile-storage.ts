@@ -30,6 +30,7 @@ export const volatileStorage = {
         "recall-chatgpt-proposal-session:",
         "recall-chatgpt-welcome:",
         "recall-knowledge-notebook:",
+        "recall-library-notes:",
         "recall-local-ai-usage",
         "recall-daily-reminders",
         "recall-pending-publication:",

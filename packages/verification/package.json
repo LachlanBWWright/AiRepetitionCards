@@ -7,7 +7,8 @@
     "test": "node scripts/run.mjs",
     "test:integration": "node scripts/run-integration.mjs",
     "test:local-integration": "node scripts/run-local-integration.mjs",
-    "typecheck": "tsc --noEmit --project tsconfig.json"
+    "typecheck": "tsc --noEmit --project tsconfig.json",
+    "test:code-runner": "node scripts/run-code-runner.mjs"
   },
   "devDependencies": {
     "@recall/ai-core": "workspace:*",

@@ -1,9 +1,19 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { Button } from "@recall/ui-web";
 import { NativeWorkspaceAuthoringPanel } from "../../../mobile/src/components/NativeWorkspaceAuthoringPanel";
 import { mockWorkspace } from "../features/workspace/mock-data";
 import { createAssessmentId, type Workspace } from "@recall/domain";
+import { Effect, Either } from "effect";
+import {
+  applyWorkspaceAuthoringCommand,
+  retainLibraryDraft,
+  discardLibraryDraft,
+  toggleCardFlag,
+  type LibraryDraft,
+} from "@recall/application";
+import { useLibraryNotes } from "../../../mobile/src/hooks/use-library-notes";
+import { createBrowserLibraryNotesStore } from "../lib/library-notes-store";
 const storyWorkspace: Workspace = mockWorkspace;
 const importedTagsWorkspace: Workspace = {
   ...storyWorkspace,
@@ -180,7 +190,9 @@ export const DuplicateCards: Story = {
   },
 };
 
-export const NewCardDraft: Story = { args: { initialEditor: "basic" } };
+export const NewCardDraft: Story = {
+  args: { initialEditor: "basic", createId: () => crypto.randomUUID() },
+};
 export const PendingSaveInteraction: Story = {
   args: { initialEditor: "edit-card" },
   render: function PendingSave(args) {
@@ -204,6 +216,50 @@ export const PendingSaveInteraction: Story = {
           </Button>
         )}
       </>
+    );
+  },
+};
+
+export const LibraryWorkflows: Story = {
+  render: function LibraryWorkflows(args) {
+    const [workspace, setWorkspace] = useState(storyWorkspace);
+    const [activeAreaId, setActiveAreaId] = useState<string | null>(
+      storyWorkspace.areas[0]?.id ?? null,
+    );
+    const [store] = useState(() => createBrowserLibraryNotesStore("native-library-story"));
+    const notes = useLibraryNotes(store);
+    const updateNotes = notes.update;
+    const retain = useCallback(
+      (draft: LibraryDraft) => updateNotes((current) => retainLibraryDraft(current, draft)),
+      [updateNotes],
+    );
+    const discard = useCallback(
+      (key: string) => updateNotes((current) => discardLibraryDraft(current, key)),
+      [updateNotes],
+    );
+    return (
+      <NativeWorkspaceAuthoringPanel
+        {...args}
+        workspace={workspace}
+        activeAreaId={activeAreaId}
+        createId={() => crypto.randomUUID()}
+        notes={notes.notes}
+        notesLoaded={notes.loaded}
+        onRetainDraft={retain}
+        onDiscardDraft={discard}
+        onFlushDraft={notes.flush}
+        onSelectDeck={setActiveAreaId}
+        onFlag={(id) => notes.update((current) => toggleCardFlag(current, id))}
+        onCommand={async (command, baseline) => {
+          const result = await Effect.runPromise(
+            Effect.either(applyWorkspaceAuthoringCommand(workspace, command, new Date(), baseline)),
+          );
+          if (Either.isLeft(result)) return { ok: false, message: result.left.message };
+          setWorkspace(result.right.workspace);
+          if (result.right.selectedAreaId) setActiveAreaId(result.right.selectedAreaId);
+          return { ok: true, message: result.right.message };
+        }}
+      />
     );
   },
 };

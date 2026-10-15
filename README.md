@@ -42,7 +42,109 @@ from a local file rather than a web server.
 
 ## Offline use and optional services
 
-Today opens directly to your review queue. Library contains area and card management;
+Today opens directly to your review queue. In Library, **New deck** creates a learning
+area (the subject containing your cards), then offers manual entry, generation from
+materials, or importing an existing deck. **Save and add another** keeps the editor
+open with the same card type and a fresh question; **Save and finish** returns to the
+library. Deck actions expose **Add card**, **Generate cards**, and **Review due cards**.
+Imports create separate decks and show their destination and card count before saving;
+Library offers separate **Import cards**, **Export deck**, and **Workspace backup** tools;
+Account also offers backup recovery.
+AI suggestions still require validation and individual approval. Studying approved
+cards opens the selected deck directly.
+
+Review screens show session counts, remaining new/learning/review cards, rating guidance,
+and deterministic next-review previews using the current retention setting. Session
+counts are temporary and reset when starting or switching decks; review history remains
+append-only. Empty decks, decks already caught up, and completed sessions have separate
+messages. Completion shows this session’s recall results and the next scheduled review,
+with a shortcut to another due deck. Cards can become due again during a session.
+
+Library shows a deck overview with due counts and next review dates. Card and deck
+editors retain incomplete drafts and confirm before discarding edits. Web drafts and
+attachments survive navigation within the current tab; mobile drafts persist locally.
+Drafts and review flags are private device preferences and are excluded from sync,
+publications, and workspace backups. Failed saves retain edits and offer a retry.
+
+Select multiple cards to add tags, move, or delete them in one atomic operation. Moving
+creates copies in the destination with fresh schedules and matching objective names;
+original review history remains associated with the originals in **Deleted cards**,
+where deleted content can be recovered. Review cards offer **Improve later**; session
+completion opens flagged cards in Library for editing. Saving an edit clears its flag.
+
+Library offers **Learning activities** alongside ordinary reviews: multiple choice, short
+answers, structured interrogation, and coding exercises. Activities can also wrap existing
+Basic/Cloze cards. Create or edit an activity, answer its prompts, review the proposed
+assessment, and explicitly accept it to record an attempt. Edit revisions and archived
+activities preserve all earlier attempt snapshots. Activity drafts and unfinished attempts
+can be saved and resumed. Objective evidence shows dimensions, self reports, assistance,
+and observed independent scores; recommendations suggest the next activity and estimated
+effort. These estimates do not claim mastery or automatically change FSRS schedules.
+Today separates quick recall reviews from **Deeper practice**, which shows recommended
+activities, their reason, and an estimated duration. **Start activity** opens the selected
+activity in Library; unfinished attempts can be resumed there.
+
+Multiple choice uses exact-match grading. Rubric-based activities support self-assessment
+and hosted AI assessment using the existing provider, quota, and token-budget adapters.
+Structured interrogation progresses through approved stages with up to ten questions in total,
+including AI follow-ups; learners approve each follow-up before answering it. Responses,
+activity payloads, and rubrics are untrusted content. Provider results are validated and
+remain proposals until accepted. Revising after feedback or revealing a reference records
+assistance. Uncertain or unavailable assessment preserves work without recording a failure.
+
+Coding exercises accept a synchronous JavaScript `solve` function and declarative JSON
+tests (`input` argument arrays and `expected` JSON values). **Run tests** executes only on
+the server, inside a read-only Docker container with no network, reduced privileges, memory,
+CPU, process, execution-time, and output limits. The trusted test harness remains outside
+the learner VM. Tests provide evidence for those cases, not a complexity proof. Build the
+runner image with `docker build -t recall-code-runner:1 apps/web/code-runner`; deployments
+need Docker and that image (override with `RECALL_CODE_IMAGE`). This runner supports only
+synchronous JavaScript and JSON inputs/outputs; it does not install dependencies, support
+other languages, or prove complexity. Hosted AI uses the API server's existing
+`OPENAI_API_KEY` and tutor model configuration. Runner and AI failures leave the response
+available for retry or self-assessment.
+
+Signed-in web activities persist in owner-scoped cloud storage. Native activities persist
+locally and **Synchronize activities** merges them with the account copy; hosted operations
+use bearer authentication through the general API. The ASP.NET API serves activity reads,
+writes, questions, and assessments. Activity definitions can be included in published
+releases, while attempts, answers, evidence, schedules, drafts, and unfinished work remain
+private. Server validation bounds activity libraries and writes; AI assessment output stays
+a proposal until the learner accepts it.
+Private workspace backups and account exports include activity content, attempts, and
+drafts. Accepted attempts are append-only and idempotent; synchronization detects conflicting
+content revisions rather than silently replacing them. Preserve a private backup before
+resolving conflicting edits; retry synchronization after a transient failure. Apply both
+`20261013090000_learning_activities.sql` and
+`20261013100000_harden_learning_activity_writes.sql` with
+`pnpm exec supabase migration up --local` for development. The latter enforces bounded
+libraries, account-owned deck references, immutable attempts, and monotonic content
+revisions at the database write boundary. Cloud writes pass through the fully validated
+API route using server-only `SUPABASE_SERVICE_ROLE_KEY`; direct authenticated RPC writes
+are disabled. Apply the hardening migration together with this app version before using cloud
+activity saves. Demo activities remain in tab
+memory. Portable card-only formats still carry Basic/Cloze content; activity libraries are
+available in private workspace backups.
+
+The plugin framework is in `packages/domain/src/learning-activities.ts` and
+`packages/application/src/learning-activities.ts`. Trusted composition registers namespaced,
+versioned `ActivityPlugin` implementations using `registerActivityPlugins`. Plugins declare
+capabilities, validate and present bounded JSON payloads, assess responses through Effect,
+and optionally migrate older versions. Shared validation checks evaluator results and
+objective identities. Unknown plugin versions retain their content and readable fallback;
+imported documents never install executable code. Domain/application packages have no
+React or provider dependencies. Web/native renderers, authenticated HTTP services, provider
+calls, and code execution are adapters. Historical snapshots never rerun an evaluator.
+Plugin authors implement presentation and assessment against validated payloads, declare
+supported platforms and assessment methods, and optionally migrate old payloads. Register
+implementations at application composition time and provide the appropriate platform UI
+and infrastructure adapters. Each evidence item identifies an objective, dimension,
+score, confidence, assistance, and assessment method; learner self-reports remain distinct
+from independent evidence. Recommendations are deterministic heuristics over accepted
+attempts, rather than a calibrated probability of mastery. Custom plugin installation,
+debugging, ordering/matching, and worked-problem editors are not bundled in this release.
+
+Library contains deck and card management;
 Tutor separates practice, study materials and suggestion review. AI editing tools
 open through **Improve**, while sources, history and advanced settings are expandable.
 Switching tutor activities preserves drafts and pending work.
@@ -157,6 +259,8 @@ Publishing preserves inherited attribution, license and fork lineage. Public/unl
 
 Forked areas can check for newer accessible public versions. Discovery excludes private and unlisted versions; an unavailable source needs an explicit author-provided share link. Review the structured differences before creating a separate copy; existing edits and review history remain intact.
 
+Shared decks have a public catalog, owner management, correction feedback, and per-copy follow subscriptions. Sharing is public publication or an unlisted exact-version link; there are no invitations or named viewer grants. Owners can withdraw remote access while retaining their history; downloaded copies remain personal content. Following a deck preserves its original fork lineage and never overwrites local edits. The updates inbox shows newer public releases and supports explicit read acknowledgment. Learners can review card, objective, and activity definition changes before applying them; review history and schedules are preserved. Learners can report releases or block publishers. Operators use the server-only comma-separated `RECALL_MODERATOR_USER_IDS` UUID allowlist to review reports and hide or restore decks; actions append to the moderation audit. Apply all pending Supabase migrations in order before enabling the API routes (`pnpm exec supabase migration up --local` for a local stack). The ASP.NET server needs `SUPABASE_SERVICE_ROLE_KEY` for immutable publication registration and moderation; keep it server-only. See the [sharing HTTP contract](docs/publishing-http.md) and [backend setup](backend/README.md#shared-deck-storage).
+
 ## Internal assessment model
 
 The shared domain names repeatable learning exercises `Assessment`, with
@@ -169,12 +273,12 @@ Existing serialized `cards` and `cardId` fields, API commands and database names
 retain their current format so saved workspaces, backups and review history remain
 compatible. The internal rename does not require a data migration.
 
-Other assessment formats and plugin checkers are future work. New formats should
-extend the validated content union; checking should run through application
-adapters that return validated evidence, independently of spaced repetition
-scheduling. A checker result should not silently replace a learner's review
-rating. `NotebookAssessment` remains the separate summary of evidence about a
-concept, rather than a scheduled exercise.
+Extensible exercises use the separate versioned `LearningActivity` envelope and plugin
+registry described above. Their accepted `LearningAttempt` snapshots preserve the content
+revision, response, evaluator identity/version, feedback, and objective evidence. Existing
+card formats and review commands remain compatible; activity evidence does not silently
+replace a learner's FSRS rating. `NotebookAssessment` remains the Tutor notebook's separate
+summary of evidence about a concept, rather than a scheduled exercise.
 
 ## Adaptive assessment and the knowledge notebook
 
@@ -361,7 +465,7 @@ See the [implementation completion audit](docs/implementation-audit.md) for sour
 - Web and Electron share framework-independent buttons, dialogs, empty states, status badges, and their styles through `@recall/ui-web`. The source-owned [shadcn/Radix foundation](docs/adr/0006-web-ui-foundation.md) supports composed links and a semantic Tailwind theme.
 - Native clients share React Native buttons, status badges, and empty states through `@recall/ui-native`; Storybook includes full-screen action, caught-up, and offline mock states.
 
-The repository's deep research report describes the wider target architecture. Tutor sessions, typed observations, and card proposals persist privately in Supabase and can be resumed on the current device. AI token usage and a 30-request daily account quota are implemented; all 13 local database migrations and generated database types are in place, while runtime RLS checks, authenticated usage validation, and broader cross-device conflict validation remain. Desktop supports local study, encrypted sign-in, authenticated API access, and a main-process SQLite media store; signed packaging and device-level runtime validation remain. Web uses account-backed study data with only tab-memory drafts; mobile supports local image/audio attachments, hash-verified media ZIP packages, and private workspace backups that preserve local review history, schedules, and media. Full-screen media editing, review, publishing, token lifecycle, and Anki import states are captured in Storybook, with screenshots captured by the explicit local screenshot command. Browser SQL.js, Electron `node:sqlite`, and Expo SQLite adapters now read Anki Basic/Cloze cards and bounded revlog history from legacy `collection.anki2`, uncompressed `collection.anki21`, and normalized v18 `.anki21b` collections; modern field/deck/notetype rows are normalized through a shared decoder. The importer decompresses and validates `.anki21b` media with bounded Zstandard and protobuf decoding. Imported review logs append as review events and rebuild FSRS schedules; Anki intervals/due dates and broader template variants remain unsupported. Web sharing publishes verified image/audio media and creates persisted independent forks; shared Electron/mobile publication transports and a native mobile publishing panel use the shared client, with server-backed token rotation/revocation. Runtime native validation remains.
+The repository's deep research report describes the wider target architecture. Tutor sessions, typed observations, and card proposals persist privately in Supabase and can be resumed on the current device. AI token usage and a 30-request daily account quota are implemented; database migrations and generated database types are in place, while runtime RLS checks, authenticated usage validation, and broader cross-device conflict validation remain. Desktop supports local study, encrypted sign-in, authenticated API access, and a main-process SQLite media store; signed packaging and device-level runtime validation remain. Web uses account-backed study data with only tab-memory drafts; mobile supports local image/audio attachments, hash-verified media ZIP packages, and private workspace backups that preserve local review history, schedules, and media. Full-screen media editing, review, publishing, token lifecycle, and Anki import states are captured in Storybook, with screenshots captured by the explicit local screenshot command. Browser SQL.js, Electron `node:sqlite`, and Expo SQLite adapters now read Anki Basic/Cloze cards and bounded revlog history from legacy `collection.anki2`, uncompressed `collection.anki21`, and normalized v18 `.anki21b` collections; modern field/deck/notetype rows are normalized through a shared decoder. The importer decompresses and validates `.anki21b` media with bounded Zstandard and protobuf decoding. Imported review logs append as review events and rebuild FSRS schedules; Anki intervals/due dates and broader template variants remain unsupported. Web sharing publishes verified image/audio media and creates persisted independent forks; shared Electron/mobile publication transports and a native mobile publishing panel use the shared client, with server-backed token rotation/revocation. Runtime native validation remains.
 
 ## Useful commands
 

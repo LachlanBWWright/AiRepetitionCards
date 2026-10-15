@@ -7,19 +7,15 @@ import type { MediaReference } from "@recall/domain";
 import { verifyMediaAsset } from "@recall/application";
 import { ipcMain, safeStorage } from "electron";
 import type { BrowserWindow, IpcMainInvokeEvent } from "electron";
+import { isDesktopApiPathAllowed } from "./desktop-api-path";
+import type { DesktopApiMethod } from "./desktop-api-path";
 
 const DesktopRequestSchema = Schema.Struct({
   path: Schema.String.pipe(Schema.maxLength(512)),
-  method: Schema.Literal("GET", "POST", "PATCH", "DELETE"),
+  method: Schema.Literal("GET", "POST", "PUT", "PATCH", "DELETE"),
   body: Schema.NullOr(Schema.String.pipe(Schema.maxLength(5_000_000))),
   expectedOwnerId: Schema.optional(Schema.UUID),
 });
-const DesktopApiPathPatterns = {
-  GET: /^\/api\/v1\/(?:workspace|sync(?:\?cursor=\d{1,20})?|tutor(?:\?sessionId=[0-9a-f-]{1,80})?|tutor\/privacy|account\/export|published\/[0-9a-f-]{36}(?:\/updates(?:\?(?:sourceAreaId=[0-9a-f-]{36}(?:&token=[A-Za-z0-9_-]{43})?|token=[A-Za-z0-9_-]{43}))?|\?token=[A-Za-z0-9_-]{43})?)$/i,
-  POST: /^\/api\/v1\/(?:workspace|sync|workspace\/(?:area-tombstones|review-identities)|tutor|account\/delete|knowledge-areas|published\/[0-9a-f-]{36}\/fork)$/i,
-  DELETE: /^\/api\/v1\/tutor\/privacy$/i,
-  PATCH: /^\/api\/v1\/tutor$|^\/api\/v1\/published\/[0-9a-f-]{36}\/token$/i,
-} as const;
 const DesktopMediaRequestSchema = Schema.Struct({
   path: Schema.String.pipe(Schema.maxLength(512)),
   method: Schema.Union(Schema.Literal("GET"), Schema.Literal("POST")),
@@ -314,7 +310,8 @@ export function registerDesktopServices(
     if (!trustedSender(event) || !authClient || !recallApiUrl) return failure();
     const decoded = Schema.decodeUnknownEither(DesktopRequestSchema)(input);
     if (Either.isLeft(decoded)) return failure();
-    if (!DesktopApiPathPatterns[decoded.right.method].test(decoded.right.path)) return failure();
+    if (!isDesktopApiPathAllowed(decoded.right.method as DesktopApiMethod, decoded.right.path))
+      return failure();
     const baseUrl = Effect.try({
       try: () => new URL(recallApiUrl),
       catch: (): ApiFailure => ({ _tag: "DesktopApiFailure" }),

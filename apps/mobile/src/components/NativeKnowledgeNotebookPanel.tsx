@@ -48,7 +48,7 @@ import { NativeCardAssistancePanel } from "./NativeCardAssistancePanel";
 import { NativeStudyMaterialsPanel } from "./NativeStudyMaterialsPanel";
 
 const NotebookSection = {
-  Practice: "Practice",
+  Practice: "Tutor practice",
   StudyMaterials: "Study materials",
   ReviewSuggestions: "Review suggestions",
 } as const;
@@ -73,8 +73,10 @@ export function NativeKnowledgeNotebookPanel({
   mayWrite,
   onApproveProposal,
   onStartReview,
+  initialActivity,
 }: {
   readonly onStartReview?: (() => void) | undefined;
+  readonly initialActivity?: "materials" | undefined;
   readonly area: KnowledgeArea;
   readonly searchTarget?: WorkspaceSearchTarget | undefined;
   readonly duplicateCandidates?: readonly CardDuplicateCandidate[];
@@ -90,9 +92,11 @@ export function NativeKnowledgeNotebookPanel({
   ) => Promise<{ readonly cardId: string; readonly content: CardProposal } | null>;
 }) {
   const [section, setSection] = useState<NotebookSection>(
-    storageNamespace === "knowledge-notebook"
-      ? NotebookSection.Practice
-      : NotebookSection.ReviewSuggestions,
+    initialActivity === "materials"
+      ? NotebookSection.StudyMaterials
+      : storageNamespace === "knowledge-notebook"
+        ? NotebookSection.Practice
+        : NotebookSection.ReviewSuggestions,
   );
   const [duplicateAcknowledgement, setDuplicateAcknowledgement] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
@@ -936,7 +940,7 @@ export function NativeKnowledgeNotebookPanel({
                 if (isCurrent()) await start();
               })
             }
-            label={section === NotebookSection.StudyMaterials ? "Start" : "Start practice"}
+            label={section === NotebookSection.StudyMaterials ? "Start" : "Start tutor practice"}
             className={
               "min-h-[40px] justify-center items-center px-[13px] rounded-[10px] bg-recall-darkGreen"
             }
@@ -949,7 +953,9 @@ export function NativeKnowledgeNotebookPanel({
             <Text className={"text-recall-ink text-[14px] font-bold"}>{notebook.goal}</Text>
             {notebook.session.phase === "finished" ? (
               <View className={"gap-[7px] py-[12px] border-t border-t-recall-line"}>
-                <Text className={"text-recall-ink font-bold text-[13px]"}>Practice complete</Text>
+                <Text className={"text-recall-ink font-bold text-[13px]"}>
+                  Tutor practice complete
+                </Text>
                 <Text className={"text-recall-muted text-[11px] leading-[16px]"}>
                   {notebook.evidence.length} evidence items ·{" "}
                   {notebook.proposals.filter((item) => item.status === "accepted").length} approved
@@ -977,7 +983,7 @@ export function NativeKnowledgeNotebookPanel({
                     if (isCurrent()) await start();
                   })
                 }
-                label="Continue practice"
+                label="Continue tutor practice"
                 className={
                   "min-h-[40px] justify-center items-center px-[13px] rounded-[10px] bg-recall-darkGreen"
                 }
@@ -1160,7 +1166,7 @@ export function NativeKnowledgeNotebookPanel({
                 {notebook.session.phase === "active"
                   ? `Question ${notebook.session.askedQuestions}/${notebook.session.maxQuestions} · ${notebook.session.requestsUsed}/${notebook.session.maxRequests} tutor requests`
                   : notebook.session.phase === "finished"
-                    ? "Practice finished"
+                    ? "Tutor practice finished"
                     : "Ready"}
               </Text>
               <ScrollView className={"max-h-[190px]"}>
@@ -1219,6 +1225,13 @@ export function NativeKnowledgeNotebookPanel({
             </View>
           </View>
           <View className={section === NotebookSection.ReviewSuggestions ? "gap-[11px]" : "hidden"}>
+            {onStartReview && notebook.proposals.some((item) => item.status === "accepted") && (
+              <NativeButton
+                label="Review saved cards"
+                disabled={busy || !!unsaved}
+                onPress={onStartReview}
+              />
+            )}
             <NativeButton
               disabled={busy || !!unsaved || !api || !mayWrite()}
               onPress={() => void proposeBatch()}

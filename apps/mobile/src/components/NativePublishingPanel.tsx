@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, Text, TextInput, View } from "react-native";
 import { Effect, Either } from "effect";
 import { designTokens } from "@recall/design-tokens";
@@ -17,6 +17,8 @@ import {
 } from "@recall/application";
 import type { KnowledgeArea } from "@recall/domain";
 import type { MediaStore, StoredMediaAsset } from "@recall/local-store";
+import { NativeDeckUpdatePanel } from "./NativeDeckUpdatePanel";
+import { NativeDeckVersionSamples } from "./NativeDeckVersionSamples";
 
 const palette = designTokens.color;
 
@@ -33,10 +35,12 @@ export function NativePublishingPanel({
   initialPublication,
   initialVersionId,
   initialUpstreamUpdate,
+  initialToken,
   forkOperationStore,
   createForkOperationId,
   publicationOperationStore,
   createPublishShareToken,
+  onUpdate,
 }: {
   readonly area: KnowledgeArea | null;
   readonly initialUpstreamUpdate?: UpstreamUpdateState;
@@ -57,10 +61,17 @@ export function NativePublishingPanel({
     readonly license: string | null;
   } | null;
   readonly initialVersionId?: string;
+  readonly initialToken?: string;
   readonly forkOperationStore: PublicationForkOperationStore;
   readonly createForkOperationId: () => string;
   readonly publicationOperationStore: PublicationOperationStore;
   readonly createPublishShareToken: () => string;
+  readonly onUpdate?: (
+    area: KnowledgeArea,
+    versionId: string,
+    advanceBaseline: boolean,
+    assets: readonly StoredMediaAsset[],
+  ) => Promise<boolean>;
 }) {
   const upstreamArea = lineageArea?.forkedFromVersionId
     ? lineageArea
@@ -83,13 +94,14 @@ export function NativePublishingPanel({
   const [mode, setMode] = useState<"publish" | "receive">(
     initialPublication ? "receive" : "publish",
   );
-  const [visibility, setVisibility] = useState<"private" | "unlisted" | "public">("unlisted");
+  const [visibility, setVisibility] = useState<"unlisted" | "public">("unlisted");
+  const [releaseNotes, setReleaseNotes] = useState("");
   const [attribution, setAttribution] = useState(area?.attribution ?? "");
   const [license, setLicense] = useState(area?.licence ?? "");
   const [reuseConfirmed, setReuseConfirmed] = useState(false);
   const needsReuseConfirmation = area ? publicationNeedsReuseConfirmation(area, license) : true;
   const [versionId, setVersionId] = useState(initialVersionId ?? "");
-  const [token, setToken] = useState("");
+  const [token, setToken] = useState(initialToken ?? "");
   const [shareToken, setShareToken] = useState<string | null>(null);
   const [publication, setPublication] = useState<{
     readonly versionId: string;
@@ -119,6 +131,21 @@ export function NativePublishingPanel({
   const [forkConflict, setForkConflict] = useState(false);
   const [publicationConflict, setPublicationConflict] = useState(false);
   const [busy, setBusy] = useState(false);
+  const receiveHandler = useRef<(versionId: string) => Promise<void>>(async () => undefined);
+  useEffect(() => {
+    receiveHandler.current = receive;
+  });
+  useEffect(() => {
+    if (!initialVersionId) return;
+    const timer = setTimeout(() => {
+      setMode("receive");
+      setVersionId(initialVersionId);
+      setToken(initialToken ?? "");
+      void receiveHandler.current(initialVersionId);
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [initialToken, initialVersionId]);
+
   async function checkUpstreamUpdates(): Promise<void> {
     const sourceVersionId = upstreamArea?.forkedFromVersionId;
     const api = clients?.publishing;
@@ -147,10 +174,7 @@ export function NativePublishingPanel({
 
   async function publish() {
     if (!area || !mediaStore) return;
-    if (
-      visibility !== "private" &&
-      (!license.trim() || (needsReuseConfirmation && !reuseConfirmed))
-    ) {
+    if (!license.trim() || (needsReuseConfirmation && !reuseConfirmed)) {
       setNotice("Choose a license and confirm you have permission to share this content.");
       return;
     }
@@ -190,6 +214,7 @@ export function NativePublishingPanel({
             sourceAreaId: area.id,
             content: area,
             visibility,
+            releaseNotes: releaseNotes.trim(),
             attribution: attribution.trim() || null,
             license: license.trim() || null,
             forkedFromVersionId: area.forkedFromVersionId ?? null,
@@ -244,15 +269,12 @@ export function NativePublishingPanel({
     setComparisonFailed(false);
     const result = await Effect.runPromise(
       Effect.either(
-        api.publishing.read(
-          exactVersionId ?? versionId.trim(),
-          exactVersionId ? undefined : token.trim() || undefined,
-        ),
+        api.publishing.read(exactVersionId ?? versionId.trim(), token.trim() || undefined),
       ),
     );
     if (Either.isLeft(result)) {
       setPublication(null);
-      setNotice("Could not load this shared Knowledge Area.");
+      setNotice("Could not load this shared Deck.");
     } else {
       if (upstreamArea) {
         const compared = Effect.runSync(
@@ -268,7 +290,7 @@ export function NativePublishingPanel({
       }
       setPublication({
         versionId: result.right.version.id,
-        token: exactVersionId ? null : token.trim() || null,
+        token: token.trim() || null,
         document: result.right.version.content,
         attribution: result.right.version.attribution,
         license: result.right.version.license,
@@ -308,7 +330,7 @@ export function NativePublishingPanel({
       ),
     );
     if (Either.isLeft(result)) {
-      setNotice("Could not create a personal copy of this Knowledge Area.");
+      setNotice("Could not create a personal copy of this Deck.");
       setForkConflict(
         result.left._tag === "PublishingApiFailure" &&
           result.left.reason === "http" &&
@@ -404,13 +426,14 @@ export function NativePublishingPanel({
       {mode === "publish" && (
         <>
           <Text className={"text-recall-muted text-[12px] leading-[18px]"}>
-            Only content is shared. Your review history and schedule stay private.
+            Choose public discovery or an unlisted link. Your review history and schedule stay
+            private.
           </Text>
           <Text className={"text-recall-ink text-[14px] font-bold mt-[4px]"}>
             Publish {area ? `“${area.title}”` : "an area"}
           </Text>
           <View className={"flex-row gap-[8px]"}>
-            {(["unlisted", "public", "private"] as const).map((item) => (
+            {(["unlisted", "public"] as const).map((item) => (
               <Pressable
                 key={item}
                 accessibilityRole="button"
@@ -427,10 +450,20 @@ export function NativePublishingPanel({
           <Text className={"text-recall-muted text-[12px] leading-[18px]"}>
             {visibility === "public"
               ? "Anyone can find and view this area."
-              : visibility === "unlisted"
-                ? "Anyone with the share token can view this area."
-                : "Only your account can view this area."}
+              : "Anyone with the share token can view this area."}
           </Text>
+          <TextInput
+            accessibilityLabel="Release notes"
+            onChangeText={setReleaseNotes}
+            placeholder="What changed in this release? (optional)"
+            placeholderTextColor={palette.muted}
+            maxLength={4_000}
+            multiline
+            className={
+              "min-h-[72px] px-[12px] py-[10px] rounded-[9px] bg-recall-paper text-recall-ink"
+            }
+            value={releaseNotes}
+          />
           <TextInput
             accessibilityLabel="Attribution"
             onChangeText={setAttribution}
@@ -452,7 +485,7 @@ export function NativePublishingPanel({
             className={"min-h-[42px] px-[12px] rounded-[9px] bg-recall-paper text-recall-ink"}
             value={license}
           />
-          {visibility !== "private" && needsReuseConfirmation && (
+          {needsReuseConfirmation && (
             <Pressable
               accessibilityRole="checkbox"
               accessibilityState={{ checked: reuseConfirmed }}
@@ -471,8 +504,8 @@ export function NativePublishingPanel({
               busy ||
               !area ||
               !mediaStore ||
-              (visibility !== "private" &&
-                (!license.trim() || (needsReuseConfirmation && !reuseConfirmed)))
+              !license.trim() ||
+              (needsReuseConfirmation && !reuseConfirmed)
             }
             onPress={() => void publish()}
             className={
@@ -592,6 +625,7 @@ export function NativePublishingPanel({
               <Text className={"text-recall-muted text-[12px] leading-[18px]"}>
                 {publication.document.cards.length} cards
               </Text>
+              <NativeDeckVersionSamples cards={publication.document.cards} />
               {comparison ? (
                 <View
                   accessibilityLabel="Upstream version comparison"
@@ -625,6 +659,21 @@ export function NativePublishingPanel({
                 >
                   The shared version loaded, but its differences could not be compared.
                 </Text>
+              ) : null}
+              {onUpdate &&
+              area?.sourceId === publication.document.id &&
+              area.forkedFromVersionId !== publication.versionId ? (
+                <NativeDeckUpdatePanel
+                  key={`${area.id}:${area.forkedFromVersionId}:${publication.versionId}:${JSON.stringify(area)}`}
+                  current={area}
+                  upstream={publication.document}
+                  versionId={publication.versionId}
+                  {...(publication.token ? { token: publication.token } : {})}
+                  publishing={clients.publishing}
+                  media={clients.media}
+                  createId={createForkOperationId}
+                  onSave={onUpdate}
+                />
               ) : null}
               <Pressable
                 accessibilityRole="button"

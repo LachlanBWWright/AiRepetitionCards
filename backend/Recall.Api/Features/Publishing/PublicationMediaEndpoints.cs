@@ -18,6 +18,7 @@ public static partial class PublishingEndpoints
         var identity = principal is null ? null : SupabaseUserIdentity.TryResolve(principal);
         var authorization = context.Request.Headers.Authorization.ToString();
         if (identity is null || !authorization.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase)) return Error("unauthenticated", 401);
+        if (!DeckOwnerHeaderMatches(context, identity.UserId)) return Error("unauthenticated", 401);
         if (!ValidMediaId(mediaId)) return Error("invalid-media-reference", 400);
         if (!TryConfiguration(configuration, out var projectUrl, out var key)) return Error("media-unavailable", 503);
         if (context.Request.ContentLength is > MaximumPublishedMediaBytes) return Error("media-too-large", 413);
@@ -69,17 +70,20 @@ public static partial class PublishingEndpoints
         var token = query.TryGetValue("token", out tokenValues) ? tokenValues.ToString() : null;
         if (token is not null && !ValidShareToken(token)) return Error("published-media-not-found", 404);
         if (!TryConfiguration(configuration, out var projectUrl, out var key)) return Error("media-unavailable", 503);
+        var principal = await AuthenticateBearerAsync(context);
+        var requester = principal is null ? null : SupabaseUserIdentity.TryResolve(principal)?.UserId;
+        if (!DeckOwnerHeaderMatches(context, requester)) return Error("unauthenticated", 401);
+        var bearer = context.Request.Headers.Authorization.ToString();
+        var accessToken = bearer.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase) ? bearer[7..].Trim() : null;
         using var client = clients.CreateClient();
-        using var publicationResponse = token is null
-            ? await GetAsync(client, projectUrl, key,
-                $"published_knowledge_area_versions?select=id,owner_id,content,content_hash,visibility&id=eq.{publicationId:D}&visibility=eq.public&limit=1", null, cancellationToken)
-            : await PostRpcAsync(client, projectUrl, key, "read_unlisted_knowledge_area_version_for_media",
-                new { p_version_id = publicationId, p_share_token_hash = Hash(token) }, cancellationToken);
+        using var publicationResponse = await PostRpcAsync(client, projectUrl, key, "read_deck_version_for_media",
+            new { p_version_id = publicationId, p_requester_id = requester, p_share_token_hash = token is null ? null : Hash(token) }, cancellationToken, accessToken);
         if (!publicationResponse.IsSuccessStatusCode) return Error("published-media-not-found", 404);
         using var publicationJson = await ParseJsonAsync(publicationResponse, cancellationToken);
         var publication = publicationJson is null ? null : FirstRow(publicationJson.RootElement);
         if (publication is null || !TryGuid(publication.Value, "id", out var returnedId) || returnedId != publicationId ||
             !TryGuid(publication.Value, "owner_id", out var ownerId) ||
+            !TryString(publication.Value, "visibility", out var visibility) || visibility is not ("private" or "unlisted" or "public") ||
             !publication.Value.TryGetProperty("content", out var content) || content.ValueKind != JsonValueKind.Object ||
             !TryString(publication.Value, "content_hash", out var contentHash))
             return Error("published-media-not-found", 404);
@@ -91,7 +95,7 @@ public static partial class PublishingEndpoints
         if (reference is null) return Error("published-media-not-found", 404);
 
         var storagePath = $"object/authenticated/published-media/{ownerId:D}/{mediaId}";
-        using var storageRequest = BuildRequest(HttpMethod.Get, projectUrl, key, storagePath, key);
+        using var storageRequest = BuildRequest(HttpMethod.Get, projectUrl, key, storagePath, requester is null ? null : accessToken);
         storageRequest.Headers.TryAddWithoutValidation("x-recall-publication-version-id", publicationId.ToString("D"));
         if (token is not null) storageRequest.Headers.TryAddWithoutValidation("x-recall-share-token-hash", Hash(token));
         using var storageResponse = await SendAsync(client, storageRequest, cancellationToken);
@@ -100,7 +104,8 @@ public static partial class PublishingEndpoints
         try { bytes = await storageResponse.Content.ReadAsByteArrayAsync(cancellationToken); }
         catch (IOException) { return Error("media-unavailable", 503); }
         if (!ValidMediaAsset(reference, bytes)) return Error("published-media-not-found", 404);
-        context.Response.Headers.CacheControl = token is null ? "public, max-age=300" : "private, no-store";
+        context.Response.Headers.CacheControl = requester is null && token is null && visibility == "public"
+            ? "public, max-age=300" : "private, no-store";
         context.Response.Headers["X-Content-Type-Options"] = "nosniff";
         context.Response.Headers["Cross-Origin-Resource-Policy"] = "cross-origin";
         return Results.Bytes(bytes, reference.MimeType);

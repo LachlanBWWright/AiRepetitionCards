@@ -69,11 +69,29 @@ export class SharedRef {}
 export class NativeModule {}
 export class CodedError extends Error {}
 export const Platform = { OS: "web" } as const;
-export const requireOptionalNativeModule = (_name: string) => null;
-export const requireNativeModule = (_name: string) => ({}) as never;
-export const requireNativeViewManager = (_name: string) => "div";
-export const registerWebModule = (_module: unknown, _name?: string) => _module;
-export const registerNativeModule = (_module: unknown, _name?: string) => _module;
+export const requireOptionalNativeModule = (name: string) => {
+  void name;
+  return null;
+};
+export const requireNativeModule = (name: string) => {
+  void name;
+  return {} as never;
+};
+export const requireNativeViewManager = (name: string) => {
+  void name;
+  return "div";
+};
+export const registerWebModule = (module: unknown, name?: string) => {
+  void name;
+  return module;
+};
+export const registerNativeModule = (module: unknown, name?: string) => {
+  void name;
+  return module;
+};
 export const reloadAppAsync = async () => undefined;
-export const registerRootComponent = (_component: unknown) => undefined;
+export const registerRootComponent = (component: unknown) => {
+  void component;
+  return undefined;
+};
 export const TextNode = Text;

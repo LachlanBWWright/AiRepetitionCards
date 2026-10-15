@@ -57,12 +57,16 @@ async function rejected<A, E extends { readonly reason: string }>(
   assert.equal(result.left.reason, reason);
 }
 
-/** Only the browser storage and lock ports are mocked; application/store code is real. */
+/** Desktop-backed storage and browser lock ports are mocked; application/store code is real. */
 function browserFixture() {
   const records = new Map<string, string>();
   const reads = new Map<string, number>();
   let lockRequests = 0;
   const storage = {
+    get length() {
+      return records.size;
+    },
+    key: (index: number) => [...records.keys()][index] ?? null,
     getItem: (key: string) => {
       reads.set(key, (reads.get(key) ?? 0) + 1);
       return records.get(key) ?? null;
@@ -78,6 +82,7 @@ function browserFixture() {
   Object.defineProperty(globalThis, "window", {
     configurable: true,
     value: {
+      recallDesktop: {},
       localStorage: storage,
       navigator: {
         locks: {
@@ -129,7 +134,7 @@ await test("browser notebook search indexes only requested namespaces and curren
     assert.equal(fixture.reads.get(notebookKey("desktop:user-a")), 1);
     assert.equal(fixture.reads.has(notebookKey("desktop:user-b")), false);
     assert.equal(fixture.reads.has(notebookKey("hosted", otherAreaId)), false);
-    assert.equal(fixture.lockRequests, 2);
+    assert.equal(fixture.lockRequests, 0);
   } finally {
     fixture.restore();
   }
@@ -215,10 +220,6 @@ await test("pending review blocks search/store mutations and cleanup permanently
     const failedCleanup = await success(coordinateLocalErasure(Effect.succeed(false)));
     assert.equal(failedCleanup, false);
     assert.equal(localWritesBlocked(), true);
-    assert.equal(
-      fixture.records.get("recall-local-data-epoch"),
-      JSON.stringify({ epoch: 1, erasing: true }),
-    );
     assert.equal(fixture.records.has(notebookKey("hosted")), true);
     await rejected(store.read(), "unavailable");
     await rejected(store.write(notebook()), "unavailable");
@@ -232,10 +233,6 @@ await test("pending review blocks search/store mutations and cleanup permanently
     );
     assert.equal(erased, true);
     assert.equal(localWritesBlocked(), true);
-    assert.equal(
-      fixture.records.get("recall-local-data-epoch"),
-      JSON.stringify({ epoch: 2, erasing: false }),
-    );
     await rejected(store.read(), "unavailable");
     await rejected(store.write(notebook()), "unavailable");
     await rejected(store.clear(), "unavailable");

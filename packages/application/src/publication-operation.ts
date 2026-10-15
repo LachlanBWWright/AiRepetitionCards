@@ -61,6 +61,7 @@ export function publicationRequestFingerprint(request: PublishKnowledgeAreaReque
     visibility: request.visibility,
     attribution: request.attribution ?? null,
     license: request.license ?? null,
+    releaseNotes: request.releaseNotes ?? "",
     forkedFromVersionId: request.forkedFromVersionId ?? null,
   });
 }

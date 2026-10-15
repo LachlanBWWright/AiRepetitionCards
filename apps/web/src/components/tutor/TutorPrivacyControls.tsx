@@ -38,7 +38,7 @@ export function TutorPrivacyView({
     <section aria-label="Tutor privacy">
       <h3 className="text-base font-semibold">Tutor privacy</h3>
       <p>
-        Tutoring sends the selected learning area, your answers and relevant conversation to OpenAI.
+        Tutoring sends the selected deck, your answers and relevant conversation to OpenAI.
         {local
           ? " Conversation history is saved on this device for this ChatGPT account."
           : " Conversation history is saved to your Recall account."}{" "}

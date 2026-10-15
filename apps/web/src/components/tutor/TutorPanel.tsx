@@ -76,6 +76,7 @@ export function TutorPanel({
   privacyApi = tutorPrivacyApi,
   reviewEvents,
   onStartReview,
+  initialActivity,
   clock = Date.now,
   searchTarget,
 }: {
@@ -95,6 +96,7 @@ export function TutorPanel({
   privacyApi?: typeof tutorPrivacyApi;
   reviewEvents?: readonly ReviewEvent[];
   onStartReview?: () => void;
+  readonly initialActivity?: "materials" | undefined;
   clock?: () => number;
   searchTarget?: WorkspaceSearchTarget;
 }) {
@@ -287,7 +289,7 @@ export function TutorPanel({
             questions: [
               {
                 prompt: "What key idea explains this objective?",
-                expectedAnswer: "Use the key concept described in the learning area.",
+                expectedAnswer: "Use the key concept described in the deck.",
               },
               {
                 prompt: "How would you apply this idea to a new example?",
@@ -614,6 +616,7 @@ export function TutorPanel({
       <KnowledgeNotebookPanel
         key={`${sessionNamespace}:${knowledgeArea.id}`}
         knowledgeArea={knowledgeArea}
+        {...(initialActivity ? { initialActivity } : {})}
         duplicateCandidates={duplicateCandidates}
         api={api}
         sessionNamespace={sessionNamespace}
@@ -625,7 +628,7 @@ export function TutorPanel({
       />
       <Collapsible className="my-5 rounded-xl border border-border bg-card p-5">
         <CollapsibleTrigger className="w-full rounded-md text-left text-base font-semibold hover:text-primary">
-          Quick practice
+          Quick tutor practice
         </CollapsibleTrigger>
         <CollapsibleContent>
           <section
@@ -635,7 +638,7 @@ export function TutorPanel({
             <div className="flex items-center justify-between gap-3">
               <div>
                 <h2 className="text-lg font-semibold" id="tutor-panel-title">
-                  Quick practice
+                  Quick tutor practice
                 </h2>
               </div>
               {history.length === 0 ? (
@@ -692,7 +695,7 @@ export function TutorPanel({
                 aria-labelledby="tutor-gaps-title"
               >
                 <h3 className="mb-2 text-sm font-semibold" id="tutor-gaps-title">
-                  Practice topics
+                  Tutor practice topics
                 </h3>
                 {visibleGaps.map((gap) => (
                   <div
@@ -1099,7 +1102,7 @@ export function TutorPanel({
         )}
       >
         <CollapsibleTrigger className="w-full text-left font-medium">
-          Quick practice suggestions
+          Quick tutor practice suggestions
         </CollapsibleTrigger>
         <CollapsibleContent>
           <section

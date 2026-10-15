@@ -79,7 +79,7 @@ export function NativePracticeInsights({
                   {card?.front ?? "Deleted card"}
                 </Text>
                 <Text className={"text-recall-muted text-[12px] leading-[18px]"}>
-                  {area?.title ?? "Deleted learning area"} · {ratingLabels[event.rating]}
+                  {area?.title ?? "Deleted deck"} · {ratingLabels[event.rating]}
                 </Text>
                 <Text className={"text-recall-muted text-[12px] leading-[18px]"}>
                   {Number.isFinite(Date.parse(event.ratedAt))

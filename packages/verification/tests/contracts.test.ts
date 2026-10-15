@@ -10,6 +10,7 @@ import {
   ResolveTutorProposalResponseSchema,
 } from "@recall/ai-core";
 import {
+  createPublicationFork,
   createPublishingApi,
   preparePublication,
   publicationContentHash,
@@ -808,4 +809,68 @@ void test("publication client binds acknowledgments to intent, document and prov
     assert.ok(result.left._tag === "PublishingApiFailure");
     assert.equal(result.left.reason, "invalid-response");
   }
+});
+
+void test("publication fork shares definitions, remaps identities, and excludes private study history", () => {
+  const activity = {
+    id: "custom-activity",
+    areaId: first,
+    title: "Recall",
+    pluginId: "recall.basic",
+    pluginVersion: 1,
+    revision: 1,
+    objectiveIds: [third],
+    fallback: "Question",
+    payload: { cardId: second, prompts: ["Question"], rubric: "Recall", reference: "Answer" },
+  } as const;
+  const unknown = {
+    ...activity,
+    id: "future-activity",
+    pluginId: "community.diagram",
+    payload: { opaque: { cardId: second, nodes: [true, null, 3] } },
+  } as const;
+  const portable = valid(KnowledgeAreaSchema, {
+    ...document,
+    activities: [activity, unknown],
+    activityLibrary: {
+      version: 1,
+      activities: [activity],
+      attempts: [{ id: "private-attempt", response: { answers: ["secret"] } }],
+      drafts: [{ id: "private-draft", response: { answers: ["secret"] } }],
+      editorDrafts: [{ id: "private-editor", fields: { answer: "secret" } }],
+    },
+  });
+  assert.deepEqual(
+    Object.keys(portable).sort(),
+    Object.keys(document).sort().concat("activities").sort(),
+  );
+  assert.deepEqual(
+    portable.activities?.map((entry) => entry.id),
+    ["custom-activity", "future-activity"],
+  );
+  const fork = Effect.runSync(
+    createPublicationFork({
+      ownerId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+      operationId: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+      sourceVersionId: "ffffffff-ffff-4fff-8fff-ffffffffffff",
+      source: portable,
+      attribution: null,
+      license: null,
+    }),
+  );
+  const forked = fork.document.activities ?? [];
+  assert.equal(forked.length, 2);
+  const forkedBuiltin = forked[0];
+  const forkedUnknown = forked[1];
+  const forkedObjective = fork.document.objectives[0];
+  const forkedCard = fork.document.cards[0];
+  assert.ok(forkedBuiltin);
+  assert.ok(forkedUnknown);
+  assert.ok(forkedObjective);
+  assert.ok(forkedCard);
+  assert.notEqual(forkedBuiltin.id, activity.id);
+  assert.equal(forkedBuiltin.areaId, fork.document.id);
+  assert.deepEqual(forkedBuiltin.objectiveIds, [forkedObjective.id]);
+  assert.equal(forkedBuiltin.payload.cardId, forkedCard.id);
+  assert.deepEqual(forkedUnknown.payload, unknown.payload);
 });

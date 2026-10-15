@@ -52,12 +52,14 @@ export function NativeTutorPanel({
   onSessionIdChange,
   onApproveProposal,
   onStartReview,
+  initialActivity,
   objectiveGaps = [],
   initialProposalDraft,
   initialNotice = null,
   initialAnswer = "",
 }: {
   readonly onStartReview?: () => void;
+  readonly initialActivity?: "materials" | undefined;
   readonly initialProposalDraft?: { readonly proposalId: string; readonly content: CardProposal };
   readonly initialNotice?: string | null;
   readonly initialAnswer?: string;
@@ -621,6 +623,7 @@ export function NativeTutorPanel({
         mayWrite={mayWrite}
         onApproveProposal={onApproveProposal}
         onStartReview={onStartReview}
+        initialActivity={initialActivity}
       />
       <NativeButton
         label={showRefinementNotebook ? "Hide split suggestions" : "Split suggestions"}

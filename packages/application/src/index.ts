@@ -43,6 +43,19 @@ export { expandCloze, renderCloze, renderClozeCard, MAX_CLOZE_TEXT_LENGTH } from
 export type { ClozeFailure, RenderedCloze } from "./cloze";
 export { fromKnowledgeArea, toKnowledgeArea } from "./knowledge-area-interchange";
 export { diffKnowledgeAreas } from "./knowledge-area-diff";
+export { createDeckSharingApi } from "./deck-sharing-api";
+export type {
+  DeckSharingApi,
+  DeckSharingFailure,
+  DeckSharingTransport,
+  DeckSharingHttpRequest,
+  DeckSharingHttpResponse,
+} from "./deck-sharing-api";
+export { applySelectedDeckUpdate } from "./deck-updates";
+export type { DeckUpdateFailure, DeckUpdateInput, DeckUpdateResult } from "./deck-updates";
+export { applyDeckWorkspaceUpdate } from "./apply-deck-workspace-update";
+export type { ApplyDeckWorkspaceUpdateFailure } from "./apply-deck-workspace-update";
+export { retainPublishedActivityDefinitions } from "./published-activity-library";
 export { AreaSettingsSchema, updateAreaSettings } from "./area-settings";
 export { deleteLearningArea, saveLearningArea } from "./area-management";
 export type { AreaDeletionResult, AreaManagementFailure } from "./area-management";
@@ -436,3 +449,23 @@ export type {
 } from "./workspace-search";
 
 export * from "./card-history";
+export { summarizeStudySession, formatReviewDelay } from "./study-session";
+export {
+  LibraryDraftSchema,
+  LibraryNotesSchema,
+  emptyLibraryNotes,
+  retainLibraryDraft,
+  discardLibraryDraft,
+  toggleCardFlag,
+  reconcileLibraryNotesWrite,
+} from "./library-notes";
+export type {
+  LibraryDraft,
+  LibraryNotes,
+  LibraryNotesFailure,
+  LibraryNotesStore,
+} from "./library-notes";
+
+export * from "./learning-activities";
+
+export * from "./activity-services";

@@ -263,3 +263,4 @@ export function decodeSyncPullQuery(
 export * from "./tutor-privacy";
 export * from "./workspace-review-identities";
 export * from "./api-rate-limit";
+export * from "./deck-sharing";

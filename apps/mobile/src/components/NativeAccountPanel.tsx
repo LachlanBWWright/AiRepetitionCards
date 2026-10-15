@@ -426,7 +426,7 @@ export function NativeAccountPanel({
               <Text className={"text-recall-muted text-[12px]"}>
                 {conflictAreas.length
                   ? conflictAreas.join(" · ")
-                  : "All learning areas were deleted on the server."}
+                  : "All decks were deleted on the server."}
               </Text>
               <Text className={"text-recall-muted text-[12px]"}>
                 Loading it replaces local area content and keeps review history.

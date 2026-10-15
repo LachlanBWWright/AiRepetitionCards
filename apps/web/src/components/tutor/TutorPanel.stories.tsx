@@ -101,7 +101,9 @@ const meta = {
     (Story: () => JSX.Element) => (
       <main className="mx-auto min-h-screen max-w-5xl space-y-6 bg-background p-8">
         <div>
-          <p className="mb-1 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">RECALL · CELL BIOLOGY</p>
+          <p className="mb-1 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+            RECALL · CELL BIOLOGY
+          </p>
           <h1>Learn through a conversation.</h1>
           <p>AI feedback stays evidence-based, and proposed cards wait for your approval.</p>
           <Story />
@@ -445,7 +447,7 @@ export const LargeAreaContext: Story = {
         { role: "assistant", content: "How does selective permeability support cell function?" },
       ],
       message:
-        "A bounded selection keeps this 500-card learning area available for tutor practice. Hosted mode requires its latest content to be synchronized first.",
+        "A bounded selection keeps this 500-card deck available for tutor practice. Hosted mode requires its latest content to be synchronized first.",
     },
   },
 };

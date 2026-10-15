@@ -637,7 +637,7 @@ export function KnowledgeNotebookPanel({
       </div>
       <h2 className="text-xl font-semibold">
         {activity === "practice"
-          ? "Practice"
+          ? "Tutor practice"
           : activity === "materials"
             ? "Study materials"
             : "Review suggestions"}
@@ -656,7 +656,7 @@ export function KnowledgeNotebookPanel({
         >
           {(
             [
-              ["practice", "Practice"],
+              ["practice", "Tutor practice"],
               ["materials", "Study materials"],
               ["suggestions", "Review suggestions"],
             ] as const
@@ -744,7 +744,7 @@ export function KnowledgeNotebookPanel({
             disabled={busy || !loaded || unsaved || (!notebook && !goal.trim())}
             onClick={begin}
           >
-            {notebook ? "Start practice" : "Start"}
+            {notebook ? "Start tutor practice" : "Start"}
           </Button>
         )}
       </div>
@@ -1343,7 +1343,7 @@ export function KnowledgeNotebookPanel({
                   ))}
                 {onStartReview && (
                   <Button type="button" variant="primary" onClick={onStartReview}>
-                    Review cards
+                    Study saved cards
                   </Button>
                 )}
               </>

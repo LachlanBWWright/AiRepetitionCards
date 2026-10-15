@@ -1,5 +1,10 @@
 import { Effect, Either, Schema } from "effect";
-import { KnowledgeAreaSchema, type KnowledgeArea } from "@recall/domain";
+import {
+  KnowledgeAreaSchema,
+  type ActivityJson,
+  type KnowledgeArea,
+  type LearningActivity,
+} from "@recall/domain";
 import { stableSyncId } from "@recall/sync-core";
 import { expandCloze } from "./cloze";
 
@@ -13,7 +18,7 @@ export type KnowledgeAreaDiffFailure =
   | {
       readonly _tag: "KnowledgeAreaDiffDuplicateId";
       readonly side: "baseline" | "candidate";
-      readonly entity: "objective" | "card";
+      readonly entity: "objective" | "card" | "activity";
       readonly id: string;
     }
   | { readonly _tag: "KnowledgeAreaDiffInvalidCloze"; readonly side: "baseline" | "candidate" };
@@ -38,6 +43,7 @@ export type KnowledgeAreaDiff = {
   readonly metadata: readonly KnowledgeAreaMetadataChange[];
   readonly objectives: KnowledgeAreaEntityChanges<KnowledgeArea["objectives"][number]>;
   readonly cards: KnowledgeAreaEntityChanges<KnowledgeArea["cards"][number]>;
+  readonly activities: KnowledgeAreaEntityChanges<LearningActivity>;
 };
 
 const metadataFields: readonly KnowledgeAreaMetadataField[] = [
@@ -176,10 +182,79 @@ const changesByCanonicalCard = (
   return { added, changed, removed };
 };
 
+const stableCardIds = (area: KnowledgeArea): ReadonlyMap<string, string> =>
+  new Map(area.cards.map((card) => [card.id, stableEntityId(card)]));
+
+const stableBuiltinPayload = (
+  value: ActivityJson,
+  cardIds: ReadonlyMap<string, string>,
+): ActivityJson => {
+  if (Array.isArray(value))
+    return (value as readonly ActivityJson[]).map((entry: ActivityJson) =>
+      stableBuiltinPayload(entry, cardIds),
+    );
+  if (value === null || typeof value !== "object") return value;
+  return Object.fromEntries(
+    Object.entries(value as Readonly<Record<string, ActivityJson>>).map(
+      ([key, entry]): [string, ActivityJson] => {
+        if (key === "cardId" && typeof entry === "string")
+          return [key, cardIds.get(entry) ?? entry];
+        if (key === "cardIds" && Array.isArray(entry))
+          return [
+            key,
+            (entry as readonly ActivityJson[]).map((id: ActivityJson) =>
+              typeof id === "string" ? (cardIds.get(id) ?? id) : id,
+            ),
+          ];
+        return [key, stableBuiltinPayload(entry, cardIds)];
+      },
+    ),
+  );
+};
+
+const stableActivityContent = (
+  activity: LearningActivity,
+  objectiveIds: ReadonlyMap<string, string>,
+  cardIds: ReadonlyMap<string, string>,
+): string =>
+  stableJson({
+    ...activity,
+    id: undefined,
+    sourceId: undefined,
+    areaId: undefined,
+    objectiveIds: activity.objectiveIds.map((id) => objectiveIds.get(id) ?? id),
+    ...(activity.pluginId.startsWith("recall.")
+      ? { payload: stableBuiltinPayload(activity.payload, cardIds) }
+      : {}),
+  });
+
+const changesByActivityId = (
+  before: readonly LearningActivity[],
+  after: readonly LearningActivity[],
+  objectiveIdsBefore: ReadonlyMap<string, string>,
+  objectiveIdsAfter: ReadonlyMap<string, string>,
+  cardIdsBefore: ReadonlyMap<string, string>,
+  cardIdsAfter: ReadonlyMap<string, string>,
+): KnowledgeAreaEntityChanges<LearningActivity> => {
+  const beforeById = new Map(before.map((item) => [stableEntityId(item), item]));
+  const afterById = new Map(after.map((item) => [stableEntityId(item), item]));
+  const added = after.filter((item) => !beforeById.has(stableEntityId(item)));
+  const removed = before.filter((item) => !afterById.has(stableEntityId(item)));
+  const changed = after.flatMap((item) => {
+    const previous = beforeById.get(stableEntityId(item));
+    return previous !== undefined &&
+      stableActivityContent(previous, objectiveIdsBefore, cardIdsBefore) !==
+        stableActivityContent(item, objectiveIdsAfter, cardIdsAfter)
+      ? [{ before: previous, after: item }]
+      : [];
+  });
+  return { added, changed, removed };
+};
+
 const duplicateFailure = (
   values: readonly StableEntity[],
   side: "baseline" | "candidate",
-  entity: "objective" | "card",
+  entity: "objective" | "card" | "activity",
 ): KnowledgeAreaDiffFailure | undefined => {
   const seen = new Set<string>();
   for (const value of values) {
@@ -221,6 +296,8 @@ export const diffKnowledgeAreas = (input: {
       if (objectiveFailure) return yield* Effect.fail(objectiveFailure);
       const cardFailure = duplicateFailure(area.cards, side, "card");
       if (cardFailure) return yield* Effect.fail(cardFailure);
+      const activityFailure = duplicateFailure(area.activities ?? [], side, "activity");
+      if (activityFailure) return yield* Effect.fail(activityFailure);
     }
 
     const stableObjectiveIds = (area: KnowledgeArea): ReadonlyMap<string, string> =>
@@ -250,5 +327,13 @@ export const diffKnowledgeAreas = (input: {
         candidateObjectiveIds,
       ),
       cards: changesByCanonicalCard(baselineCards, candidateCards),
+      activities: changesByActivityId(
+        baseline.activities ?? [],
+        candidate.activities ?? [],
+        baselineObjectiveIds,
+        candidateObjectiveIds,
+        stableCardIds(baseline),
+        stableCardIds(candidate),
+      ),
     };
   });

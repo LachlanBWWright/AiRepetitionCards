@@ -199,6 +199,267 @@ export type Database = {
           },
         ];
       };
+      deck_feedback: {
+        Row: {
+          card_id: string | null;
+          created_at: string;
+          deck_id: string;
+          id: string;
+          kind: string;
+          message: string;
+          status: string;
+          updated_at: string;
+          user_id: string;
+          version_id: string;
+        };
+        Insert: {
+          card_id?: string | null;
+          created_at?: string;
+          deck_id: string;
+          id: string;
+          kind: string;
+          message: string;
+          status?: string;
+          updated_at?: string;
+          user_id: string;
+          version_id: string;
+        };
+        Update: {
+          card_id?: string | null;
+          created_at?: string;
+          deck_id?: string;
+          id?: string;
+          kind?: string;
+          message?: string;
+          status?: string;
+          updated_at?: string;
+          user_id?: string;
+          version_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "deck_feedback_deck_id_fkey";
+            columns: ["deck_id"];
+            isOneToOne: false;
+            referencedRelation: "shared_decks";
+            referencedColumns: ["deck_id"];
+          },
+          {
+            foreignKeyName: "deck_feedback_version_id_fkey";
+            columns: ["version_id"];
+            isOneToOne: false;
+            referencedRelation: "published_knowledge_area_versions";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      deck_moderation_audit: {
+        Row: {
+          action: string;
+          actor_id: string;
+          created_at: string;
+          id: number;
+          reason: string;
+          target_id: string;
+        };
+        Insert: {
+          action: string;
+          actor_id: string;
+          created_at?: string;
+          id?: never;
+          reason: string;
+          target_id: string;
+        };
+        Update: {
+          action?: string;
+          actor_id?: string;
+          created_at?: string;
+          id?: never;
+          reason?: string;
+          target_id?: string;
+        };
+        Relationships: [];
+      };
+      deck_publisher_blocks: {
+        Row: {
+          created_at: string;
+          publisher_id: string;
+          user_id: string;
+        };
+        Insert: {
+          created_at?: string;
+          publisher_id: string;
+          user_id: string;
+        };
+        Update: {
+          created_at?: string;
+          publisher_id?: string;
+          user_id?: string;
+        };
+        Relationships: [];
+      };
+      deck_reports: {
+        Row: {
+          created_at: string;
+          deck_id: string;
+          id: string;
+          message: string;
+          reason: string;
+          status: string;
+          user_id: string;
+          version_id: string;
+        };
+        Insert: {
+          created_at?: string;
+          deck_id: string;
+          id: string;
+          message: string;
+          reason: string;
+          status?: string;
+          user_id: string;
+          version_id: string;
+        };
+        Update: {
+          created_at?: string;
+          deck_id?: string;
+          id?: string;
+          message?: string;
+          reason?: string;
+          status?: string;
+          user_id?: string;
+          version_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "deck_reports_deck_id_fkey";
+            columns: ["deck_id"];
+            isOneToOne: false;
+            referencedRelation: "shared_decks";
+            referencedColumns: ["deck_id"];
+          },
+          {
+            foreignKeyName: "deck_reports_version_id_fkey";
+            columns: ["version_id"];
+            isOneToOne: false;
+            referencedRelation: "published_knowledge_area_versions";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      deck_subscriptions: {
+        Row: {
+          area_id: string;
+          deck_id: string;
+          following: boolean;
+          updated_at: string;
+          user_id: string;
+          version_id: string;
+        };
+        Insert: {
+          area_id: string;
+          deck_id: string;
+          following?: boolean;
+          updated_at?: string;
+          user_id: string;
+          version_id: string;
+        };
+        Update: {
+          area_id?: string;
+          deck_id?: string;
+          following?: boolean;
+          updated_at?: string;
+          user_id?: string;
+          version_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "deck_subscriptions_area_id_fkey";
+            columns: ["area_id"];
+            isOneToOne: false;
+            referencedRelation: "knowledge_areas";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "deck_subscriptions_deck_id_fkey";
+            columns: ["deck_id"];
+            isOneToOne: false;
+            referencedRelation: "shared_decks";
+            referencedColumns: ["deck_id"];
+          },
+          {
+            foreignKeyName: "deck_subscriptions_version_id_fkey";
+            columns: ["version_id"];
+            isOneToOne: false;
+            referencedRelation: "published_knowledge_area_versions";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      deck_update_reads: {
+        Row: {
+          area_id: string;
+          read_at: string;
+          user_id: string;
+          version_id: string;
+        };
+        Insert: {
+          area_id: string;
+          read_at?: string;
+          user_id: string;
+          version_id: string;
+        };
+        Update: {
+          area_id?: string;
+          read_at?: string;
+          user_id?: string;
+          version_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "deck_update_reads_area_id_fkey";
+            columns: ["area_id"];
+            isOneToOne: false;
+            referencedRelation: "knowledge_areas";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "deck_update_reads_version_id_fkey";
+            columns: ["version_id"];
+            isOneToOne: false;
+            referencedRelation: "published_knowledge_area_versions";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      deck_viewer_grants: {
+        Row: {
+          created_at: string;
+          deck_id: string;
+          role: string;
+          user_id: string;
+        };
+        Insert: {
+          created_at?: string;
+          deck_id: string;
+          role?: string;
+          user_id: string;
+        };
+        Update: {
+          created_at?: string;
+          deck_id?: string;
+          role?: string;
+          user_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "deck_viewer_grants_deck_id_fkey";
+            columns: ["deck_id"];
+            isOneToOne: false;
+            referencedRelation: "shared_decks";
+            referencedColumns: ["deck_id"];
+          },
+        ];
+      };
       generated_card_proposals: {
         Row: {
           approved_card_id: string | null;
@@ -363,6 +624,27 @@ export type Database = {
         };
         Relationships: [];
       };
+      learning_activity_libraries: {
+        Row: {
+          library: NonNullable<Json>;
+          revision: number;
+          updated_at: string;
+          user_id: string;
+        };
+        Insert: {
+          library?: NonNullable<Json>;
+          revision?: number;
+          updated_at?: string;
+          user_id: string;
+        };
+        Update: {
+          library?: NonNullable<Json>;
+          revision?: number;
+          updated_at?: string;
+          user_id?: string;
+        };
+        Relationships: [];
+      };
       learning_objectives: {
         Row: {
           created_at: string;
@@ -466,6 +748,7 @@ export type Database = {
           id: string;
           license: string | null;
           owner_id: string | null;
+          release_notes: string;
           share_token_hash: string | null;
           source_area_id: string | null;
           version: number;
@@ -481,6 +764,7 @@ export type Database = {
           id: string;
           license?: string | null;
           owner_id?: string | null;
+          release_notes?: string;
           share_token_hash?: string | null;
           source_area_id?: string | null;
           version: number;
@@ -496,6 +780,7 @@ export type Database = {
           id?: string;
           license?: string | null;
           owner_id?: string | null;
+          release_notes?: string;
           share_token_hash?: string | null;
           source_area_id?: string | null;
           version?: number;
@@ -639,6 +924,81 @@ export type Database = {
             isOneToOne: false;
             referencedRelation: "review_events";
             referencedColumns: ["user_id", "card_id", "id"];
+          },
+        ];
+      };
+      shared_decks: {
+        Row: {
+          attribution: string | null;
+          author_name: string;
+          card_count: number;
+          created_at: string;
+          deck_id: string;
+          description: string;
+          language: string;
+          latest_version_id: string;
+          license: string | null;
+          moderation_status: string;
+          owner_id: string;
+          status: string;
+          tags: string[];
+          title: string;
+          updated_at: string;
+          version: number;
+          visibility: string;
+        };
+        Insert: {
+          attribution?: string | null;
+          author_name?: string;
+          card_count?: number;
+          created_at?: string;
+          deck_id: string;
+          description?: string;
+          language?: string;
+          latest_version_id: string;
+          license?: string | null;
+          moderation_status?: string;
+          owner_id: string;
+          status?: string;
+          tags?: string[];
+          title?: string;
+          updated_at?: string;
+          version: number;
+          visibility: string;
+        };
+        Update: {
+          attribution?: string | null;
+          author_name?: string;
+          card_count?: number;
+          created_at?: string;
+          deck_id?: string;
+          description?: string;
+          language?: string;
+          latest_version_id?: string;
+          license?: string | null;
+          moderation_status?: string;
+          owner_id?: string;
+          status?: string;
+          tags?: string[];
+          title?: string;
+          updated_at?: string;
+          version?: number;
+          visibility?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "shared_decks_deck_id_fkey";
+            columns: ["deck_id"];
+            isOneToOne: true;
+            referencedRelation: "knowledge_areas";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "shared_decks_latest_version_id_fkey";
+            columns: ["latest_version_id"];
+            isOneToOne: false;
+            referencedRelation: "published_knowledge_area_versions";
+            referencedColumns: ["id"];
           },
         ];
       };
@@ -808,9 +1168,182 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
+      acknowledge_deck_subscription_update: {
+        Args: { p_area_id: string; p_user_id: string; p_version_id: string };
+        Returns: {
+          area_id: string;
+          created_at: string;
+          deck_id: string;
+          known_version_id: string;
+          latest_version: number;
+          latest_version_id: string;
+          release_notes: string;
+          seen: boolean;
+          title: string;
+        }[];
+      };
+      can_access_active_deck: { Args: { p_deck_id: string; p_user_id?: string }; Returns: boolean };
+      can_follow_deck_snapshot: {
+        Args: { p_area_id: string; p_deck_id: string; p_user_id: string; p_version_id: string };
+        Returns: boolean;
+      };
+      create_deck_publication: {
+        Args: {
+          p_attribution: string;
+          p_content: Json;
+          p_content_hash: string;
+          p_forked_from_version_id: string;
+          p_license: string;
+          p_operation_id: string;
+          p_owner_id: string;
+          p_release_notes?: string;
+          p_share_token_hash: string;
+          p_source_area_id: string;
+          p_version_id: string;
+          p_visibility: string;
+        };
+        Returns: {
+          attribution: string | null;
+          content: NonNullable<Json>;
+          content_hash: string;
+          created_at: string;
+          created_by: string | null;
+          forked_from_version_id: string | null;
+          id: string;
+          license: string | null;
+          owner_id: string | null;
+          release_notes: string;
+          share_token_hash: string | null;
+          source_area_id: string | null;
+          version: number;
+          visibility: string;
+        }[];
+        SetofOptions: {
+          from: "*";
+          to: "published_knowledge_area_versions";
+          isOneToOne: false;
+          isSetofReturn: true;
+        };
+      };
+      create_deck_report: {
+        Args: {
+          p_deck_id: string;
+          p_id: string;
+          p_message: string;
+          p_reason: string;
+          p_share_token_hash?: string;
+          p_user_id: string;
+          p_version_id: string;
+        };
+        Returns: {
+          id: string;
+          status: string;
+        }[];
+      };
       erase_account_data: { Args: { p_user_id: string }; Returns: boolean };
+      is_active_deck_viewer: { Args: { p_deck_id: string; p_user_id?: string }; Returns: boolean };
+      is_active_public_deck: { Args: { p_deck_id: string }; Returns: boolean };
+      is_deck_owner: { Args: { p_deck_id: string; p_user_id?: string }; Returns: boolean };
+      is_deck_viewer: { Args: { p_deck_id: string; p_user_id?: string }; Returns: boolean };
+      list_deck_subscription_updates: {
+        Args: { p_user_id: string };
+        Returns: {
+          area_id: string;
+          created_at: string;
+          deck_id: string;
+          known_version_id: string;
+          latest_version: number;
+          latest_version_id: string;
+          release_notes: string;
+          seen: boolean;
+          title: string;
+        }[];
+      };
+      list_deck_versions: {
+        Args: { p_deck_id: string; p_requester_id: string; p_share_token_hash: string };
+        Returns: {
+          created_at: string;
+          id: string;
+          version: number;
+          visibility: string;
+        }[];
+      };
+      list_owned_shared_decks: {
+        Args: { p_cursor?: string; p_limit?: number; p_owner_id: string };
+        Returns: {
+          attribution: string | null;
+          author_name: string;
+          card_count: number;
+          created_at: string;
+          deck_id: string;
+          description: string;
+          language: string;
+          latest_version_id: string;
+          license: string | null;
+          moderation_status: string;
+          owner_id: string;
+          status: string;
+          tags: string[];
+          title: string;
+          updated_at: string;
+          version: number;
+          visibility: string;
+        }[];
+        SetofOptions: {
+          from: "*";
+          to: "shared_decks";
+          isOneToOne: false;
+          isSetofReturn: true;
+        };
+      };
+      list_public_shared_decks: {
+        Args: {
+          p_cursor?: string;
+          p_language?: string;
+          p_limit?: number;
+          p_q?: string;
+          p_tag?: string;
+        };
+        Returns: {
+          attribution: string;
+          author_name: string;
+          card_count: number;
+          deck_id: string;
+          description: string;
+          language: string;
+          latest_version_id: string;
+          license: string;
+          status: string;
+          tags: string[];
+          title: string;
+          updated_at: string;
+          version: number;
+          visibility: string;
+        }[];
+      };
       manage_unlisted_knowledge_area_share_token: {
         Args: { p_action: string; p_share_token_hash?: string; p_version_id: string };
+        Returns: boolean;
+      };
+      moderator_list_deck_reports: {
+        Args: { p_actor_id: string };
+        Returns: {
+          created_at: string;
+          deck_id: string;
+          id: string;
+          message: string;
+          reason: string;
+          status: string;
+          title: string;
+          version_id: string;
+        }[];
+      };
+      moderator_set_deck_report_status: {
+        Args: { p_actor_id: string; p_report_id: string; p_status: string };
+        Returns: boolean;
+      };
+      moderator_set_deck_status: {
+        Args: { p_actor_id: string; p_deck_id: string; p_reason: string; p_status: string };
         Returns: boolean;
       };
       published_media_read_allowed: {
@@ -821,6 +1354,74 @@ export type Database = {
           p_version_id: string;
         };
         Returns: boolean;
+      };
+      read_deck_version: {
+        Args: { p_requester_id?: string; p_share_token_hash?: string; p_version_id: string };
+        Returns: {
+          attribution: string;
+          content: Json;
+          content_hash: string;
+          created_at: string;
+          forked_from_version_id: string;
+          id: string;
+          license: string;
+          owner_id: string;
+          release_notes: string;
+          source_area_id: string;
+          version: number;
+          visibility: string;
+        }[];
+      };
+      read_deck_version_for_media: {
+        Args: { p_requester_id?: string; p_share_token_hash?: string; p_version_id: string };
+        Returns: {
+          attribution: string;
+          content: Json;
+          content_hash: string;
+          created_at: string;
+          forked_from_version_id: string;
+          id: string;
+          license: string;
+          owner_id: string;
+          release_notes: string;
+          source_area_id: string;
+          version: number;
+          visibility: string;
+        }[];
+      };
+      read_learning_activities: { Args: Record<PropertyKey, never>; Returns: Json };
+      read_my_deck_feedback: {
+        Args: { p_id: string };
+        Returns: {
+          card_id: string;
+          created_at: string;
+          deck_id: string;
+          id: string;
+          kind: string;
+          message: string;
+          status: string;
+          version_id: string;
+        }[];
+      };
+      read_shared_deck: {
+        Args: { p_deck_id: string; p_requester_id?: string; p_share_token_hash?: string };
+        Returns: {
+          attribution: string;
+          author_name: string;
+          card_count: number;
+          deck_id: string;
+          description: string;
+          language: string;
+          latest_version_id: string;
+          license: string;
+          owner_id: string;
+          status: string;
+          tags: string[];
+          title: string;
+          updated_at: string;
+          version: number;
+          visibility: string;
+        }[];
       };
       read_unlisted_knowledge_area_version: {
         Args: { p_share_token_hash: string; p_version_id: string };
@@ -858,8 +1459,21 @@ export type Database = {
         Args: { p_card_id?: string; p_content?: Json; p_proposal_id: string; p_state: string };
         Returns: boolean;
       };
+      set_blocked_deck_publisher: {
+        Args: {
+          p_blocked: boolean;
+          p_deck_id: string;
+          p_share_token_hash?: string;
+          p_user_id: string;
+        };
+        Returns: boolean;
+      };
       sync_workspace_content: { Args: { p_areas: Json; p_tombstones: Json }; Returns: boolean };
       tombstone_knowledge_areas: { Args: { p_area_tombstones: Json }; Returns: boolean };
+      write_learning_activities: {
+        Args: { p_library: Json; p_revision: number; p_user_id: string };
+        Returns: Json;
+      };
     };
     Enums: {
       [_ in never]: never;

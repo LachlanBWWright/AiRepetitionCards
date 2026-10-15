@@ -132,6 +132,25 @@ export function scheduleReview(
   return storeSchedule(scheduler.next(schedulerInput(schedule), now, ratingValue[rating]).card);
 }
 
+export function previewReviewSchedules(
+  schedule: AssessmentSchedule,
+  now: Date,
+  parameters: SchedulerParameters = DEFAULT_SCHEDULER_PARAMETERS,
+): Effect.Effect<
+  Readonly<Record<ReviewRating, AssessmentSchedule>>,
+  { readonly _tag: "SchedulerPreviewUnavailable" }
+> {
+  return Effect.try({
+    try: () => ({
+      again: scheduleReview(schedule, "again", now, parameters),
+      hard: scheduleReview(schedule, "hard", now, parameters),
+      good: scheduleReview(schedule, "good", now, parameters),
+      easy: scheduleReview(schedule, "easy", now, parameters),
+    }),
+    catch: () => ({ _tag: "SchedulerPreviewUnavailable" }) as const,
+  });
+}
+
 /** Empty history needs an explicit initial timestamp; replay never reads the clock. */
 export function rebuildScheduleEffect(
   events: readonly ReviewEvent[],

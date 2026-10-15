@@ -1,4 +1,7 @@
 import { useEffect } from "react";
+import { Effect, Either } from "effect";
+import { previewReviewSchedules, type SchedulerParameters } from "@recall/scheduler";
+import { summarizeStudySession, formatReviewDelay } from "@recall/application";
 import type { LearningArea, Assessment } from "@recall/domain";
 import { Button } from "@recall/ui-web/components/button";
 import { EmptyState } from "./EmptyState";
@@ -15,6 +18,15 @@ export type ReviewRating = "again" | "hard" | "good" | "easy";
 
 type ReviewCardProps = {
   area: Pick<LearningArea, "title" | "color"> | undefined;
+  readonly session?: ReturnType<typeof summarizeStudySession>;
+  readonly now?: Date;
+  readonly schedulerParameters?: SchedulerParameters | undefined;
+  readonly onBack?: () => void;
+  readonly onNextDeck?: (() => void) | undefined;
+  readonly flagged?: boolean;
+  readonly flaggedCount?: number;
+  readonly onFlag?: (card: Assessment) => void;
+  readonly onEditFlagged?: () => void;
   card: Assessment | undefined;
   showAnswer: boolean;
   onReveal: () => void;
@@ -37,6 +49,15 @@ const ratings: ReadonlyArray<{ rating: ReviewRating; label: string }> = [
 
 export function ReviewCard({
   area,
+  session,
+  now,
+  schedulerParameters,
+  onBack,
+  onNextDeck,
+  flagged = false,
+  flaggedCount = 0,
+  onFlag,
+  onEditFlagged,
   card,
   showAnswer,
   onReveal,
@@ -49,6 +70,13 @@ export function ReviewCard({
   disabled = false,
   saving = false,
 }: ReviewCardProps) {
+  const preview =
+    card && now
+      ? Effect.runSync(
+          Effect.either(previewReviewSchedules(card.schedule, now, schedulerParameters)),
+        )
+      : null;
+  const emptyDeck = session?.cardCount === 0;
   useEffect(() => {
     if (!keyboardActive || !card || disabled || saving) return;
     const handleKey = (event: KeyboardEvent) => {
@@ -86,8 +114,29 @@ export function ReviewCard({
   }, [keyboardActive, card, showAnswer, onReveal, onRate, disabled, saving]);
   return (
     <article className="flex min-h-[262px] flex-col rounded-[11px] border border-[var(--line)] bg-[var(--surface)] px-[17px] pt-[14px]">
+      {session && card && (
+        <p className="text-sm text-muted-foreground" role="status">
+          {session.reviewed} reviewed this session · {session.remaining} remaining
+          <br />
+          {session.newCards} new · {session.learningCards} learning ·{" "}
+          {session.remaining - session.newCards - session.learningCards} review
+        </p>
+      )}
       <div className="flex min-h-8 items-center justify-end">
-        {!card && <span className="text-[8px] font-semibold text-[var(--ink)]">COMPLETE</span>}
+        {card && onFlag && (
+          <Button
+            variant="secondary"
+            size="sm"
+            disabled={disabled || saving}
+            aria-pressed={flagged}
+            onClick={() => onFlag(card)}
+          >
+            {flagged ? "Flagged for editing" : "Improve later"}
+          </Button>
+        )}
+        {!card && session && session.reviewed > 0 && (
+          <span className="text-xs font-semibold text-[var(--ink)]">SESSION FINISHED</span>
+        )}
         {card && (onEdit || onDelete) && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -154,14 +203,14 @@ export function ReviewCard({
           )}
           {showAnswer ? (
             <div className="flex flex-col items-center gap-[9px] pb-[15px]">
-              <span className="text-[9px] text-[var(--muted)]" role={saving ? "status" : undefined}>
+              <span className="text-sm text-[var(--muted)]" role={saving ? "status" : undefined}>
                 {saving ? "Saving review…" : "How well did you recall it?"}
               </span>
               <div className="flex gap-1.5 max-[640px]:w-full max-[640px]:[&>button]:min-w-0 max-[640px]:[&>button]:flex-1">
                 {ratings.map(({ rating, label }, index) => (
                   <Button
-                    variant={rating === "again" ? "danger" : "secondary"}
-                    className={`min-w-[54px] rounded-md border border-[var(--line)] bg-[var(--surface)] px-[9px] py-[7px] text-[9px] ${rating === "again" || rating === "hard" ? "text-[var(--status-warning-fg)]" : "text-[var(--status-success-fg)]"}`}
+                    variant={rating === "again" ? "destructive" : "secondary"}
+                    className={`min-h-12 min-w-[72px] flex-col rounded-md border border-[var(--line)] bg-[var(--surface)] px-3 py-2 text-sm ${rating === "again" || rating === "hard" ? "text-[var(--status-warning-fg)]" : "text-[var(--status-success-fg)]"}`}
                     key={rating}
                     disabled={disabled || saving}
                     onClick={() => onRate(rating)}
@@ -169,13 +218,21 @@ export function ReviewCard({
                   >
                     {label}
                     {keyboardActive ? ` · ${String(index + 1)}` : ""}
+                    {preview && Either.isRight(preview) && now && (
+                      <span className="text-xs font-normal">
+                        {formatReviewDelay(preview.right[rating].due, now.getTime())}
+                      </span>
+                    )}
                   </Button>
                 ))}
               </div>
+              <p className="text-xs text-muted-foreground text-center">
+                Again: forgot · Hard: recalled with difficulty · Good: recalled · Easy: effortless
+              </p>
             </div>
           ) : (
             <Button
-              size="small"
+              size="sm"
               className="mb-[17px] self-center rounded-[7px] bg-[var(--primary)] px-[13px] py-[9px] text-[10px] text-white hover:bg-[var(--status-success-bg)]"
               onClick={onReveal}
               disabled={disabled || saving}
@@ -187,11 +244,43 @@ export function ReviewCard({
         </>
       ) : (
         <EmptyState
-          className="flex flex-1 flex-col items-center justify-center text-center [&>span]:text-[22px] [&>span]:text-[var(--status-success-fg)] [&_h3]:my-[9px] [&_h3]:mb-1 [&_h3]:text-[20px] [&_h3]:font-normal [&_h3]:[font-family:Georgia,serif] [&_p]:m-0 [&_p]:text-[10px] [&_p]:text-[var(--ink)] [&_button]:mt-[13px] [&_button]:rounded-md [&_button]:bg-[var(--primary)] [&_button]:px-[10px] [&_button]:py-[7px] [&_button]:text-[9px] [&_button]:text-white]"
+          className="flex flex-1 flex-col items-center justify-center p-6 text-center [&_p]:text-sm [&_h3]:text-xl"
           icon="✳"
-          title={area ? "No cards due" : "Your library is empty"}
-          description={area ? "Add a card or choose another area." : "Create an area to add cards."}
-          action={<Button onClick={onAddCard}>{area ? "Add a card" : "New area"}</Button>}
+          title={
+            !area
+              ? "Your library is empty"
+              : emptyDeck
+                ? "Build your deck"
+                : session && session.reviewed > 0
+                  ? `You’re caught up in ${area.title}`
+                  : "Already caught up"
+          }
+          description={
+            !area
+              ? "Create a deck to add cards."
+              : emptyDeck
+                ? "Add your first card to start studying."
+                : `${session?.reviewed ? `${session.reviewed} ${session.reviewed === 1 ? "review" : "reviews"} this session · ${session.recalled} recalled. ` : "No cards due right now. "}${session?.nextReviewAt ? `Next review: ${new Date(session.nextReviewAt).toLocaleString()}.` : ""}`
+          }
+          action={
+            <div className="flex flex-wrap justify-center gap-2 pb-5">
+              {flaggedCount > 0 && onEditFlagged && (
+                <Button variant="secondary" onClick={onEditFlagged}>
+                  Edit flagged cards ({flaggedCount})
+                </Button>
+              )}
+              {area &&
+                !emptyDeck &&
+                (onNextDeck ? (
+                  <Button onClick={onNextDeck}>Review next deck</Button>
+                ) : onBack ? (
+                  <Button onClick={onBack}>Back to Today</Button>
+                ) : null)}
+              <Button variant={area && !emptyDeck ? "secondary" : "default"} onClick={onAddCard}>
+                {area ? (emptyDeck ? "Add your first card" : "Add more cards") : "New deck"}
+              </Button>
+            </div>
+          }
         />
       )}
     </article>

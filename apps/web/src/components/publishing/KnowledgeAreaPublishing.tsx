@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Effect, Either, Fiber, Schema } from "effect";
+import { Effect, Either, Fiber } from "effect";
 import {
   diffKnowledgeAreas,
   verifyMediaAsset,
@@ -15,7 +15,6 @@ import {
   type PublishedMediaGateway,
   type PublishingApi,
 } from "@recall/application";
-import { PublicationVisibilitySchema } from "@recall/contracts";
 import type { KnowledgeArea } from "@recall/domain";
 import type { MediaStore, StoredMediaAsset } from "@recall/local-store";
 import { browserMediaStore } from "@/features/workspace/browser-media-store";
@@ -23,6 +22,7 @@ import { publishedMediaGateway } from "@/features/workspace/published-media-api"
 import { publishingApi } from "@/lib/publishing-api";
 import { isDesktopRuntime } from "@/lib/desktop-api";
 import { KnowledgeAreaDiffView } from "./KnowledgeAreaDiffView";
+import { DeckUpdatePanel } from "./DeckUpdatePanel";
 import { browserForkOperationStore } from "@/lib/publishing/fork-operation-store";
 import { Button } from "@/components/ui/Button";
 import { Checkbox } from "@recall/ui-web/components/checkbox";
@@ -33,6 +33,7 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
+  Textarea,
 } from "@recall/ui-web";
 import { Alert, toast } from "@recall/ui-web";
 
@@ -59,6 +60,12 @@ type Props = {
     contentHash: string,
     assets: readonly StoredMediaAsset[],
   ) => boolean | Promise<boolean>;
+  readonly onUpdate?: (
+    area: KnowledgeArea,
+    versionId: string,
+    advanceBaseline: boolean,
+    assets: readonly StoredMediaAsset[],
+  ) => Promise<boolean>;
   readonly forkOperationStore?: PublicationForkOperationStore;
   readonly createForkOperationId?: () => string;
   readonly publicationOperationStore?: PublicationOperationStore;
@@ -84,6 +91,7 @@ export function KnowledgeAreaPublishing({
   embedded = false,
   lineageArea,
   onFork,
+  onUpdate,
   transport = publishingApi,
   mediaGateway = publishedMediaGateway,
   mediaStore = browserMediaStore,
@@ -115,7 +123,8 @@ export function KnowledgeAreaPublishing({
       : null;
   const setUpstreamUpdate = (value: UpstreamUpdateState) =>
     setUpstreamRecord({ sourceVersionId: upstreamArea?.forkedFromVersionId ?? null, value });
-  const [visibility, setVisibility] = useState<"private" | "unlisted" | "public">("unlisted");
+  const [visibility, setVisibility] = useState<"unlisted" | "public">("unlisted");
+  const [releaseNotes, setReleaseNotes] = useState("");
   const [attribution, setAttribution] = useState(area?.attribution ?? "");
   const [license, setLicense] = useState(area?.licence ?? "");
   const [reuseConfirmed, setReuseConfirmed] = useState(false);
@@ -207,9 +216,7 @@ export function KnowledgeAreaPublishing({
           setComparisonFailed(false);
           if (Either.isLeft(result)) {
             setPublication(null);
-            setNotice(
-              "Could not load this shared Knowledge Area. Check the link and access token.",
-            );
+            setNotice("Could not load this shared Deck. Check the link and access token.");
           } else {
             const received = result.right.version;
             if (upstreamArea) {
@@ -303,10 +310,7 @@ export function KnowledgeAreaPublishing({
 
   async function publish(): Promise<void> {
     if (!area) return;
-    if (
-      visibility !== "private" &&
-      (!license.trim() || (needsReuseConfirmation && !reuseConfirmed))
-    ) {
+    if (!license.trim() || (needsReuseConfirmation && !reuseConfirmed)) {
       setNotice("Choose a license and confirm you have permission to share this content.");
       return;
     }
@@ -341,6 +345,7 @@ export function KnowledgeAreaPublishing({
             sourceAreaId: area.id,
             content: area,
             visibility,
+            ...(releaseNotes.trim() ? { releaseNotes: releaseNotes.trim() } : {}),
             attribution: attribution.trim() || null,
             license: license.trim() || null,
             forkedFromVersionId: area.forkedFromVersionId ?? null,
@@ -382,7 +387,7 @@ export function KnowledgeAreaPublishing({
       setPublicationConflict(false);
       setNotice(
         Either.isRight(cleared)
-          ? "Knowledge Area published. Its study history remains private."
+          ? "Deck published. Its study history remains private."
           : "Published, but the pending attempt could not be cleared. Retrying recovers this version.",
       );
     }
@@ -456,7 +461,7 @@ export function KnowledgeAreaPublishing({
           result.left.reason === "http" &&
           result.left.status === 401
           ? "Sign in to add a personal copy, then return to this shared area."
-          : "Could not create a personal copy of this Knowledge Area.",
+          : "Could not create a personal copy of this Deck.",
       );
       setForkConflict(
         result.left._tag === "PublishingApiFailure" &&
@@ -552,23 +557,25 @@ export function KnowledgeAreaPublishing({
               Visibility
               <Select
                 value={visibility}
-                onValueChange={(value) =>
-                  setVisibility(
-                    Schema.decodeUnknownEither(PublicationVisibilitySchema)(value).pipe(
-                      Either.getOrElse(() => "unlisted" as const),
-                    ),
-                  )
-                }
+                onValueChange={(value) => setVisibility(value === "public" ? "public" : "unlisted")}
               >
                 <SelectTrigger aria-label="Visibility">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="unlisted">Unlisted · link access</SelectItem>
-                  <SelectItem value="private">Private · account only</SelectItem>
                   <SelectItem value="public">Public access</SelectItem>
                 </SelectContent>
               </Select>
+            </label>
+            <label>
+              Release notes (optional)
+              <Textarea
+                value={releaseNotes}
+                onChange={(event) => setReleaseNotes(event.currentTarget.value)}
+                maxLength={4000}
+                placeholder="Describe what changed in this release"
+              />
             </label>
             <label>
               Attribution
@@ -604,7 +611,7 @@ export function KnowledgeAreaPublishing({
                 </SelectContent>
               </Select>
             </label>
-            {visibility !== "private" && needsReuseConfirmation && (
+            {needsReuseConfirmation && (
               <label htmlFor="publication-reuse-confirmed">
                 <Checkbox
                   id="publication-reuse-confirmed"
@@ -617,11 +624,7 @@ export function KnowledgeAreaPublishing({
             <Button
               className="self-start"
               type="submit"
-              disabled={
-                busy ||
-                (visibility !== "private" &&
-                  (!license.trim() || (needsReuseConfirmation && !reuseConfirmed)))
-              }
+              disabled={busy || !license.trim() || (needsReuseConfirmation && !reuseConfirmed)}
             >
               Publish area
             </Button>
@@ -821,6 +824,22 @@ export function KnowledgeAreaPublishing({
                   The shared version loaded, but its differences could not be compared.
                 </Alert>
               )}
+              {onUpdate &&
+                area?.forkedFromVersionId &&
+                area.sourceId === publication.document.id &&
+                area.forkedFromVersionId !== publication.versionId && (
+                  <DeckUpdatePanel
+                    key={`${area.id}:${publication.versionId}`}
+                    current={area}
+                    upstream={publication.document}
+                    versionId={publication.versionId}
+                    {...(publication.token ? { token: publication.token } : {})}
+                    publishing={transport}
+                    media={mediaGateway}
+                    createId={() => crypto.randomUUID()}
+                    onSave={onUpdate}
+                  />
+                )}
               <Button
                 className="self-start"
                 type="button"

@@ -56,11 +56,15 @@ export const FullScreenCatalog: Story = {
   args: Question.args,
   render: () => (
     <main className="mx-auto max-w-5xl space-y-6 p-8">
-      <p className="mb-1 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">RECALL · DESIGN SYSTEM</p>
+      <p className="mb-1 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+        RECALL · DESIGN SYSTEM
+      </p>
       <h1>
         Study at your <em>own pace.</em>
       </h1>
-      <p className="text-sm leading-relaxed text-muted-foreground">Question, answer, recall ratings, and completion states.</p>
+      <p className="text-sm leading-relaxed text-muted-foreground">
+        Question, answer, recall ratings, and completion states.
+      </p>
       <div className="grid gap-6 md:grid-cols-2">
         <section>
           <h2>Question</h2>
@@ -78,7 +82,7 @@ export const FullScreenCatalog: Story = {
           <ReviewCard {...CaughtUp.args} />
         </section>
         <section>
-          <h2>Another learning area</h2>
+          <h2>Another deck</h2>
           <p>Card context comes from the selected area.</p>
           <ReviewCard
             {...Question.args}

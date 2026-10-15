@@ -137,7 +137,7 @@ export function KnowledgeAreaSettings({
     if (!latest || latest.id !== draftArea.id) {
       setFeedback({
         kind: "error",
-        text: "This knowledge area is no longer available. Your draft is preserved.",
+        text: "This deck is no longer available. Your draft is preserved.",
       });
       return;
     }
@@ -439,7 +439,7 @@ export function KnowledgeAreaSettings({
           <AlertDialogHeader>
             <AlertDialogTitle>Discard this draft?</AlertDialogTitle>
             <AlertDialogDescription>
-              Your unsaved changes will be replaced with the latest knowledge area settings.
+              Your unsaved changes will be replaced with the latest deck settings.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

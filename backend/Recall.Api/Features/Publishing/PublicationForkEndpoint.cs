@@ -17,6 +17,7 @@ public static partial class PublishingEndpoints
         var identity = principal is null ? null : SupabaseUserIdentity.TryResolve(principal);
         var authorization = context.Request.Headers.Authorization.ToString();
         if (identity is null || !authorization.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase)) return Error("unauthenticated", 401);
+        if (!DeckOwnerHeaderMatches(context, identity.UserId)) return Error("unauthenticated", 401);
         if (!TryGuid(versionId, out var sourceVersionId)) return Error("source-version-not-found", 404);
         if (!TryConfiguration(configuration, out var projectUrl, out var key)) return Error("publication-unavailable", 503);
         JsonDocument? body = null;
@@ -55,11 +56,8 @@ public static partial class PublishingEndpoints
             var recovered = await RecoverForkAsync(client, projectUrl, key, accessToken, identity.UserId, areaId, initialVersionId, operationId, sourceVersionId, cancellationToken);
             if (recovered is not null) return recovered;
 
-            using var sourceResponse = shareToken is null
-                ? await GetAsync(client, projectUrl, key,
-                    $"published_knowledge_area_versions?select=id,content,content_hash,attribution,license,created_at&id=eq.{sourceVersionId:D}&visibility=eq.public&limit=1", null, cancellationToken)
-                : await PostRpcAsync(client, projectUrl, key, "read_unlisted_knowledge_area_version",
-                    new { p_version_id = sourceVersionId, p_share_token_hash = Hash(shareToken) }, cancellationToken);
+            using var sourceResponse = await PostRpcAsync(client, projectUrl, key, "read_deck_version",
+                new { p_version_id = sourceVersionId, p_requester_id = identity.UserId, p_share_token_hash = shareToken is null ? null : Hash(shareToken) }, cancellationToken, accessToken);
             if (!sourceResponse.IsSuccessStatusCode) return Error("source-version-not-found", 404);
             using var sourceJson = await ParseJsonAsync(sourceResponse, cancellationToken);
             var sourceRow = sourceJson is null ? null : FirstRow(sourceJson.RootElement);
@@ -105,12 +103,15 @@ public static partial class PublishingEndpoints
             }
 
             var forkCards = new JsonArray();
+            var cardIds = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             foreach (var card in cards.OfType<JsonObject>())
             {
                 var copy = (JsonObject)card.DeepClone();
                 var oldId = copy["id"]?.GetValue<string>();
                 if (oldId is null || !TryGuid(oldId, out _)) return Error("source-version-invalid", 502);
-                copy["id"] = ForkId(identity.UserId, sourceVersionId, operationId, "card", oldId!).ToString("D").ToLowerInvariant();
+                var newCardId = ForkId(identity.UserId, sourceVersionId, operationId, "card", oldId!).ToString("D").ToLowerInvariant();
+                cardIds[oldId!] = newCardId;
+                copy["id"] = newCardId;
                 copy["revisionId"] = ForkId(identity.UserId, sourceVersionId, operationId, "card-revision", oldId!).ToString("D").ToLowerInvariant();
                 if (copy["sourceId"] is null) copy["sourceId"] = oldId;
                 if (copy["objectiveIds"] is JsonArray cardObjectives)
@@ -131,6 +132,35 @@ public static partial class PublishingEndpoints
             sourceDocument["licence"] = forkLicense;
             sourceDocument["objectives"] = forkObjectives;
             sourceDocument["cards"] = forkCards;
+            if (sourceDocument["activities"] is JsonArray activities)
+            {
+                var activityIds = new Dictionary<string, string>(StringComparer.Ordinal);
+                foreach (var activity in activities.OfType<JsonObject>())
+                {
+                    if (activity["id"] is not JsonValue idValue || !idValue.TryGetValue<string>(out var oldId) || string.IsNullOrWhiteSpace(oldId))
+                        return Error("source-version-invalid", 502);
+                    activityIds[oldId] = ForkId(identity.UserId, sourceVersionId, operationId, "activity", oldId).ToString("D").ToLowerInvariant();
+                }
+                foreach (var activity in activities.OfType<JsonObject>())
+                {
+                    var oldId = activity["id"]!.GetValue<string>();
+                    activity["id"] = activityIds[oldId];
+                    activity["sourceId"] ??= oldId;
+                    activity["areaId"] = areaId.ToString("D").ToLowerInvariant();
+                    if (activity["objectiveIds"] is JsonArray activityObjectives)
+                        for (var index = 0; index < activityObjectives.Count; index++)
+                        {
+                            var oldObjective = activityObjectives[index]?.GetValue<string>();
+                            if (oldObjective is null) return Error("source-version-invalid", 502);
+                            var newObjective = objectiveIds.TryGetValue(oldObjective, out var mappedObjective)
+                                ? mappedObjective
+                                : ForkId(identity.UserId, sourceVersionId, operationId, "objective", oldObjective).ToString("D").ToLowerInvariant();
+                            activityObjectives[index] = newObjective;
+                        }
+                    if (activity["pluginId"]?.GetValue<string>()?.StartsWith("recall.", StringComparison.Ordinal) == true && activity["payload"] is JsonObject payload)
+                        RemapBuiltinCardReferences(payload, cardIds);
+                }
+            }
             using var forkDocument = JsonDocument.Parse(sourceDocument.ToJsonString());
             var forkHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(CanonicalJson(forkDocument.RootElement)))).ToLowerInvariant();
             var areaPayload = new JsonObject
@@ -168,7 +198,9 @@ public static partial class PublishingEndpoints
                 saved = true,
                 areaId = areaId.ToString("D").ToLowerInvariant(),
                 contentHash = forkHash,
-                document = forkDocument.RootElement,
+                // Results.Json writes after this using-scope exits; detach the element
+                // so serialization does not read from a disposed JsonDocument.
+                document = forkDocument.RootElement.Clone(),
                 attribution = forkAttribution,
                 license = forkLicense,
                 forkedFromVersionId = sourceVersionId.ToString("D").ToLowerInvariant()
@@ -229,7 +261,7 @@ public static partial class PublishingEndpoints
     // version, so the fork boundary mirrors the current 1.0.0 schema decoder by stripping unknown keys.
     private static void NormalizeForkDocument(JsonObject document, JsonArray objectives, JsonArray cards)
     {
-        KeepOnly(document, "schemaVersion", "id", "sourceId", "title", "description", "language", "objectives", "ai", "cards", "tags", "licence", "attribution", "forkedFromVersionId");
+        KeepOnly(document, "schemaVersion", "id", "sourceId", "title", "description", "language", "objectives", "ai", "cards", "tags", "licence", "attribution", "forkedFromVersionId", "activities");
         foreach (var objective in objectives.OfType<JsonObject>())
             KeepOnly(objective, "id", "title", "description", "prerequisiteIds", "sourceId");
         if (document["ai"] is JsonObject ai)
@@ -241,6 +273,30 @@ public static partial class PublishingEndpoints
             else
                 KeepOnly(card, "kind", "id", "text", "deletionIndex", "objectiveIds", "media", "tags", "origin", "sourceId");
         }
+        if (document["activities"] is JsonArray activities)
+            foreach (var activity in activities.OfType<JsonObject>())
+                KeepOnly(activity, "id", "sourceId", "areaId", "title", "pluginId", "pluginVersion", "revision", "objectiveIds", "fallback", "payload", "archived");
+    }
+
+    private static void RemapBuiltinCardReferences(JsonNode node, IReadOnlyDictionary<string, string> cardIds)
+    {
+        if (node is JsonObject value)
+        {
+            foreach (var (key, child) in value.ToArray())
+            {
+                if (key == "cardId" && child is JsonValue cardId && cardId.TryGetValue<string>(out var oldId) && cardIds.TryGetValue(oldId, out var newId))
+                    value[key] = newId;
+                else if (key == "cardIds" && child is JsonArray cardArray)
+                {
+                    for (var index = 0; index < cardArray.Count; index++)
+                        if (cardArray[index] is JsonValue item && item.TryGetValue<string>(out var oldCardId) && cardIds.TryGetValue(oldCardId, out var newCardId)) cardArray[index] = newCardId;
+                }
+                else if (child is not null) RemapBuiltinCardReferences(child, cardIds);
+            }
+        }
+        else if (node is JsonArray array)
+            foreach (var child in array)
+                if (child is not null) RemapBuiltinCardReferences(child, cardIds);
     }
 
     private static void KeepOnly(JsonObject value, params string[] allowed)

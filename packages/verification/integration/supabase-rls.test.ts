@@ -45,12 +45,13 @@ function suite(config: Configuration) {
   };
   const createdUsers: string[] = [];
   const publications: string[] = [];
+  const areaIds: string[] = [];
   const uploadedPaths = new Set<string>();
   const runId = id();
   function makeUser(label: string) {
     return Effect.gen(function* () {
-      const email = `recall-rls-${runId}-${label}@example.invalid`;
-      const password = `${id()}-${id()}`;
+      const email = `recall-rls-${runId}-${label}@example.com`;
+      const password = `${id()}-aA1!`;
       const created = yield* request(config, admin, "/auth/v1/admin/users", {
         method: "POST",
         body: {
@@ -97,6 +98,7 @@ function suite(config: Configuration) {
     const owner = yield* makeUser("owner");
     const stranger = yield* makeUser("stranger");
     const areaId = id();
+    areaIds.push(areaId);
     const cardId = id();
     const objectiveId = id();
     const prerequisiteId = id();
@@ -159,6 +161,24 @@ function suite(config: Configuration) {
     });
     yield* successful(provision, "Owner transactional content provisioning");
     yield* verify(provision.body === true, "Owner content provisioning was rejected.");
+    const unchangedSync = yield* rpc(owner, "sync_workspace_content", {
+      p_areas: [envelope],
+      p_tombstones: [],
+    });
+    yield* successful(unchangedSync, "Unchanged workspace content replay");
+    yield* verify(unchangedSync.body === true, "Unchanged workspace content replay was rejected.");
+    const areaVersions = yield* rows(
+      yield* request(
+        config,
+        owner,
+        `/rest/v1/knowledge_area_versions?select=id&knowledge_area_id=eq.${areaId}`,
+      ),
+      "Workspace content version replay",
+    );
+    yield* verify(
+      areaVersions.length === 1,
+      "Unchanged workspace replay created a duplicate area version.",
+    );
     const seedRows: readonly [string, unknown][] = [
       ["profiles", { user_id: owner.userId, display_name: "Fixture owner" }],
       [
@@ -448,24 +468,33 @@ function suite(config: Configuration) {
     const tokenHash = createHash("sha256").update(id()).digest("hex");
     const wrongHash = createHash("sha256").update(id()).digest("hex");
     const versions = { private: id(), unlisted: id(), public: id() };
-    let number = 0;
     for (const visibility of ["private", "unlisted", "public"] as const) {
       const publicationId = versions[visibility];
       publications.push(publicationId);
-      number += 1;
+      const publicationArgs = {
+        p_version_id: publicationId,
+        p_source_area_id: areaId,
+        p_owner_id: owner.userId,
+        p_operation_id: id(),
+        p_content: document,
+        p_content_hash: contentHash,
+        p_visibility: visibility,
+        p_attribution: null,
+        p_license: "CC-BY-4.0",
+        p_forked_from_version_id: null,
+        p_share_token_hash: visibility === "unlisted" ? tokenHash : null,
+      };
       yield* successful(
-        yield* insert(owner, "published_knowledge_area_versions", {
-          id: publicationId,
-          source_area_id: areaId,
-          owner_id: owner.userId,
-          created_by: owner.userId,
-          version: number,
-          content: document,
-          content_hash: contentHash,
-          visibility,
-          ...(visibility === "unlisted" ? { share_token_hash: tokenHash } : {}),
+        yield* rpc(admin, "create_deck_publication", publicationArgs),
+        "Service atomic immutable publication registration",
+      );
+      yield* expectDenied(
+        rpc(owner, "create_deck_publication", {
+          ...publicationArgs,
+          p_version_id: id(),
+          p_operation_id: id(),
         }),
-        "Owner immutable publication insert",
+        "Authenticated direct publication registration",
       );
       for (const identity of [owner, anon, stranger]) {
         const reply = yield* request(
@@ -605,6 +634,16 @@ function suite(config: Configuration) {
             method: "DELETE",
             body: { prefixes: [...uploadedPaths] },
           }).pipe(Effect.flatMap((reply) => successful(reply, "Scoped Storage fixture cleanup"))),
+        ),
+      );
+    for (const areaId of areaIds)
+      results.push(
+        yield* Effect.either(
+          request(config, admin, `/rest/v1/shared_decks?deck_id=eq.${areaId}`, {
+            method: "DELETE",
+          }).pipe(
+            Effect.flatMap((reply) => successful(reply, "Scoped deck registry fixture cleanup")),
+          ),
         ),
       );
     for (const publicationId of publications)

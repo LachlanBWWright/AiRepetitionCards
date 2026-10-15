@@ -280,10 +280,10 @@ function NativeAppPanelScreen() {
           <View className="grow gap-recall-lg p-recall-md">
             {tab !== NativeAppTab.Account && areas.length > 0 && onSelectArea && (
               <NativeSelect
-                label="Learning area"
+                label="Deck"
                 value={activeAreaId ?? ""}
                 options={[
-                  { label: "Choose area", value: "" },
+                  { label: "Choose deck", value: "" },
                   ...areas.map((area) => ({ label: area.title, value: area.id })),
                 ]}
                 disabled={selectionDisabled}
@@ -295,7 +295,7 @@ function NativeAppPanelScreen() {
             {tab === NativeAppTab.Tutor && !panels[NativeAppTab.Tutor] ? (
               <View className="gap-recall-md">
                 <Text className="text-base leading-6 text-recall-muted">
-                  Choose a learning area in Library to practice.
+                  Choose a deck in Library to practice.
                 </Text>
                 <Pressable
                   accessibilityRole="button"

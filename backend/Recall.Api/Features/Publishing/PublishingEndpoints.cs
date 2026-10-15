@@ -30,6 +30,8 @@ public static partial class PublishingEndpoints
             .WithMetadata(new ApiRateLimitMetadata(ApiRateLimitScope.PublicationWrite, "publication-write", Publication: true)).WithPublicationResponseHeaders();
         endpoints.MapPost("/api/v1/publishing/media/{mediaId}", UploadPublishedMediaAsync).AllowAnonymous()
             .WithMetadata(new ApiRateLimitMetadata(ApiRateLimitScope.PrivateMediaWrite, "media-write", Publication: true)).WithPublicationResponseHeaders();
+        MapDeckSharingEndpoints(endpoints);
+        MapModerationEndpoints(endpoints);
         return endpoints;
     }
 
@@ -75,13 +77,14 @@ public static partial class PublishingEndpoints
             }
         }
 
+        var principal = await AuthenticateBearerAsync(context);
+        var requester = principal is null ? null : SupabaseUserIdentity.TryResolve(principal)?.UserId;
+        if (!DeckOwnerHeaderMatches(context, requester)) return Error("unauthenticated", 401);
+        var bearer = context.Request.Headers.Authorization.ToString();
+        var accessToken = bearer.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase) ? bearer[7..].Trim() : null;
         using var client = clients.CreateClient();
-        using var response = token is null
-            ? await GetAsync(client, projectUrl, key,
-                $"published_knowledge_area_versions?select=id,version,content,content_hash,attribution,license,forked_from_version_id,created_at,visibility&id=eq.{parsedId:D}&visibility=eq.public&limit=1",
-                null, cancellationToken)
-            : await PostRpcAsync(client, projectUrl, key, "read_unlisted_knowledge_area_version",
-                new { p_version_id = parsedId, p_share_token_hash = Hash(token) }, cancellationToken);
+        using var response = await PostRpcAsync(client, projectUrl, key, "read_deck_version",
+            new { p_version_id = parsedId, p_requester_id = requester, p_share_token_hash = token is null ? null : Hash(token) }, cancellationToken, accessToken);
 
         if (!response.IsSuccessStatusCode) return Error("publication-not-found", 404);
         using var document = await ParseJsonAsync(response, cancellationToken);
@@ -100,6 +103,7 @@ public static partial class PublishingEndpoints
                 contentHash = published.ContentHash,
                 attribution = published.Attribution,
                 license = published.License,
+                releaseNotes = published.ReleaseNotes,
                 forkedFromVersionId = published.ForkedFromVersionId,
                 createdAt = published.CreatedAt
             }
@@ -128,13 +132,14 @@ public static partial class PublishingEndpoints
         if (!TryConfiguration(configuration, out var projectUrl, out var key))
             return Error("publication-unavailable", 503);
 
+        var principal = await AuthenticateBearerAsync(context);
+        var requesterId = principal is null ? null : SupabaseUserIdentity.TryResolve(principal)?.UserId;
+        if (!DeckOwnerHeaderMatches(context, requesterId)) return Error("unauthenticated", 401);
+        var bearer = context.Request.Headers.Authorization.ToString();
+        var accessToken = bearer.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase) ? bearer[7..].Trim() : null;
         using var client = clients.CreateClient();
-        using var baselineResponse = token is null
-            ? await GetAsync(client, projectUrl, key,
-                $"published_knowledge_area_versions?select=id,source_area_id,owner_id,version,content,content_hash,visibility,created_at&id=eq.{parsedId:D}&visibility=eq.public&limit=1",
-                null, cancellationToken)
-            : await PostRpcAsync(client, projectUrl, key, "read_unlisted_knowledge_area_version",
-                new { p_version_id = parsedId, p_share_token_hash = Hash(token) }, cancellationToken);
+        using var baselineResponse = await PostRpcAsync(client, projectUrl, key, "read_deck_version",
+            new { p_version_id = parsedId, p_requester_id = requesterId, p_share_token_hash = token is null ? null : Hash(token) }, cancellationToken, accessToken);
         if (!baselineResponse.IsSuccessStatusCode) return Error("publication-unavailable", 503);
         using var baselineJson = await ParseJsonAsync(baselineResponse, cancellationToken);
         var baseline = baselineJson is null ? null : FirstRow(baselineJson.RootElement);
@@ -149,21 +154,7 @@ public static partial class PublishingEndpoints
             return Error("publication-not-found", 404);
         if (!TryGuid(known.Content, "id", out var documentSourceId) || documentSourceId != sourceId)
             return Error("publication-not-found", 404);
-        Guid? ownerId;
-        if (token is null)
-        {
-            ownerId = TryGuid(baseline.Value, "owner_id", out var publicOwner) ? publicOwner : null;
-        }
-        else
-        {
-            using var ownerResponse = await PostRpcAsync(client, projectUrl, key, "read_unlisted_knowledge_area_version_for_media",
-                new { p_version_id = parsedId, p_share_token_hash = Hash(token) }, cancellationToken);
-            if (!ownerResponse.IsSuccessStatusCode) return Error("publication-unavailable", 503);
-            using var ownerJson = await ParseJsonAsync(ownerResponse, cancellationToken);
-            var ownerRow = ownerJson is null ? null : FirstRow(ownerJson.RootElement);
-            if (ownerRow is null) return Error("publication-not-found", 404);
-            ownerId = TryGuid(ownerRow.Value, "owner_id", out var privateOwner) ? privateOwner : null;
-        }
+        Guid? ownerId = TryGuid(baseline.Value, "owner_id", out var publisherIdValue) ? publisherIdValue : null;
         if (
             !StringEquals(assertedSource, sourceId.ToString("D"), allowNull: true))
             return Error("publication-not-found", 404);
@@ -290,7 +281,15 @@ public static partial class PublishingEndpoints
         projectUrl = configuration["SUPABASE_URL"] ?? configuration["NEXT_PUBLIC_SUPABASE_URL"] ?? string.Empty;
         key = configuration["SUPABASE_PUBLISHABLE_KEY"] ?? configuration["NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY"] ?? string.Empty;
         return Uri.TryCreate(projectUrl, UriKind.Absolute, out var uri) &&
-               (uri.Scheme == Uri.UriSchemeHttps || uri.Host == "localhost") && !string.IsNullOrWhiteSpace(key);
+               (uri.Scheme == Uri.UriSchemeHttps || uri.Scheme == Uri.UriSchemeHttp && IsLocalSupabaseHost(uri)) &&
+               string.IsNullOrWhiteSpace(uri.Query) && string.IsNullOrWhiteSpace(uri.Fragment) && !string.IsNullOrWhiteSpace(key);
+    }
+
+
+    private static bool IsLocalSupabaseHost(Uri uri)
+    {
+        var host = uri.Host.Trim('[', ']');
+        return host.Equals("localhost", StringComparison.OrdinalIgnoreCase) || host is "127.0.0.1" or "::1";
     }
 
     private static async Task<JsonDocument?> ParseJsonAsync(HttpResponseMessage response, CancellationToken cancellationToken)
@@ -312,7 +311,7 @@ public static partial class PublishingEndpoints
     };
 
     private sealed record Publication(int Version, JsonElement Content, string ContentHash,
-        string? Attribution, string? License, string? ForkedFromVersionId, string CreatedAt);
+        string? Attribution, string? License, string? ForkedFromVersionId, string CreatedAt, string ReleaseNotes = "");
 
     private static bool TryValidatePublication(JsonElement row, Guid? expectedId, out Publication publication)
     {
@@ -338,7 +337,10 @@ public static partial class PublishingEndpoints
             forked = forkId.ToString("D").ToLowerInvariant();
         }
         else if (forkElement.ValueKind != JsonValueKind.Null) return false;
-        publication = new Publication(version, normalizedContent.Value, contentHash.ToLowerInvariant(), attribution, license, forked, createdAt);
+        var releaseNotes = row.TryGetProperty("release_notes", out var notes) && notes.ValueKind == JsonValueKind.String
+            ? notes.GetString() ?? string.Empty : string.Empty;
+        if (releaseNotes.Length > 4_000) return false;
+        publication = new Publication(version, normalizedContent.Value, contentHash.ToLowerInvariant(), attribution, license, forked, createdAt, releaseNotes);
         return true;
     }
 
@@ -349,7 +351,7 @@ public static partial class PublishingEndpoints
             if (value.ValueKind != JsonValueKind.Object) return null;
             var document = JsonNode.Parse(value.GetRawText())?.AsObject();
             if (document is null) return null;
-            KeepOnly(document, "schemaVersion", "id", "sourceId", "title", "description", "language", "objectives", "ai", "cards", "tags", "licence", "attribution", "forkedFromVersionId");
+            KeepOnly(document, "schemaVersion", "id", "sourceId", "title", "description", "language", "objectives", "ai", "cards", "tags", "licence", "attribution", "forkedFromVersionId", "activities");
             if (document["objectives"] is JsonArray objectives)
                 foreach (var objective in objectives.OfType<JsonObject>())
                     KeepOnly(objective, "id", "title", "description", "prerequisiteIds", "sourceId");
@@ -368,6 +370,9 @@ public static partial class PublishingEndpoints
                             KeepOnly(reference, "id", "mimeType", "byteLength");
                 }
             }
+            if (document["activities"] is JsonArray activities)
+                foreach (var activity in activities.OfType<JsonObject>())
+                    KeepOnly(activity, "id", "sourceId", "areaId", "title", "pluginId", "pluginVersion", "revision", "objectiveIds", "fallback", "payload", "archived");
             using var normalized = JsonDocument.Parse(document.ToJsonString());
             return normalized.RootElement.Clone();
         }

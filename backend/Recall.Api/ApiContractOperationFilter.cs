@@ -28,7 +28,7 @@ public sealed class ApiContractOperationFilter : IOperationFilter
         AddRequestBody(operation, path, method);
         AddResponses(operation, path, method);
 
-        if (RequiresBearer(path))
+        if (RequiresBearer(path, method))
         {
             operation.Security ??= new List<OpenApiSecurityRequirement>();
             operation.Security.Add(new OpenApiSecurityRequirement
@@ -72,6 +72,18 @@ public sealed class ApiContractOperationFilter : IOperationFilter
             "/api/v1/knowledge-areas" => "Publication creation request. Includes the source area, schemaVersion, visibility and rights metadata; validated before saving.",
             "/api/v1/published/{versionId}/fork" => "Fork request with an operation id and optional share token.",
             "/api/v1/published/{versionId}/token" => "Share-token action request. Supported actions are defined by the publication token contract.",
+            "/api/v1/decks/{deckId}" when method == "PATCH" => "Selective shared-deck metadata and status fields.",
+            "/api/v1/decks/{deckId}/feedback" => "Feedback item with id, versionId, optional cardId, message, and kind.",
+            "/api/v1/decks/{deckId}/feedback/{feedbackId}" => "Feedback status update: open or resolved.",
+            "/api/v1/deck-subscriptions" => "Subscription source and following state.",
+            "/api/v1/deck-subscriptions/{areaId}/updates/read" => "Acknowledges the supplied latest public version for this followed deck. Body: { versionId }.",
+            "/api/v1/decks/{deckId}/reports" => "Idempotent report request: { id, versionId, reason, message, token? }. Reasons: spam, harmful, copyright, or broken.",
+            "/api/v1/decks/{deckId}/block" => "Optional JSON body { token } supplies the exact unlisted-link capability when blocking or unblocking its publisher.",
+            "/api/v1/moderation/decks/{deckId}" => "Operator-only moderation action: { status: visible|hidden, reason }. Owner publication status is unchanged.",
+            "/api/v1/moderation/reports/{reportId}" => "Operator-only report status action: { status: open|resolved }.",
+            "/api/v1/activities" => "Per-user activity snapshot read or revision-checked replacement. Authenticated workspace owner required.",
+            "/api/v1/activities/assess" => "Assessment request with activity snapshot and learner response; validates synced activity revision before evaluation.",
+            "/api/v1/activities/question" => "Adaptive question request with activity snapshot and answer sequence; validates synced activity revision before evaluation.",
             "/api/v1/account/delete" => "Account-deletion confirmation request. Exact confirmation text is required.",
             "/api/v1/workspace/review-identities" => "Review identity lookup request containing the requested identifiers.",
             "/api/v1/workspace/area-tombstones" => "Area tombstone deletion request with the schemaVersion and tombstone operations.",
@@ -109,6 +121,18 @@ public sealed class ApiContractOperationFilter : IOperationFilter
         }
         if (path == "/api/v1/published/{versionId}/fork")
             AddQuery(operation, "token", "Optional share token for the source publication.");
+        if (path is "/api/v1/decks" or "/api/v1/decks/{deckId}")
+        {
+            if (path == "/api/v1/decks")
+            {
+                AddQuery(operation, "q", "Optional title or description search.");
+                AddQuery(operation, "language", "Optional language filter.");
+                AddQuery(operation, "tag", "Optional exact tag filter.");
+                AddQuery(operation, "limit", "Page size from 1 to 50; defaults to 20.");
+                AddQuery(operation, "cursor", "Last deck UUID from the prior page.");
+            }
+            else AddQuery(operation, "token", "Optional exact share token for an unlisted deck.");
+        }
         if (path == "/auth/confirm")
         {
             AddQuery(operation, "token_hash", "Supabase email confirmation token hash.", required: true);
@@ -130,6 +154,8 @@ public sealed class ApiContractOperationFilter : IOperationFilter
             AddHeader(operation, "x-recall-media-reference", "JSON-encoded media reference validated against the uploaded bytes.", required: true);
         if (path == "/api/v1/auth/session" || path == "/api/v1/workspace" || path.StartsWith("/api/v1/account/", StringComparison.Ordinal) || path == "/api/v1/sync")
             AddHeader(operation, "x-recall-workspace-owner", "Optional expected owner id; a mismatch returns 409 workspace-account-changed.");
+        if (path.StartsWith("/api/v1/decks/", StringComparison.Ordinal) || path.StartsWith("/api/v1/deck-subscriptions", StringComparison.Ordinal))
+            AddHeader(operation, "x-recall-owner", "Optional expected authenticated owner id; a mismatch returns 401.");
     }
 
     private static void AddQuery(OpenApiOperation operation, string name, string description, bool required = false)
@@ -284,6 +310,13 @@ public sealed class ApiContractOperationFilter : IOperationFilter
         "/api/v1/publishing/media/{mediaId}" or "/api/v1/workspace/media/{mediaId}" => ["400", "401", "404", "409", "413", "415", "422", "502", "503"],
         "/api/v1/published/{versionId}/media/{mediaId}" => ["404", "503"],
         "/api/v1/published/{versionId}/updates" => ["400", "404", "503"],
+        "/api/v1/deck-subscriptions/updates" => ["401", "502", "503"],
+        "/api/v1/deck-subscriptions/{areaId}/updates/read" => ["400", "401", "404", "409", "502", "503"],
+        "/api/v1/decks/{deckId}/reports" => ["400", "401", "404", "409", "413", "429", "502", "503"],
+        "/api/v1/decks/{deckId}/block" => ["400", "401", "404", "413", "429", "502", "503"],
+        "/api/v1/moderation/reports" or "/api/v1/moderation/decks/{deckId}" or "/api/v1/moderation/reports/{reportId}" => ["400", "401", "403", "404", "409", "413", "429", "502", "503"],
+        "/api/v1/activities" => ["400", "401", "409", "413", "502", "503"],
+        "/api/v1/activities/assess" or "/api/v1/activities/question" => ["400", "401", "409", "413", "429", "502", "503"],
         "/api/v1/workspace/review-identities" or "/api/v1/workspace/area-tombstones" => ["400", "401", "409", "413", "502", "503"],
         _ => ["400", "401", "403", "404", "409", "413", "429", "502", "503"]
     };
@@ -316,12 +349,19 @@ public sealed class ApiContractOperationFilter : IOperationFilter
 
     private static bool IsBinary(string path) => path is "/api/v1/published/{versionId}/media/{mediaId}" or "/api/v1/workspace/media/{mediaId}";
 
-    private static bool RequiresBearer(string path) =>
+    private static bool RequiresBearer(string path, string method) =>
         path.StartsWith("/api/v1/account/", StringComparison.Ordinal) ||
         path.StartsWith("/api/v1/workspace", StringComparison.Ordinal) ||
         path == "/api/v1/sync" || path == "/api/v1/tutor" || path == "/api/v1/tutor/privacy" ||
         path == "/api/v1/knowledge-areas" || path == "/api/v1/published/{versionId}/fork" ||
-        path == "/api/v1/published/{versionId}/token" || path == "/api/v1/publishing/media/{mediaId}";
+        path == "/api/v1/published/{versionId}/token" || path == "/api/v1/publishing/media/{mediaId}" ||
+        path == "/api/v1/decks/mine" ||
+        path == "/api/v1/decks/{deckId}/reports" || path == "/api/v1/decks/{deckId}/block" ||
+        path.StartsWith("/api/v1/moderation/", StringComparison.Ordinal) || path.StartsWith("/api/v1/activities", StringComparison.Ordinal) ||
+        path == "/api/v1/deck-subscriptions/updates" || path == "/api/v1/deck-subscriptions/{areaId}/updates/read" ||
+        (path == "/api/v1/deck-subscriptions" && (method is "PUT" or "DELETE")) || path == "/api/v1/deck-subscriptions/{areaId}" ||
+        (path == "/api/v1/decks/{deckId}" && method == "PATCH") || (path == "/api/v1/decks/{deckId}/feedback" && method == "POST") ||
+        path == "/api/v1/decks/{deckId}/feedback/{feedbackId}";
 
     private static bool AcceptsSsrCookie(string path) =>
         path.StartsWith("/api/v1/account/", StringComparison.Ordinal) ||

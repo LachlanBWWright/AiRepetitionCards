@@ -1,4 +1,5 @@
 import { Effect, Either, Schema } from "effect";
+import { ActivityLibrarySchema } from "@recall/domain";
 import type { RecallSupabaseClient } from "./client";
 
 export type AccountExportReadError = { readonly _tag: "AccountExportReadError" };
@@ -126,6 +127,12 @@ export function readAccountExportRows(
             .range(from, to),
         ),
       ]);
+      const activityReply = await client.rpc("read_learning_activities");
+      if (activityReply.error) return { _tag: "ReadFailure" } as const;
+      const activitySnapshot = Schema.decodeUnknownEither(
+        Schema.Struct({ library: ActivityLibrarySchema }),
+      )(activityReply.data);
+      if (Either.isLeft(activitySnapshot)) return { _tag: "ReadFailure" } as const;
       const ownerRows = [
         profiles,
         areas,
@@ -233,6 +240,7 @@ export function readAccountExportRows(
             aiObservations: observations,
             generatedCardProposals: proposals,
             aiUsage: usage,
+            learningActivities: activitySnapshot.right.library,
           },
         },
       } as const;

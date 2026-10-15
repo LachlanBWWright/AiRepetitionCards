@@ -13,6 +13,7 @@ import { Effect, Either, Schema } from "effect";
 import { sha256 } from "@noble/hashes/sha2.js";
 import {
   MediaReferenceSchema,
+  emptyActivityLibrary,
   WorkspaceSchema,
   createAreaId,
   createAssessmentId,
@@ -28,6 +29,9 @@ import { rebuildScheduleEffect, type ReviewRating } from "@recall/scheduler";
 import { orderReviewEvents } from "@recall/sync-core";
 import {
   applyWorkspaceAuthoringCommand,
+  applyDeckWorkspaceUpdate,
+  retainPublishedActivityDefinitions,
+  publicationContentHash,
   refinementCardContent,
   type WorkspaceAuthoringCommand,
   workspaceAuthoringBaseline,
@@ -43,6 +47,13 @@ import {
   loadWorkspace,
   recordReview,
   summarizeReviews,
+  summarizeStudySession,
+  recommendLearningActivities,
+  mergeActivityLibraries,
+  retainLibraryDraft,
+  discardLibraryDraft,
+  toggleCardFlag,
+  type LibraryDraft,
   applyWorkspaceSyncChanges,
   bindWorkspaceOwner,
   workspaceHasRemoteSyncMetadata,
@@ -66,6 +77,13 @@ import { type LearningArea, type Assessment, type Workspace } from "@/features/w
 import { fromKnowledgeArea, toKnowledgeArea } from "@/features/workspace/knowledge-area-json";
 import { Button } from "@/components/ui/Button";
 import { Button as ShadcnButton } from "@recall/ui-web/components/button";
+import { useLibraryNotes } from "@/hooks/use-library-notes";
+import {
+  createBrowserLibraryNotesStore,
+  retainDraftFile,
+  readDraftFile,
+} from "@/lib/library-notes-store";
+import { DeckOverview } from "@/components/knowledge/DeckOverview";
 import { ReviewCard } from "@/components/ui/ReviewCard";
 import { InlineImage } from "@/components/ui/InlineImage";
 import {
@@ -145,7 +163,12 @@ import {
   type CardRefinementResult,
 } from "@recall/ai-core";
 import { KnowledgeAreaPublishing } from "@/components/publishing/KnowledgeAreaPublishing";
+import { DeckSharingPanel } from "@/components/publishing/DeckSharingPanel";
+import { DeckUpdatesInbox } from "@/components/publishing/DeckUpdatesInbox";
+import { createBrowserDeckSharingApi } from "@/lib/deck-sharing-api";
 import { AnkiImportAction } from "@/features/interchange/AnkiImportAction";
+import { createBrowserActivityServices } from "@/lib/learning/activity-client";
+import { LearningActivitiesPanel } from "@/components/knowledge/LearningActivitiesPanel";
 import { KnowledgeAreaCardLibrary } from "@/components/knowledge/KnowledgeAreaCardLibrary";
 import {
   CardDuplicateWarnings,
@@ -332,7 +355,7 @@ type DeletionRequest = {
 const staleAreaDraftMessage =
   "This area changed while you were editing. Your draft is preserved. Reopen the latest area before saving.";
 const areaSaveFailureMessage =
-  "This area could not be kept in the current tab. Your draft is preserved; reconnect to the account server and retry.";
+  "Save not confirmed. Your deck draft is still here. Check your connection, then retry saving.";
 function areaEditingBaseline(workspace: Workspace, area: LearningArea): string {
   return (
     workspaceAuthoringBaseline(
@@ -368,16 +391,44 @@ export default function Home({
   sharedRequest,
   routeView,
   onViewChange,
-  practiceId,
+  practiceId: routedPracticeId,
   onPracticeChange,
+  initialAreaId,
+  initialActivityId,
+  onActivityChange,
+  onOpenDeckPage,
+  initialTutorActivity,
+  initialImport = false,
+  initialFlaggedOnly = false,
 }: {
   readonly demo?: StoryDemo;
   readonly sharedRequest?: { readonly versionId: string; readonly token?: string };
   readonly routeView?: DashboardViewValue;
-  readonly onViewChange?: (view: DashboardViewValue) => void;
+  readonly onViewChange?: (
+    view: DashboardViewValue,
+    areaId?: string,
+    activity?: "materials" | "import" | "flagged",
+  ) => void;
+  readonly initialAreaId?: string;
+  readonly initialActivityId?: string;
+  readonly onActivityChange?: (areaId: string, activityId: string) => void;
+  readonly onOpenDeckPage?: (deckId?: string, token?: string) => void;
+  readonly initialTutorActivity?: "materials";
+  readonly initialImport?: boolean;
+  readonly initialFlaggedOnly?: boolean;
   readonly practiceId?: string;
   readonly onPracticeChange?: (id: string) => void;
 }) {
+  const [localActivityId, setLocalActivityId] = useState<string | undefined>(initialActivityId);
+  const [localPracticeId, setLocalPracticeId] = useState<string | undefined>();
+  const practiceId = routedPracticeId ?? localPracticeId;
+  const [sessionEvents, setSessionEvents] = useState<readonly ReviewEvent[]>([]);
+  const [onlyFlagged, setOnlyFlagged] = useState(initialFlaggedOnly);
+  const [draftClose, setDraftClose] = useState<"card" | "area" | null>(null);
+  const [libraryTools, setLibraryTools] = useState<"import" | "export" | "backup">("import");
+  const [creationChoices, setCreationChoices] = useState(false);
+  const [tutorActivity, setTutorActivity] = useState<"materials" | undefined>(initialTutorActivity);
+  const saveAnother = useRef(false);
   const [pendingConfirmation, setPendingConfirmation] = useState<{
     readonly description: string;
     readonly onConfirm: () => void | Promise<unknown>;
@@ -395,6 +446,10 @@ export default function Home({
     demo?.workspace.areas.flatMap((item) => item.cards).find((item) => item.id === demo.editCardId);
   const [workspace, setWorkspaceState] = useState<Workspace>(
     demo?.workspace ?? { ...starter, reviewEvents: [] },
+  );
+  const deckSharingApi = useMemo(
+    () => createBrowserDeckSharingApi(demo ? undefined : workspace.syncOwnerId),
+    [demo, workspace.syncOwnerId],
   );
   const workspaceRef = useRef(workspace);
   const workspaceSaveLane = useRef<Promise<void>>(Promise.resolve());
@@ -457,10 +512,7 @@ export default function Home({
     "checking" | "signed-in" | "signed-out" | "unavailable"
   >(demo || isDesktopRuntime() ? "signed-in" : "checking");
   const checkAccount = useCallback(() => {
-    if (demo || isDesktopRuntime()) {
-      setAccountStatus("signed-in");
-      return;
-    }
+    if (demo || isDesktopRuntime()) return;
     void Effect.runPromise(Effect.either(readBrowserSession())).then((result) => {
       if (Either.isLeft(result)) {
         setCloudWorkspaceLoaded(false);
@@ -492,8 +544,57 @@ export default function Home({
   const stale = demo?.localSnapshotStale ?? localStale;
   const cacheWritable = cacheMayWrite && !erased && !stale && !reviewSaveFailed && !reviewSaving;
   const cacheBlocked = cacheHasProblem || erased;
-  const [selectedId, setSelectedId] = useState(
-    demo?.selectedAreaId ?? demo?.editAreaId ?? "area-biology",
+  const notesScope = demo ? "demo-library" : (workspace.syncOwnerId ?? "local");
+  const notesStore = useMemo(
+    () =>
+      createBrowserLibraryNotesStore(
+        notesScope,
+        !demo &&
+          !isDesktopRuntime() &&
+          accountStatus === "signed-in" &&
+          Boolean(workspace.syncOwnerId),
+      ),
+    [notesScope, demo, accountStatus, workspace.syncOwnerId],
+  );
+  const activityServices = useMemo(
+    () =>
+      !demo && accountStatus === "signed-in"
+        ? createBrowserActivityServices(workspace.syncOwnerId)
+        : null,
+    [demo, accountStatus, workspace.syncOwnerId],
+  );
+  const libraryNotes = useLibraryNotes(notesStore);
+  const [activityRestoreError, setActivityRestoreError] = useState<string | null>(null);
+  const notesLoaded = libraryNotes.loaded;
+  const updateActivityNotes = libraryNotes.update;
+  useEffect(() => {
+    const restored = workspace?.activityLibrary;
+    if (!restored || !notesLoaded) return;
+    updateActivityNotes((notes) => {
+      const merged = Effect.runSync(
+        Effect.either(
+          mergeActivityLibraries(restored, notes.activityLibrary ?? emptyActivityLibrary),
+        ),
+      );
+      if (Either.isLeft(merged)) {
+        setActivityRestoreError(merged.left.message);
+        return notes;
+      }
+      setActivityRestoreError(null);
+      return { ...notes, activityLibrary: merged.right };
+    });
+  }, [workspace?.activityLibrary, notesLoaded, updateActivityNotes]);
+
+  const updateLibraryNotes = libraryNotes.update;
+  const [selectedId, setSelectedIdState] = useState(
+    practiceId ?? initialAreaId ?? demo?.selectedAreaId ?? demo?.editAreaId ?? "area-biology",
+  );
+  const setSelectedId = useCallback(
+    (areaId: SetStateAction<string>) => {
+      setLocalActivityId(undefined);
+      setSelectedIdState(areaId);
+    },
+    [setLocalActivityId, setSelectedIdState],
   );
   const [showAnswer, setShowAnswer] = useState(demo?.showAnswer ?? false);
   const [addingArea, setAddingArea] = useState(Boolean(demo?.editAreaId));
@@ -509,6 +610,8 @@ export default function Home({
     baseline: demoArea ? areaEditingBaseline(workspace, demoArea) : undefined,
   });
   const libraryMutationPending = useRef(false);
+  const deckUpdatePendingRef = useRef(false);
+  const [deckUpdatePending, setDeckUpdatePending] = useState(false);
   const [libraryMutation, setLibraryMutation] = useState<
     "area-save" | "area-delete" | "card-delete" | null
   >(null);
@@ -580,7 +683,10 @@ export default function Home({
   const [removedMediaIds, setRemovedMediaIds] = useState<readonly string[]>([]);
   const [showAreaSettings, setShowAreaSettings] = useState(demo?.areaSettings ?? false);
   const [shareKnowledgeOpen, setShareKnowledgeOpen] = useState(Boolean(sharedRequest));
-  const [importExportOpen, setImportExportOpen] = useState(false);
+  const [reviewedRequest, setReviewedRequest] = useState<
+    { readonly versionId: string; readonly token?: string } | undefined
+  >();
+  const [importExportOpen, setImportExportOpen] = useState(initialImport);
   const [reviewSettingsOpen, setReviewSettingsOpen] = useState(false);
   const [mediaFile, setMediaFile] = useState<File | null>(null);
   const [mediaPreviews, setMediaPreviews] = useState<
@@ -726,6 +832,7 @@ export default function Home({
     contentImportPending.current = false;
     if (!cardEditorMounted.current) return false;
     setContentImportBusy(false);
+    if (Either.isRight(saved)) setNow(new Date());
     if (Either.isLeft(saved)) {
       setImportNotice(saved.left);
       return false;
@@ -746,12 +853,32 @@ export default function Home({
   );
   const activeView = routeView ?? localActiveView;
   const setActiveView = useCallback(
-    (view: DashboardViewValue) => {
-      if (onViewChange) onViewChange(view);
+    (view: DashboardViewValue, targetAreaId = selectedId) => {
+      setLocalPracticeId(undefined);
+      if (onViewChange) onViewChange(view, targetAreaId);
       else setLocalActiveView(view);
     },
-    [onViewChange],
+    [onViewChange, selectedId],
   );
+  function startPractice(id: string) {
+    if (reviewSaving || reviewSaveFailed) return;
+    setSessionEvents([]);
+    setNow(new Date());
+    setShowAnswer(false);
+    setSelectedId(id);
+    if (onPracticeChange) onPracticeChange(id);
+    else {
+      setLocalPracticeId(id);
+      if (onViewChange) onViewChange(DashboardView.Today, id);
+      else setLocalActiveView(DashboardView.Today);
+    }
+  }
+  function generateCards() {
+    setCreationChoices(false);
+    setTutorActivity("materials");
+    if (onViewChange) onViewChange(DashboardView.Tutor, selectedId, "materials");
+    else setLocalActiveView(DashboardView.Tutor);
+  }
   useEffect(() => {
     if (demo) return;
     return startDailyReminderRuntime(() => setActiveView(DashboardView.Today));
@@ -793,7 +920,14 @@ export default function Home({
           }
         }
         setWorkspace(prepareWorkspaceForSync(loaded, () => crypto.randomUUID()));
-        setSelectedId(loaded.areas[0]?.id ?? "");
+        setSelectedIdState(
+          (selected) =>
+            initialAreaId ??
+            routedPracticeId ??
+            (loaded.areas.some((item) => item.id === selected)
+              ? selected
+              : (loaded.areas[0]?.id ?? "")),
+        );
         setCacheWritable(canWriteCache);
         setCacheBlocked(!canWriteCache);
         setImportNotice(cacheProblem);
@@ -805,7 +939,7 @@ export default function Home({
       active = false;
       window.clearInterval(timer);
     };
-  }, [demo, setWorkspace]);
+  }, [demo, setWorkspace, initialAreaId, routedPracticeId]);
 
   useEffect(() => {
     if (ready && !demo && cacheWritable) {
@@ -843,13 +977,49 @@ export default function Home({
     window.location.reload();
   }
 
-  const activeAreaId = practiceId ?? selectedId;
+  const deepPracticeRecommendations = workspace.areas
+    .flatMap((item) =>
+      recommendLearningActivities(
+        libraryNotes.notes.activityLibrary ?? emptyActivityLibrary,
+        item.id,
+        now.getTime(),
+      ),
+    )
+    .sort(
+      (left, right) =>
+        right.priority - left.priority || left.activity.id.localeCompare(right.activity.id, "en"),
+    )
+    .slice(0, 3);
+  function openLearningActivity(areaId: string, activityId: string) {
+    if (onActivityChange) {
+      onActivityChange(areaId, activityId);
+      return;
+    }
+    setSelectedId(areaId);
+    setOnlyFlagged(false);
+    setLocalActivityId(activityId);
+    setLocalActiveView(DashboardView.Library);
+  }
   const area = practiceId
     ? workspace.areas.find((item) => item.id === practiceId)
     : (workspace.areas.find((item) => item.id === selectedId) ?? workspace.areas[0]);
   const publishingAreaDocument = useMemo(
-    () => (area ? Effect.runSync(Effect.either(toKnowledgeArea(area, true, true))) : null),
-    [area],
+    () =>
+      area
+        ? Effect.runSync(
+            Effect.either(
+              toKnowledgeArea(area, true, true).pipe(
+                Effect.map((document) => ({
+                  ...document,
+                  activities: (libraryNotes.notes.activityLibrary?.activities ?? []).filter(
+                    (activity) => activity.areaId === area.id && !activity.archived,
+                  ),
+                })),
+              ),
+            ),
+          )
+        : null,
+    [area, libraryNotes.notes.activityLibrary],
   );
   const tutorAreaDocument = publishingAreaDocument;
   const clozePreview = useMemo(
@@ -883,6 +1053,202 @@ export default function Home({
     () => (area ? Effect.runSync(Effect.either(toKnowledgeArea(area, false, true))) : null),
     [area],
   );
+  const snapshotLibraryDraft = useCallback((): LibraryDraft | null => {
+    if (addingArea) {
+      if (!editingAreaId && !areaTitle.trim()) return null;
+      const original = workspaceRef.current.areas.find((item) => item.id === editingAreaId);
+      if (editingAreaId && original?.title === areaTitle && original.color === areaColor)
+        return null;
+      return {
+        kind: "area",
+        key: editingAreaId ? `area:${editingAreaId}` : "new-area",
+        id: areaEditor.current.id ?? "new",
+        mode: editingAreaId ? "edit" : "create",
+        title: areaTitle,
+        color: areaColor,
+        ...(areaEditor.current.baseline === undefined
+          ? {}
+          : { baseline: areaEditor.current.baseline }),
+      };
+    }
+    if (
+      !addingCard ||
+      !area ||
+      (!editingCardId &&
+        !(
+          front.trim() ||
+          back.trim() ||
+          clozeText.trim() ||
+          cardTags.trim() ||
+          mediaFile ||
+          removedMediaIds.length
+        ))
+    )
+      return null;
+    const source = cardEditor.current.sourceCard;
+    if (
+      source &&
+      source.front === front &&
+      source.back === back &&
+      (source.cloze?.text ?? "") === clozeText &&
+      String(source.cloze?.deletionIndex ?? 1) === clozeIndex &&
+      formatTagInput(source.tags ?? []) === cardTags &&
+      JSON.stringify(source.objectiveIds ?? []) === JSON.stringify(cardObjectiveIds) &&
+      removedMediaIds.length === 0 &&
+      !mediaFile &&
+      (source.cloze ? "cloze" : "basic") === cardKind
+    )
+      return null;
+    return {
+      kind: "card",
+      key: editingCardId ? `card:${editingCardId}` : `new-card:${area.id}`,
+      areaId: area.id,
+      id: editingCardId ?? "new",
+      mode: editingCardId ? "edit" : "create",
+      cardKind,
+      front,
+      back,
+      clozeText,
+      clozeIndex,
+      tagsText: cardTags,
+      objectiveIds: cardObjectiveIds,
+      media: source?.media ?? [],
+      removedMediaIds,
+      ...(source ? { sourceCard: source } : {}),
+      ...(cardEditor.current.baseline === undefined
+        ? {}
+        : { baseline: cardEditor.current.baseline }),
+    };
+  }, [
+    addingArea,
+    areaTitle,
+    editingAreaId,
+    areaColor,
+    addingCard,
+    area,
+    front,
+    back,
+    clozeText,
+    cardTags,
+    mediaFile,
+    removedMediaIds,
+    editingCardId,
+    cardKind,
+    clozeIndex,
+    cardObjectiveIds,
+  ]);
+  const retainOpenDraft = useCallback(() => {
+    const draft = snapshotLibraryDraft();
+    if (!draft) return;
+    updateLibraryNotes((notes) => retainLibraryDraft(notes, draft));
+    if (draft.kind === "card") retainDraftFile(notesScope, draft.key, mediaFile);
+  }, [snapshotLibraryDraft, updateLibraryNotes, notesScope, mediaFile]);
+  useEffect(() => {
+    if (!libraryNotes.loaded || (!addingCard && !addingArea)) return;
+    const timer = window.setTimeout(retainOpenDraft, 350);
+    return () => window.clearTimeout(timer);
+  }, [retainOpenDraft, libraryNotes.loaded, addingCard, addingArea]);
+  useEffect(() => {
+    if (!addingCard && !addingArea) return;
+    const warn = (event: BeforeUnloadEvent) => {
+      if (snapshotLibraryDraft()) {
+        event.preventDefault();
+        event.returnValue = "";
+      }
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [addingCard, addingArea, snapshotLibraryDraft]);
+  function resumeLibraryDraft(draft: LibraryDraft) {
+    if (reviewSaving || libraryMutation !== null || cardSaving) return;
+    if (addingCard || addingArea) {
+      retainOpenDraft();
+      closeCardEditor();
+      closeAreaEditor();
+    }
+    if (draft.kind === "area") {
+      areaEditor.current = {
+        generation: areaEditor.current.generation + 1,
+        id: draft.mode === "edit" || draft.id !== "new" ? createAreaId(draft.id) : null,
+        baseline: draft.baseline,
+      };
+      setEditingAreaId(draft.mode === "edit" ? draft.id : null);
+      setAreaTitle(draft.title);
+      setAreaColor(draft.color);
+      setAddingArea(true);
+      return;
+    }
+    if (!workspaceRef.current.areas.some((item) => item.id === draft.areaId)) {
+      setImportNotice("This draft’s deck no longer exists. Copy its text before discarding it.");
+      return;
+    }
+    cardEditor.current = {
+      generation: cardEditor.current.generation + 1,
+      baseline: draft.baseline,
+      sourceCard: draft.sourceCard ?? null,
+    };
+    setSelectedId(draft.areaId);
+    setEditingCardId(draft.mode === "edit" ? draft.id : null);
+    setFront(draft.front);
+    setBack(draft.back);
+    setCardKind(draft.cardKind);
+    setClozeText(draft.clozeText);
+    setClozeIndex(draft.clozeIndex);
+    setCardTags(draft.tagsText);
+    setCardObjectiveIds(draft.objectiveIds);
+    setRemovedMediaIds(draft.removedMediaIds);
+    setMediaFile(readDraftFile(notesScope, draft.key));
+    setCardEditorError(null);
+    setCardDraftStale(false);
+    setAddingCard(true);
+  }
+  async function keepDraftAndClose() {
+    retainOpenDraft();
+    if (!(await libraryNotes.flush())) {
+      setImportNotice(
+        "The draft couldn’t be retained. Keep editing here or retry saving drafts before closing.",
+      );
+      return;
+    }
+    if (draftClose === "card") closeCardEditor();
+    else closeAreaEditor();
+    setDraftClose(null);
+  }
+  function requestDraftClose(kind: "card" | "area") {
+    if (cardSaving || libraryMutation !== null) return;
+    const draft = snapshotLibraryDraft();
+    if (draft) {
+      retainOpenDraft();
+      setDraftClose(kind);
+    } else if (kind === "card") closeCardEditor();
+    else closeAreaEditor();
+  }
+  async function applyBulkCards(
+    command: WorkspaceAuthoringCommand,
+    expectedBaseline: string | undefined,
+  ): Promise<{ readonly ok: boolean; readonly message?: string }> {
+    if (
+      libraryMutationPending.current ||
+      cardSavePending.current ||
+      reviewSaving ||
+      reviewSaveFailed
+    )
+      return { ok: false, message: "Wait for the current save to finish." };
+    libraryMutationPending.current = true;
+    setLibraryMutation("area-save");
+    const saved = await Effect.runPromise(
+      Effect.either(saveAuthoringCommand(command, expectedBaseline)),
+    );
+    libraryMutationPending.current = false;
+    setLibraryMutation(null);
+    if (Either.isLeft(saved)) {
+      setImportNotice(saved.left.message);
+      return { ok: false, message: saved.left.message };
+    }
+    setImportNotice("Selected cards saved. Review history is preserved.");
+    setNow(new Date());
+    return { ok: true };
+  }
   const allCards = workspace.areas.flatMap((item) => item.cards);
   const dueCount = allCards.filter((card) => dueNow(card, now)).length;
   const card = area?.cards.find((item) => dueNow(item, now));
@@ -1108,6 +1474,8 @@ export default function Home({
         if (workspaceRef.current !== current) continue;
         workspaceRef.current = candidate;
         setWorkspaceState(candidate);
+        const savedEvent = candidate.reviewEvents?.find((event) => event.id === attempt.eventId);
+        if (savedEvent) setSessionEvents((events) => [...events, savedEvent]);
         pendingReviewRef.current = null;
         if (!demo) setReviewWritePending(false);
         setShowAnswer(false);
@@ -1164,7 +1532,12 @@ export default function Home({
         ? `${title} updated. Syncing to your account…`
         : `${title} created. Syncing to your account…`,
     );
+    const created = !editingAreaId;
+    libraryNotes.update((notes) =>
+      discardLibraryDraft(notes, editingAreaId ? `area:${editingAreaId}` : "new-area"),
+    );
     closeAreaEditor();
+    if (created) setCreationChoices(true);
   }
 
   function editArea(target: LearningArea) {
@@ -1245,7 +1618,7 @@ export default function Home({
     const current = workspaceRef.current;
     const latest = current.areas.find((item) => item.id === target.id);
     if (!latest) {
-      setImportNotice("This learning area is no longer available. Your workspace was preserved.");
+      setImportNotice("This deck is no longer available. Your workspace was preserved.");
       return;
     }
     const command: DeletionCommand = { kind: "delete-area", areaId: latest.id };
@@ -1339,7 +1712,7 @@ export default function Home({
         return {
           reason: "storage" as const,
           message:
-            "This change could not be kept in the current tab. Your draft or deletion request is preserved; reconnect and retry.",
+            "Save not confirmed. The draft or selection is still here. Check your connection, then retry saving.",
         };
       }),
     );
@@ -1419,13 +1792,13 @@ export default function Home({
     if (result.target.kind === "card") {
       const targetId = result.target.cardId;
       const targetCard = targetArea.cards.find((item) => item.id === targetId);
-      setActiveView(DashboardView.Library);
+      setActiveView(DashboardView.Library, targetArea.id);
       if (targetCard) editCard(targetCard);
       else setImportNotice("This card is no longer available. Search again.");
     } else if (result.target.kind === "area" || result.target.kind === "objective") {
-      setActiveView(DashboardView.Library);
+      setActiveView(DashboardView.Library, targetArea.id);
       setShowAreaSettings(result.target.kind === "objective");
-    } else setActiveView(DashboardView.Tutor);
+    } else setActiveView(DashboardView.Tutor, targetArea.id);
   }
 
   async function applyCardRefinement(
@@ -1508,6 +1881,10 @@ export default function Home({
 
   async function createCard(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    saveAnother.current =
+      event.nativeEvent instanceof SubmitEvent &&
+      event.nativeEvent.submitter instanceof HTMLElement &&
+      event.nativeEvent.submitter.dataset.saveAnother === "true";
     if (!area || cardSavePending.current) return;
     if (!duplicatesAccepted) {
       setCardEditorError("Review the matching cards and choose Keep both before saving.");
@@ -1692,7 +2069,27 @@ export default function Home({
     cardSavePending.current = false;
     setCardSaving(false);
     if (!accepted) return;
+    libraryNotes.update((notes) =>
+      discardLibraryDraft(
+        notes,
+        editingCardId ? `card:${editingCardId}` : `new-card:${area?.id ?? selectedId}`,
+      ),
+    );
+    if (editingCardId)
+      libraryNotes.update((notes) => ({
+        ...notes,
+        flaggedCardIds: notes.flaggedCardIds.filter((id) => id !== editingCardId),
+      }));
+    setNow(new Date());
+    const continueAdding = saveAnother.current && !editingCardId;
+    saveAnother.current = false;
+    const nextKind = cardKind;
     closeCardEditor();
+    if (continueAdding) {
+      addCard();
+      setCardKind(nextKind);
+      setImportNotice("Card saved. Add your next card.");
+    }
     setShowAnswer(false);
   }
 
@@ -1799,6 +2196,19 @@ export default function Home({
   }
 
   function exportWorkspaceSnapshot() {
+    const current = workspaceRef.current;
+    const merged = Effect.runSync(
+      Effect.either(
+        mergeActivityLibraries(
+          current.activityLibrary ?? emptyActivityLibrary,
+          libraryNotes.notes.activityLibrary ?? emptyActivityLibrary,
+        ),
+      ),
+    );
+    if (Either.isLeft(merged)) {
+      toast.error(merged.left.message);
+      return;
+    }
     const exported = Effect.runSync(
       Effect.either(
         Effect.try({
@@ -1809,7 +2219,7 @@ export default function Home({
                 {
                   backupVersion: 1,
                   exportedAt: new Date().toISOString(),
-                  workspace: workspaceRef.current,
+                  workspace: { ...current, activityLibrary: merged.right },
                   unconfirmedReviewAttempt: pendingReviewRef.current,
                 },
                 null,
@@ -1832,9 +2242,32 @@ export default function Home({
   }
 
   async function exportWorkspaceBackup() {
+    if (!libraryNotes.loaded) {
+      setImportNotice("Wait for learning activities to load before exporting a complete backup.");
+      return;
+    }
+    const merged = Effect.runSync(
+      Effect.either(
+        mergeActivityLibraries(
+          workspace.activityLibrary ?? emptyActivityLibrary,
+          libraryNotes.notes.activityLibrary ?? emptyActivityLibrary,
+        ),
+      ),
+    );
+    if (Either.isLeft(merged)) {
+      setImportNotice(merged.left.message);
+      return;
+    }
     const result = await Effect.runPromise(
       Effect.either(
-        exportWorkspaceBackupPackage(workspace, new Date().toISOString(), browserMediaStore),
+        exportWorkspaceBackupPackage(
+          {
+            ...workspace,
+            activityLibrary: merged.right,
+          },
+          new Date().toISOString(),
+          browserMediaStore,
+        ),
       ),
     );
     if (Either.isLeft(result)) {
@@ -2067,12 +2500,11 @@ export default function Home({
               "missing-front-back":
                 "Include front and back columns, or two columns without a header. Every non-empty row needs both a question and an answer; no cards were imported.",
               "no-cards": "No non-empty front/back card rows were found.",
-              "too-many-cards": "A Knowledge Area can contain up to 500 cards.",
-              "too-many-objectives": "A Knowledge Area can contain up to 200 learning objectives.",
+              "too-many-cards": "A Deck can contain up to 500 cards.",
+              "too-many-objectives": "A Deck can contain up to 200 learning objectives.",
               "invalid-metadata":
                 "Rename the import file to use a title of 80 characters or fewer and select a valid area color.",
-              "invalid-content":
-                "The imported content could not be validated as a portable Knowledge Area.",
+              "invalid-content": "The imported content could not be validated as a portable Deck.",
               "invalid-tag-encoding":
                 "The tags_json column must contain a JSON array of valid tag text. Correct it before importing.",
               "identity-unavailable": "Card identifiers could not be created. Try importing again.",
@@ -2081,10 +2513,19 @@ export default function Home({
             failContentImport(messages[result.reason]);
             return;
           }
-          void commitContentImport({
-            area: result.area,
-            message: `${result.area.cards.length} cards imported from ${file.name}.`,
-          });
+          contentImportPending.current = false;
+          setContentImportBusy(false);
+          requestConfirmation(
+            `Import ${result.area.cards.length} cards into a new deck named “${result.area.title}”? The file passed validation. Existing decks remain available.`,
+            () => {
+              if (!beginContentImport()) return;
+              setImportExportOpen(false);
+              return commitContentImport({
+                area: result.area,
+                message: `${result.area.cards.length} cards imported from ${file.name}.`,
+              });
+            },
+          );
         },
       }),
     );
@@ -2125,6 +2566,89 @@ export default function Home({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      <AlertDialog
+        open={draftClose !== null}
+        onOpenChange={(open) => {
+          if (!open) setDraftClose(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Keep this draft?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Your edits haven’t been saved as a card or deck. Keep the draft to resume it later in
+              this tab, or discard it.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {(libraryNotes.error || activityRestoreError) && (
+            <Alert variant="destructive">
+              {libraryNotes.error ?? activityRestoreError}
+              <Button onClick={libraryNotes.retry}>Retry draft save</Button>
+            </Alert>
+          )}
+          <AlertDialogFooter>
+            <AlertDialogCancel>Continue editing</AlertDialogCancel>
+            <Button
+              variant="secondary"
+              onClick={() => {
+                const draft = snapshotLibraryDraft();
+                if (draft) libraryNotes.update((notes) => discardLibraryDraft(notes, draft.key));
+                if (draftClose === "card") closeCardEditor();
+                else closeAreaEditor();
+                setDraftClose(null);
+              }}
+            >
+              Discard draft
+            </Button>
+            <Button disabled={!libraryNotes.loaded} onClick={() => void keepDraftAndClose()}>
+              Keep draft and close
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      <Dialog open={creationChoices && workspaceUnlocked} onOpenChange={setCreationChoices}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add cards to {area?.title}</DialogTitle>
+            <DialogDescription>
+              Choose how to build your deck. AI suggestions need your approval before becoming study
+              cards. Importing creates a separate deck.
+            </DialogDescription>
+          </DialogHeader>
+          <Button
+            onClick={() => {
+              setCreationChoices(false);
+              addCard();
+            }}
+          >
+            Write manually
+          </Button>
+          <Button variant="secondary" onClick={generateCards}>
+            Generate from materials
+          </Button>
+          <Button
+            variant="secondary"
+            onClick={() => {
+              setCreationChoices(false);
+              setLibraryTools("import");
+              setImportExportOpen(true);
+              if (onViewChange) onViewChange(DashboardView.Library, selectedId, "import");
+              else setActiveView(DashboardView.Library);
+            }}
+          >
+            Import existing cards
+          </Button>
+          <Button
+            variant="secondary"
+            onClick={() => {
+              setCreationChoices(false);
+              setActiveView(DashboardView.Library);
+            }}
+          >
+            Finish later
+          </Button>
+        </DialogContent>
+      </Dialog>
       <SidebarProvider className="min-h-screen">
         <Sidebar>
           <SidebarHeader className="flex-col items-center gap-2.5 px-3.5 pt-3 pb-0">
@@ -2196,12 +2720,12 @@ export default function Home({
               <SidebarGroup className="mt-0">
                 <SidebarGroupLabel>
                   <span className="overflow-hidden text-ellipsis whitespace-nowrap group-data-[state=collapsed]/sidebar:invisible">
-                    YOUR LEARNING AREAS
+                    YOUR DECKS
                   </span>
                   <SidebarGroupAction
                     className="static ml-auto grid size-[26px] shrink-0 translate-y-0 place-items-center rounded-md text-[var(--muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--ink)] group-data-[state=collapsed]/sidebar:invisible [&_svg]:size-[15px]"
                     type="button"
-                    aria-label="Add learning area"
+                    aria-label="Add deck"
                     onClick={addArea}
                   >
                     <Plus aria-hidden="true" />
@@ -2217,7 +2741,7 @@ export default function Home({
                         onClick={() => {
                           setSelectedId(item.id);
                           setShowAnswer(false);
-                          setActiveView(DashboardView.Today);
+                          startPractice(item.id);
                         }}
                       >
                         <span
@@ -2472,8 +2996,8 @@ export default function Home({
             <>
               {stale && !erased && (
                 <Alert className="my-3 flex flex-wrap items-center gap-2" variant="destructive">
-                  Another tab saved a newer workspace. This tab is read-only; your unsaved changes
-                  are still here. Export them before reloading the latest saved workspace.
+                  Another tab saved newer changes. Your unsaved work is still here. Export it, then
+                  reload to continue.
                   <Button onClick={() => void exportWorkspaceBackup()}>
                     Export this tab backup
                   </Button>
@@ -2494,7 +3018,7 @@ export default function Home({
                 >
                   {contentImportBusy
                     ? "Saving imported content…"
-                    : "This import has not been confirmed saved. Its content is retained on this page."}
+                    : "Save not confirmed. The imported cards are still here. Retry saving or cancel the import."}
                   {!contentImportBusy && pendingContentImport && (
                     <>
                       <Button
@@ -2543,9 +3067,8 @@ export default function Home({
               )}
               {reviewSaveFailed && (
                 <Alert className="my-3 flex flex-wrap items-center gap-2" variant="destructive">
-                  This review has not been confirmed saved. The answer is still here; retry saving
-                  the same review before continuing. Other saves are paused so a pending review
-                  cannot be overwritten.
+                  This review’s save hasn’t been confirmed. Your answer is still here. Retry saving
+                  before continuing.
                   <Button
                     disabled={erased || stale}
                     onClick={() => {
@@ -2555,10 +3078,15 @@ export default function Home({
                   >
                     Retry review save
                   </Button>
-                  <Button onClick={exportWorkspaceSnapshot}>Export this tab snapshot</Button>
-                  <Button onClick={() => void exportWorkspaceBackup()}>
-                    Export saved attachments backup
-                  </Button>
+                  <details className="text-sm">
+                    <summary>More recovery options</summary>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <Button onClick={exportWorkspaceSnapshot}>Export unsaved work</Button>
+                      <Button onClick={() => void exportWorkspaceBackup()}>
+                        Export workspace backup
+                      </Button>
+                    </div>
+                  </details>
                 </Alert>
               )}
 
@@ -2589,33 +3117,35 @@ export default function Home({
                   <div>
                     <h1 className="text-3xl font-semibold tracking-tight">Tutor</h1>
                     <p className="m-0 text-[12px] text-[var(--ink)]">
-                      Ask questions about your learning area
+                      Ask questions about your deck
                     </p>
                   </div>
                   {workspace.areas.length > 0 && (
                     <label className="grid gap-1.5 text-[12px] text-[var(--ink)]">
-                      Study area
+                      Deck
                       <StudyAreaSelect
                         areas={workspace.areas}
                         value={selectedId ?? ""}
                         disabled={reviewSaving || reviewSaveFailed}
-                        ariaLabel="Area"
+                        ariaLabel="Deck"
                         onValueChange={setSelectedId}
                       />
                     </label>
                   )}
                 </div>
                 <div className="mt-7">
-                  {!demo && area && tutorAreaDocument && Either.isRight(tutorAreaDocument) && (
+                  {area && tutorAreaDocument && Either.isRight(tutorAreaDocument) && (
                     <TutorPanel
-                      key={area.id}
+                      key={`${area.id}:${tutorActivity ?? "practice"}`}
                       knowledgeArea={tutorAreaDocument.right}
                       duplicateCandidates={duplicateCandidates}
                       {...(searchTarget?.areaId === area.id
                         ? { searchTarget: searchTarget.target }
                         : {})}
                       reviewEvents={workspace.reviewEvents ?? []}
-                      onStartReview={() => setActiveView(DashboardView.Today)}
+                      initialActivity={tutorActivity}
+                      demo={Boolean(demo)}
+                      onStartReview={() => startPractice(area.id)}
                       objectiveGaps={objectiveGaps}
                       onApprove={async (
                         proposal: CardProposal,
@@ -2662,11 +3192,11 @@ export default function Home({
                   )}
                   {!demo && area && tutorAreaDocument && Either.isLeft(tutorAreaDocument) && (
                     <p className="mt-2.5 text-[11px] text-[var(--status-warning-fg)]" role="status">
-                      The AI tutor is unavailable because this learning area has invalid content.
+                      The AI tutor is unavailable because this deck has invalid content.
                     </p>
                   )}
 
-                  {!area && <p>Add an area in Library to begin.</p>}
+                  {!area && <p>Create a deck in Library to begin.</p>}
                 </div>
               </div>
               {activeView === DashboardView.Tutor ? null : activeView === DashboardView.Today ? (
@@ -2676,13 +3206,14 @@ export default function Home({
                       <div className="mb-7">
                         <h1 className="text-3xl font-semibold tracking-tight">Today</h1>
                         <p className="m-0 text-sm text-[var(--muted)]">
-                          {dueCount} cards to review across {workspace.areas.length} learning areas
-                          · {studiedToday} reviewed today
+                          {dueCount} cards to review across {workspace.areas.length} decks ·{" "}
+                          {studiedToday} reviewed today
                         </p>
                       </div>
+                      {workspace.areas.length === 0 && <Button onClick={addArea}>New deck</Button>}
                       {workspace.areas.length === 0 ? (
                         <p className="rounded-xl border border-[var(--line)] bg-[var(--surface)] p-6 text-sm text-[var(--muted)]">
-                          No learning areas yet. Add an area in Library to begin.
+                          No decks yet. Create a deck to begin.
                         </p>
                       ) : (
                         <div className="grid gap-3">
@@ -2714,14 +3245,48 @@ export default function Home({
                                 <Button
                                   variant={due > 0 ? "default" : "secondary"}
                                   disabled={due === 0}
-                                  onClick={() => onPracticeChange?.(item.id)}
+                                  onClick={() => startPractice(item.id)}
                                 >
-                                  {due > 0 ? "Start practice" : "All caught up"}
+                                  {due > 0 ? "Start review" : "All caught up"}
                                 </Button>
                               </section>
                             );
                           })}
                         </div>
+                      )}
+                      {deepPracticeRecommendations.length > 0 && (
+                        <section aria-label="Deeper practice" className="grid gap-3">
+                          <h2 className="text-xl font-semibold">Deeper practice</h2>
+                          <p className="text-sm text-muted-foreground">
+                            Longer activities build evidence beyond quick recall reviews.
+                          </p>
+                          {deepPracticeRecommendations.map((recommendation) => (
+                            <article
+                              key={recommendation.activity.id}
+                              className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-card p-4"
+                            >
+                              <div>
+                                <h3 className="font-semibold">{recommendation.activity.title}</h3>
+                                <p className="text-sm text-muted-foreground">
+                                  About {recommendation.estimatedMinutes} minutes ·{" "}
+                                  {recommendation.reason}
+                                </p>
+                              </div>
+                              <Button
+                                variant="secondary"
+                                disabled={!libraryNotes.loaded || reviewSaving}
+                                onClick={() =>
+                                  openLearningActivity(
+                                    recommendation.activity.areaId,
+                                    recommendation.activity.id,
+                                  )
+                                }
+                              >
+                                Start activity
+                              </Button>
+                            </article>
+                          ))}
+                        </section>
                       )}
                     </main>
                   ) : (
@@ -2733,12 +3298,12 @@ export default function Home({
                         <div>
                           <div>
                             <h1 className="text-3xl font-semibold tracking-tight">
-                              {area?.title ?? "Practice"}
+                              {area?.title ?? "Review"}
                             </h1>
                             <button
                               type="button"
                               className="mt-1 text-sm text-[var(--muted)] underline-offset-4 hover:underline"
-                              onClick={() => onViewChange?.(DashboardView.Today)}
+                              onClick={() => setActiveView(DashboardView.Today)}
                             >
                               Back to Today
                             </button>
@@ -2749,7 +3314,7 @@ export default function Home({
                           </p>
                         </div>
                         <label className="grid gap-1.5 text-[12px] text-[var(--ink)]">
-                          Study area
+                          Deck
                           <StudyAreaSelect
                             areas={workspace.areas}
                             value={selectedId ?? ""}
@@ -2757,7 +3322,7 @@ export default function Home({
                             onValueChange={(value) => {
                               setSelectedId(value);
                               setShowAnswer(false);
-                              onPracticeChange?.(value);
+                              startPractice(value);
                             }}
                             renderDetail={(item) => (
                               <span className="shrink-0 text-muted-foreground">
@@ -2770,11 +3335,11 @@ export default function Home({
                       <div className="mt-7 block">
                         {!area ? (
                           <p className="rounded-xl border border-[var(--line)] bg-[var(--surface)] p-6 text-sm text-[var(--muted)]">
-                            This learning area is no longer available.{" "}
+                            This deck is no longer available.{" "}
                             <button
                               type="button"
                               className="underline"
-                              onClick={() => onViewChange?.(DashboardView.Today)}
+                              onClick={() => setActiveView(DashboardView.Today)}
                             >
                               Return to Today
                             </button>
@@ -2782,6 +3347,35 @@ export default function Home({
                         ) : (
                           <ReviewCard
                             area={area}
+                            flaggedCount={
+                              area.cards.filter((entry) =>
+                                libraryNotes.notes.flaggedCardIds.includes(entry.id),
+                              ).length
+                            }
+                            flagged={Boolean(
+                              card && libraryNotes.notes.flaggedCardIds.includes(card.id),
+                            )}
+                            onFlag={(target) =>
+                              libraryNotes.update((notes) => toggleCardFlag(notes, target.id))
+                            }
+                            onEditFlagged={() => {
+                              setOnlyFlagged(true);
+                              if (onViewChange)
+                                onViewChange(DashboardView.Library, area.id, "flagged");
+                              else setActiveView(DashboardView.Library);
+                            }}
+                            session={summarizeStudySession(area, sessionEvents, now.getTime())}
+                            now={now}
+                            schedulerParameters={workspace.schedulerSettings}
+                            onBack={() => setActiveView(DashboardView.Today)}
+                            onNextDeck={(() => {
+                              const next = workspace.areas.find(
+                                (item) =>
+                                  item.id !== area.id &&
+                                  item.cards.some((entry) => dueNow(entry, now)),
+                              );
+                              return next ? () => startPractice(next.id) : undefined;
+                            })()}
                             card={card}
                             mediaPreviews={mediaPreviews}
                             showAnswer={showAnswer}
@@ -2823,9 +3417,37 @@ export default function Home({
                       {activeView === DashboardView.Library ? "Library" : "Insights"}
                     </h1>
                     {activeView === DashboardView.Library && (
-                      <Button variant="secondary" onClick={() => setImportExportOpen(true)}>
-                        Import and export
-                      </Button>
+                      <div className="flex flex-wrap gap-2">
+                        <Button onClick={addArea}>New deck</Button>
+                        <Button
+                          variant="secondary"
+                          onClick={() => {
+                            setLibraryTools("import");
+                            setImportExportOpen(true);
+                          }}
+                        >
+                          Import cards
+                        </Button>
+                        <Button
+                          variant="secondary"
+                          disabled={!area}
+                          onClick={() => {
+                            setLibraryTools("export");
+                            setImportExportOpen(true);
+                          }}
+                        >
+                          Export deck
+                        </Button>
+                        <Button
+                          variant="secondary"
+                          onClick={() => {
+                            setLibraryTools("backup");
+                            setImportExportOpen(true);
+                          }}
+                        >
+                          Workspace backup
+                        </Button>
+                      </div>
                     )}
                     {activeView === DashboardView.Insights && (
                       <Button variant="secondary" onClick={() => setReviewSettingsOpen(true)}>
@@ -2836,10 +3458,66 @@ export default function Home({
                   {activeView === DashboardView.Library ? (
                     <>
                       <div className="mt-7 grid gap-7">
-                        <section
-                          aria-label="Learning areas"
-                          className="flex min-w-0 items-center gap-2"
-                        >
+                        {(libraryNotes.error || activityRestoreError) && (
+                          <Alert variant="destructive">
+                            {libraryNotes.error ?? activityRestoreError}
+                            <Button onClick={libraryNotes.retry}>Retry retaining drafts</Button>
+                          </Alert>
+                        )}
+                        {libraryNotes.notes.drafts.length > 0 && (
+                          <section
+                            aria-label="Saved drafts"
+                            className="grid gap-2 rounded-xl border p-4"
+                          >
+                            <h2 className="font-semibold">Resume a draft</h2>
+                            <p className="text-sm text-muted-foreground">
+                              Drafts stay in this tab across navigation. Save them as cards before
+                              closing or refreshing the tab.
+                            </p>
+                            {libraryNotes.notes.drafts.map((draft) => (
+                              <div key={draft.key} className="flex flex-wrap items-center gap-2">
+                                <Button
+                                  variant="secondary"
+                                  onClick={() => resumeLibraryDraft(draft)}
+                                >
+                                  {draft.kind === "area"
+                                    ? `Deck: ${draft.title || "Untitled"}`
+                                    : `Card: ${draft.front || draft.clozeText || "Untitled"}`}
+                                </Button>
+                                <Button
+                                  variant="secondary"
+                                  onClick={() =>
+                                    requestConfirmation("Discard this saved draft?", () =>
+                                      libraryNotes.update((notes) =>
+                                        discardLibraryDraft(notes, draft.key),
+                                      ),
+                                    )
+                                  }
+                                >
+                                  Discard
+                                </Button>
+                                <p className="max-w-full whitespace-pre-wrap text-sm">
+                                  {draft.kind === "card"
+                                    ? `${draft.front || draft.clozeText} — ${draft.back}`
+                                    : draft.title}
+                                </p>
+                              </div>
+                            ))}
+                          </section>
+                        )}
+                        <DeckOverview
+                          areas={workspace.areas}
+                          selectedId={selectedId}
+                          now={now.getTime()}
+                          onOpen={(id) => {
+                            setOnlyFlagged(false);
+                            setSelectedId(id);
+                            setShowAnswer(false);
+                          }}
+                          onStudy={startPractice}
+                          disabled={libraryMutation !== null || cardSaving || reviewSaving}
+                        />
+                        <section aria-label="Decks" className="flex min-w-0 items-center gap-2">
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                               <ShadcnButton
@@ -2855,7 +3533,7 @@ export default function Home({
                                   />
                                 )}
                                 <span className="min-w-0 flex-1 truncate text-left">
-                                  {area?.title ?? "Select a learning area"}
+                                  {area?.title ?? "Select a deck"}
                                 </span>
                                 {area && (
                                   <span className="shrink-0 text-xs text-[var(--muted)]">
@@ -2892,16 +3570,7 @@ export default function Home({
                               ))}
                             </DropdownMenuContent>
                           </DropdownMenu>
-                          <ShadcnButton
-                            type="button"
-                            variant="secondary"
-                            size="icon"
-                            className="size-9 shrink-0"
-                            aria-label="New area"
-                            onClick={addArea}
-                          >
-                            <Plus aria-hidden="true" />
-                          </ShadcnButton>
+
                           {area && (
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild>
@@ -2939,6 +3608,29 @@ export default function Home({
                             </DropdownMenu>
                           )}
                         </section>
+                        {area && (
+                          <div className="flex flex-wrap gap-2" aria-label="Deck actions">
+                            <Button onClick={addCard}>Add card</Button>
+                            <Button variant="secondary" onClick={generateCards}>
+                              Generate cards
+                            </Button>
+                            <Button
+                              variant="secondary"
+                              onClick={() => startPractice(area.id)}
+                              disabled={!area.cards.some((entry) => dueNow(entry, now))}
+                            >
+                              Review {area.cards.filter((entry) => dueNow(entry, now)).length} due
+                              cards
+                            </Button>
+                          </div>
+                        )}
+                        {!area && (
+                          <EmptyState
+                            title="Create your first deck"
+                            description="A deck groups cards for a subject. Write cards, generate them from materials, or import an existing deck."
+                            action={<Button onClick={addArea}>New deck</Button>}
+                          />
+                        )}
                         <div className="min-w-0 pt-1">
                           {area && (
                             <>
@@ -2948,7 +3640,7 @@ export default function Home({
                               >
                                 <DialogContent className="max-h-[calc(100dvh-2rem)] gap-5 overflow-y-auto sm:max-w-3xl">
                                   <DialogHeader>
-                                    <DialogTitle>Area settings</DialogTitle>
+                                    <DialogTitle>Deck settings</DialogTitle>
                                     <DialogDescription>Update {area.title}.</DialogDescription>
                                   </DialogHeader>
                                   <KnowledgeAreaSettings
@@ -2973,7 +3665,7 @@ export default function Home({
                                             : Effect.fail({
                                                 reason: "unavailable" as const,
                                                 message:
-                                                  "This knowledge area is no longer available. Your draft is preserved.",
+                                                  "This deck is no longer available. Your draft is preserved.",
                                               });
                                         }),
                                         Effect.mapError((error) => ({
@@ -2988,6 +3680,13 @@ export default function Home({
                               <KnowledgeAreaCardLibrary
                                 key={`area-library-${area.id}`}
                                 area={area}
+                                flaggedCardIds={libraryNotes.notes.flaggedCardIds}
+                                flaggedOnly={onlyFlagged}
+                                onFlaggedFilterChange={setOnlyFlagged}
+                                onFlag={(id) =>
+                                  libraryNotes.update((notes) => toggleCardFlag(notes, id))
+                                }
+                                onBulk={applyBulkCards}
                                 onEdit={editCard}
                                 onDelete={(target) => void deleteCard(target)}
                                 onAdd={addCard}
@@ -3009,6 +3708,60 @@ export default function Home({
                               />
                             </>
                           )}
+                          {area && (
+                            <LearningActivitiesPanel
+                              key={`activities:${notesScope}:${area.id}`}
+                              areaId={area.id}
+                              {...(localActivityId ? { initialActivityId: localActivityId } : {})}
+                              cards={area.cards}
+                              {...(activityServices ? { services: activityServices } : {})}
+                              objectives={area.objectives ?? []}
+                              {...(libraryNotes.notes.activityLibrary
+                                ? { library: libraryNotes.notes.activityLibrary }
+                                : {})}
+                              disabled={
+                                !libraryNotes.loaded ||
+                                (!demo && !cacheWritable) ||
+                                reviewSaveFailed ||
+                                reviewSaving ||
+                                cardSaving ||
+                                deckUpdatePending ||
+                                libraryMutation !== null
+                              }
+                              createId={() => crypto.randomUUID()}
+                              onSave={(activityLibrary) => {
+                                if (
+                                  localWritesBlocked() ||
+                                  localSnapshotStale() ||
+                                  !libraryNotes.loaded ||
+                                  (!demo && !cacheWritable) ||
+                                  reviewSaving ||
+                                  reviewSaveFailed ||
+                                  cardSaving ||
+                                  deckUpdatePendingRef.current ||
+                                  libraryMutation !== null
+                                )
+                                  return Promise.resolve(false);
+                                let valid = true;
+                                libraryNotes.update((notes) => {
+                                  const merged = Effect.runSync(
+                                    Effect.either(
+                                      mergeActivityLibraries(
+                                        activityLibrary,
+                                        notes.activityLibrary ?? emptyActivityLibrary,
+                                      ),
+                                    ),
+                                  );
+                                  if (Either.isLeft(merged)) {
+                                    valid = false;
+                                    return notes;
+                                  }
+                                  return { ...notes, activityLibrary: merged.right };
+                                });
+                                return valid ? libraryNotes.flush() : Promise.resolve(false);
+                              }}
+                            />
+                          )}
                           <DeletedCardRecovery
                             workspace={workspace}
                             onRestoreVersion={restoreVersion}
@@ -3025,101 +3778,146 @@ export default function Home({
                           >
                             <DialogContent className="max-h-[calc(100dvh-2rem)] gap-5 overflow-y-auto sm:max-w-2xl">
                               <DialogHeader>
-                                <DialogTitle>Import and export</DialogTitle>
+                                <DialogTitle>
+                                  {libraryTools === "import"
+                                    ? "Import cards"
+                                    : libraryTools === "export"
+                                      ? "Export deck"
+                                      : "Workspace backup"}
+                                </DialogTitle>
                                 <DialogDescription>
-                                  Import cards or restore a workspace backup. Export cards or save a
-                                  backup.
+                                  {libraryTools === "import"
+                                    ? "Validate and preview cards before adding a separate deck. Existing decks stay available."
+                                    : libraryTools === "export"
+                                      ? `Export ${area?.title ?? "the selected deck"} as CSV or TSV. These formats include text and tags, but omit attachments and review history.`
+                                      : "A backup includes all decks, schedules, review history and attachments. Restore replaces the workspace. Drafts and editing flags are stored separately."}
                                 </DialogDescription>
                               </DialogHeader>
                               <div
                                 className="flex flex-wrap gap-2"
-                                aria-label="Import and export tools"
+                                aria-label="Deck transfer tools"
                               >
-                                <AnkiImportAction
-                                  color={
-                                    colors[workspace.areas.length % colors.length] ?? "#c4ed68"
-                                  }
-                                  onAccept={(proposal) =>
-                                    Effect.tryPromise({
-                                      try: async () => {
-                                        if (
-                                          contentImportPending.current ||
-                                          (pendingContentImport &&
-                                            pendingContentImport.area?.id !== proposal.area.id)
+                                <div
+                                  className="flex flex-wrap gap-2"
+                                  role="group"
+                                  aria-label="Choose transfer task"
+                                >
+                                  {(["import", "export", "backup"] as const).map((task) => (
+                                    <Button
+                                      key={task}
+                                      variant="secondary"
+                                      aria-pressed={libraryTools === task}
+                                      onClick={() => setLibraryTools(task)}
+                                    >
+                                      {task === "import"
+                                        ? "Import cards"
+                                        : task === "export"
+                                          ? "Export deck"
+                                          : "Workspace backup"}
+                                    </Button>
+                                  ))}
+                                </div>
+                                {libraryTools === "import" && (
+                                  <div className="flex flex-wrap gap-2">
+                                    <AnkiImportAction
+                                      color={
+                                        colors[workspace.areas.length % colors.length] ?? "#c4ed68"
+                                      }
+                                      onAccept={(proposal) =>
+                                        Effect.tryPromise({
+                                          try: async () => {
+                                            if (
+                                              contentImportPending.current ||
+                                              (pendingContentImport &&
+                                                pendingContentImport.area?.id !== proposal.area.id)
+                                            )
+                                              return false;
+                                            return commitContentImport({
+                                              area: proposal.area,
+                                              media: proposal.media,
+                                              reviewEvents: proposal.reviewEvents,
+                                              message: `${proposal.area.cards.length} cards and ${proposal.reviewEvents.length} reviews imported from Anki. FSRS schedules were rebuilt from the review history.`,
+                                            });
+                                          },
+                                          catch: () =>
+                                            ({ _tag: "AnkiImportAcceptanceUnavailable" }) as const,
+                                        }).pipe(
+                                          Effect.flatMap((saved) =>
+                                            saved
+                                              ? Effect.void
+                                              : Effect.fail({
+                                                  _tag: "AnkiImportNotSaved",
+                                                } as const),
+                                          ),
                                         )
-                                          return false;
-                                        return commitContentImport({
-                                          area: proposal.area,
-                                          media: proposal.media,
-                                          reviewEvents: proposal.reviewEvents,
-                                          message: `${proposal.area.cards.length} cards and ${proposal.reviewEvents.length} reviews imported from Anki. FSRS schedules were rebuilt from the review history.`,
-                                        });
-                                      },
-                                      catch: () =>
-                                        ({ _tag: "AnkiImportAcceptanceUnavailable" }) as const,
-                                    }).pipe(
-                                      Effect.flatMap((saved) =>
-                                        saved
-                                          ? Effect.void
-                                          : Effect.fail({ _tag: "AnkiImportNotSaved" } as const),
-                                      ),
-                                    )
-                                  }
-                                />
-                                <label
-                                  className="inline-flex min-h-8 cursor-pointer items-center rounded-md px-2 text-sm text-[var(--ink)] underline-offset-4 hover:bg-[var(--surface-hover)] hover:underline"
-                                  htmlFor="delimited-import"
-                                >
-                                  Import CSV/TSV
-                                </label>
-                                <input
-                                  id="delimited-import"
-                                  className="sr-only"
-                                  type="file"
-                                  accept=".csv,.tsv,text/csv,text/tab-separated-values"
-                                  onChange={importDelimited}
-                                />
-                                <Button
-                                  variant="secondary"
-                                  className="inline-flex min-h-8 items-center rounded-md px-2 text-sm text-[var(--ink)] underline-offset-4 hover:bg-[var(--surface-hover)] hover:underline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
-                                  onClick={() => exportDelimited(",")}
-                                  disabled={!area}
-                                >
-                                  Export CSV
-                                </Button>
-                                <Button
-                                  variant="secondary"
-                                  className="inline-flex min-h-8 items-center rounded-md px-2 text-sm text-[var(--ink)] underline-offset-4 hover:bg-[var(--surface-hover)] hover:underline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
-                                  onClick={() => exportDelimited("\t")}
-                                  disabled={!area}
-                                >
-                                  Export TSV
-                                </Button>
-                                <Button
-                                  variant="secondary"
-                                  className="inline-flex min-h-8 items-center rounded-md px-2 text-sm text-[var(--ink)] underline-offset-4 hover:bg-[var(--surface-hover)] hover:underline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
-                                  onClick={exportWorkspaceBackup}
-                                >
-                                  Backup workspace
-                                </Button>
-                                <label
-                                  className="inline-flex min-h-8 cursor-pointer items-center rounded-md px-2 text-sm text-[var(--ink)] underline-offset-4 hover:bg-[var(--surface-hover)] hover:underline"
-                                  htmlFor={
-                                    isDesktopRuntime() ? undefined : "workspace-backup-import"
-                                  }
-                                  onClick={
-                                    isDesktopRuntime() ? restoreDesktopWorkspaceBackup : undefined
-                                  }
-                                >
-                                  Restore backup
-                                </label>
-                                <input
-                                  id="workspace-backup-import"
-                                  className="sr-only"
-                                  type="file"
-                                  accept="application/zip,.zip,application/json,.json"
-                                  onChange={restoreWorkspaceBackup}
-                                />
+                                      }
+                                    />
+                                    <label
+                                      className="inline-flex min-h-8 cursor-pointer items-center rounded-md px-2 text-sm text-[var(--ink)] underline-offset-4 hover:bg-[var(--surface-hover)] hover:underline"
+                                      htmlFor="delimited-import"
+                                    >
+                                      Import CSV/TSV
+                                    </label>
+                                    <input
+                                      id="delimited-import"
+                                      className="sr-only"
+                                      type="file"
+                                      accept=".csv,.tsv,text/csv,text/tab-separated-values"
+                                      onChange={importDelimited}
+                                    />
+                                  </div>
+                                )}
+                                {libraryTools === "export" && (
+                                  <div className="flex flex-wrap gap-2">
+                                    <Button
+                                      variant="secondary"
+                                      className="inline-flex min-h-8 items-center rounded-md px-2 text-sm text-[var(--ink)] underline-offset-4 hover:bg-[var(--surface-hover)] hover:underline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
+                                      onClick={() => exportDelimited(",")}
+                                      disabled={!area}
+                                    >
+                                      Export CSV
+                                    </Button>
+                                    <Button
+                                      variant="secondary"
+                                      className="inline-flex min-h-8 items-center rounded-md px-2 text-sm text-[var(--ink)] underline-offset-4 hover:bg-[var(--surface-hover)] hover:underline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
+                                      onClick={() => exportDelimited("\t")}
+                                      disabled={!area}
+                                    >
+                                      Export TSV
+                                    </Button>
+                                  </div>
+                                )}
+                                {libraryTools === "backup" && (
+                                  <div className="flex flex-wrap gap-2">
+                                    <Button
+                                      variant="secondary"
+                                      className="inline-flex min-h-8 items-center rounded-md px-2 text-sm text-[var(--ink)] underline-offset-4 hover:bg-[var(--surface-hover)] hover:underline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
+                                      onClick={exportWorkspaceBackup}
+                                    >
+                                      Backup workspace
+                                    </Button>
+                                    <label
+                                      className="inline-flex min-h-8 cursor-pointer items-center rounded-md px-2 text-sm text-[var(--ink)] underline-offset-4 hover:bg-[var(--surface-hover)] hover:underline"
+                                      htmlFor={
+                                        isDesktopRuntime() ? undefined : "workspace-backup-import"
+                                      }
+                                      onClick={
+                                        isDesktopRuntime()
+                                          ? restoreDesktopWorkspaceBackup
+                                          : undefined
+                                      }
+                                    >
+                                      Restore backup
+                                    </label>
+                                    <input
+                                      id="workspace-backup-import"
+                                      className="sr-only"
+                                      type="file"
+                                      accept="application/zip,.zip,application/json,.json"
+                                      onChange={restoreWorkspaceBackup}
+                                    />
+                                  </div>
+                                )}
                               </div>
                             </DialogContent>
                           </Dialog>
@@ -3127,13 +3925,45 @@ export default function Home({
                             open={shareKnowledgeOpen && workspaceUnlocked}
                             onOpenChange={setShareKnowledgeOpen}
                           >
-                            <DialogContent className="max-h-[calc(100dvh-2rem)] gap-5 overflow-y-auto sm:max-w-3xl">
+                            <DialogContent className="max-h-[calc(100dvh-2rem)] gap-5 overflow-y-auto sm:max-w-5xl">
                               <DialogHeader>
                                 <DialogTitle id="publication-title">Share knowledge</DialogTitle>
                                 <DialogDescription>
-                                  Publish a learning area or receive one from a shared link.
+                                  Publish a deck or receive one from a shared link.
                                 </DialogDescription>
+                                {onOpenDeckPage && (
+                                  <Button
+                                    variant="link"
+                                    className="w-fit"
+                                    onClick={() => onOpenDeckPage()}
+                                  >
+                                    Open public deck discovery
+                                  </Button>
+                                )}
                               </DialogHeader>
+                              {accountStatus === "signed-in" && (
+                                <DeckUpdatesInbox
+                                  key={`updates:${workspace.syncOwnerId ?? "local"}`}
+                                  api={deckSharingApi}
+                                  onReviewVersion={(versionId) => setReviewedRequest({ versionId })}
+                                />
+                              )}
+                              <DeckSharingPanel
+                                key={workspace.syncOwnerId ?? "local-deck-sharing"}
+                                api={deckSharingApi}
+                                {...(onOpenDeckPage ? { onOpenDeck: onOpenDeckPage } : {})}
+                                {...(publishingAreaDocument &&
+                                Either.isRight(publishingAreaDocument)
+                                  ? { currentArea: publishingAreaDocument.right }
+                                  : {})}
+                                onReviewVersion={(versionId, token) => {
+                                  setReviewedRequest({
+                                    versionId,
+                                    ...(token ? { token } : {}),
+                                  });
+                                  setShareKnowledgeOpen(true);
+                                }}
+                              />
                               <KnowledgeAreaPublishing
                                 key={area?.id ?? "receive-shared-area"}
                                 embedded
@@ -3145,7 +3975,180 @@ export default function Home({
                                 {...(lineageAreaDocument && Either.isRight(lineageAreaDocument)
                                   ? { lineageArea: lineageAreaDocument.right }
                                   : {})}
-                                {...(sharedRequest ? { initialRequest: sharedRequest } : {})}
+                                {...((reviewedRequest ?? sharedRequest)
+                                  ? { initialRequest: reviewedRequest ?? sharedRequest }
+                                  : {})}
+                                onUpdate={async (
+                                  updatedArea,
+                                  versionId,
+                                  advanceBaseline,
+                                  assets,
+                                ) => {
+                                  if (deckUpdatePendingRef.current) return false;
+                                  deckUpdatePendingRef.current = true;
+                                  setDeckUpdatePending(true);
+                                  try {
+                                    if (
+                                      !publishingAreaDocument ||
+                                      Either.isLeft(publishingAreaDocument)
+                                    )
+                                      return false;
+                                    const cardDocument = area
+                                      ? Effect.runSync(
+                                          Effect.either(toKnowledgeArea(area, true, true)),
+                                        )
+                                      : null;
+                                    if (!cardDocument || Either.isLeft(cardDocument)) return false;
+                                    const expected = publicationContentHash(cardDocument.right);
+                                    return await enqueueWorkspaceSave(async () => {
+                                      for (;;) {
+                                        if (
+                                          localWritesBlocked() ||
+                                          localSnapshotStale() ||
+                                          pendingReviewRef.current ||
+                                          (!demo && (!ready || !cacheWritable))
+                                        )
+                                          return false;
+                                        if (!(await libraryNotes.flush())) return false;
+                                        const notes = libraryNotes.getCurrentNotes();
+                                        if (!notes) return false;
+                                        const current = workspaceRef.current;
+                                        const existingLibrary = Effect.runSync(
+                                          Effect.either(
+                                            mergeActivityLibraries(
+                                              notes.activityLibrary ?? emptyActivityLibrary,
+                                              current.activityLibrary ?? emptyActivityLibrary,
+                                            ),
+                                          ),
+                                        );
+                                        if (Either.isLeft(existingLibrary)) {
+                                          setImportNotice(
+                                            "Your saved activities changed in another workspace. Retry after resolving the activity conflict.",
+                                          );
+                                          return false;
+                                        }
+                                        const currentAreaDefinitions =
+                                          notes.activityLibrary?.activities.filter(
+                                            (activity) =>
+                                              activity.areaId === updatedArea.id &&
+                                              !activity.archived,
+                                          ) ?? [];
+                                        const reviewedAreaDefinitions = (
+                                          publishingAreaDocument?.right.activities ?? []
+                                        ).filter(
+                                          (activity) =>
+                                            activity.areaId === updatedArea.id &&
+                                            !activity.archived,
+                                        );
+                                        const definitionSignature = (
+                                          activities: readonly { readonly id: string }[],
+                                        ) =>
+                                          JSON.stringify(
+                                            [...activities].sort((left, right) =>
+                                              left.id.localeCompare(right.id, "en"),
+                                            ),
+                                          );
+                                        if (
+                                          definitionSignature(currentAreaDefinitions) !==
+                                          definitionSignature(reviewedAreaDefinitions)
+                                        ) {
+                                          setImportNotice(
+                                            "Activities in this area changed after you reviewed the update. Review the deck again before applying it.",
+                                          );
+                                          return false;
+                                        }
+                                        const workspaceWithLibrary = {
+                                          ...current,
+                                          activityLibrary: existingLibrary.right,
+                                        };
+                                        const result = Effect.runSync(
+                                          Effect.either(
+                                            applyDeckWorkspaceUpdate(
+                                              {
+                                                workspace: workspaceWithLibrary,
+                                                updatedArea,
+                                                newVersionId: versionId,
+                                                advanceBaseline,
+                                                expectedCurrentAreaContentFingerprint: expected,
+                                              },
+                                              new Date(),
+                                              () => crypto.randomUUID(),
+                                            ),
+                                          ),
+                                        );
+                                        if (Either.isLeft(result)) {
+                                          setImportNotice(
+                                            "Your deck changed or the update could not be applied. Review it before retrying.",
+                                          );
+                                          return false;
+                                        }
+                                        if (!demo) {
+                                          const saved = await Effect.runPromise(
+                                            Effect.either(
+                                              saveWorkspaceWithMedia(
+                                                browserWorkspaceStore,
+                                                browserMediaStore,
+                                                result.right,
+                                                assets,
+                                              ),
+                                            ),
+                                          );
+                                          if (Either.isLeft(saved)) return false;
+                                        }
+                                        if (
+                                          localWritesBlocked() ||
+                                          localSnapshotStale() ||
+                                          pendingReviewRef.current
+                                        )
+                                          return false;
+                                        const latestNotes = libraryNotes.getCurrentNotes();
+                                        const workspaceChanged = workspaceRef.current !== current;
+                                        const definitionsChanged =
+                                          latestNotes?.activityLibrary !== notes.activityLibrary;
+                                        if (workspaceChanged || definitionsChanged) {
+                                          if (!demo) {
+                                            const rollback = await Effect.runPromise(
+                                              Effect.either(
+                                                saveWorkspaceWithMedia(
+                                                  browserWorkspaceStore,
+                                                  browserMediaStore,
+                                                  workspaceChanged ? workspaceRef.current : current,
+                                                  [],
+                                                ),
+                                              ),
+                                            );
+                                            if (Either.isLeft(rollback)) return false;
+                                          }
+                                          if (workspaceChanged) continue;
+                                          const latestAreaDefinitions =
+                                            latestNotes?.activityLibrary?.activities.filter(
+                                              (activity) =>
+                                                activity.areaId === updatedArea.id &&
+                                                !activity.archived,
+                                            ) ?? [];
+                                          if (
+                                            definitionSignature(latestAreaDefinitions) !==
+                                            definitionSignature(reviewedAreaDefinitions)
+                                          ) {
+                                            setImportNotice(
+                                              "Activities in this area changed after you reviewed the update. Review the deck again before applying it.",
+                                            );
+                                            return false;
+                                          }
+                                          continue;
+                                        }
+                                        setWorkspace(result.right);
+                                        setImportNotice(
+                                          "Selected deck changes saved. Review history is preserved.",
+                                        );
+                                        return true;
+                                      }
+                                    });
+                                  } finally {
+                                    deckUpdatePendingRef.current = false;
+                                    setDeckUpdatePending(false);
+                                  }
+                                }}
                                 onFork={async (
                                   document,
                                   attribution,
@@ -3171,6 +4174,12 @@ export default function Home({
                                       if (existing) {
                                         if (existing.forkedFromVersionId !== forkedFromVersionId)
                                           return false;
+                                        const retained = Effect.runSync(
+                                          Effect.either(
+                                            retainPublishedActivityDefinitions(current, document),
+                                          ),
+                                        );
+                                        if (Either.isLeft(retained)) return false;
                                         if (!demo) {
                                           const requiredMedia = new Set(
                                             existing.cards.flatMap((card) =>
@@ -3182,7 +4191,7 @@ export default function Home({
                                               saveWorkspaceWithMedia(
                                                 browserWorkspaceStore,
                                                 browserMediaStore,
-                                                current,
+                                                retained.right,
                                                 assets.filter((asset) =>
                                                   requiredMedia.has(asset.reference.id),
                                                 ),
@@ -3203,6 +4212,7 @@ export default function Home({
                                         )
                                           return false;
                                         if (workspaceRef.current !== current) continue;
+                                        setWorkspace(retained.right);
                                         setSelectedId(existing.id);
                                         setActiveView(DashboardView.Today);
                                         return true;
@@ -3226,14 +4236,23 @@ export default function Home({
                                         ),
                                       );
                                       if (Either.isLeft(imported)) return false;
-                                      const next = {
-                                        ...current,
-                                        areas: [...current.areas, imported.right],
-                                        syncContentHashes: {
-                                          ...(current.syncContentHashes ?? {}),
-                                          [imported.right.id]: contentHash,
-                                        },
-                                      };
+                                      const retained = Effect.runSync(
+                                        Effect.either(
+                                          retainPublishedActivityDefinitions(
+                                            {
+                                              ...current,
+                                              areas: [...current.areas, imported.right],
+                                              syncContentHashes: {
+                                                ...(current.syncContentHashes ?? {}),
+                                                [imported.right.id]: contentHash,
+                                              },
+                                            },
+                                            document,
+                                          ),
+                                        ),
+                                      );
+                                      if (Either.isLeft(retained)) return false;
+                                      const next = retained.right;
                                       if (!demo) {
                                         const saved = await Effect.runPromise(
                                           Effect.either(
@@ -3285,7 +4304,7 @@ export default function Home({
                           </span>
                         </div>
                         <p className="m-0 text-sm text-[var(--muted)]">
-                          {dueCount} cards are ready across {workspace.areas.length} learning areas.
+                          {dueCount} cards are ready across {workspace.areas.length} decks.
                         </p>
                         <p className="m-0 text-sm text-[var(--muted)]">
                           {studiedToday} today · {practice.week.inWindow} in the last 7 calendar
@@ -3312,7 +4331,7 @@ export default function Home({
                               <p>
                                 {retainedCards} deleted card{retainedCards === 1 ? "" : "s"}
                                 {deletedRetainedAreas > 0
-                                  ? ` in ${deletedRetainedAreas} deleted area${deletedRetainedAreas === 1 ? "" : "s"}`
+                                  ? ` in ${deletedRetainedAreas} deleted deck${deletedRetainedAreas === 1 ? "" : "s"}`
                                   : ""}{" "}
                                 {retainedPendingReviews > 0
                                   ? `retained privately for ${retainedPendingReviews} pending review${retainedPendingReviews === 1 ? "" : "s"}.`
@@ -3514,7 +4533,7 @@ export default function Home({
         <Dialog
           open={addingArea && workspaceUnlocked}
           onOpenChange={(open) => {
-            if (!open) closeAreaEditor();
+            if (!open) requestDraftClose("area");
           }}
         >
           <DialogContent
@@ -3532,14 +4551,14 @@ export default function Home({
                 size="icon"
                 className="absolute top-4 right-4 size-8 text-[var(--muted)] hover:bg-[var(--surface-hover)]"
                 disabled={libraryMutation === "area-save"}
-                onClick={closeAreaEditor}
+                onClick={() => requestDraftClose("area")}
                 aria-label="Close area editor"
               >
                 ×
               </Button>
               <DialogHeader className="pr-10">
                 <DialogTitle id="area-dialog-title">
-                  {editingAreaId ? "Edit area" : "New area"}
+                  {editingAreaId ? "Edit deck" : "New deck"}
                 </DialogTitle>
               </DialogHeader>
               {areaEditorError && (
@@ -3571,7 +4590,7 @@ export default function Home({
                 className="grid gap-3"
                 style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}
               >
-                <label htmlFor="area-title">Area name</label>
+                <label htmlFor="area-title">Deck name</label>
                 <Input
                   id="area-title"
                   autoFocus
@@ -3580,11 +4599,11 @@ export default function Home({
                   placeholder="e.g. Organic chemistry"
                   maxLength={80}
                 />
-                <p>Area color</p>
+                <p>Color (optional)</p>
                 <div className="flex items-center gap-2">
                   <RadioGroup
                     className="flex gap-2"
-                    aria-label="Area color"
+                    aria-label="Deck color"
                     value={areaColor}
                     onValueChange={setAreaColor}
                   >
@@ -3615,8 +4634,7 @@ export default function Home({
                     size="small"
                     type="button"
                     onClick={() => {
-                      setAddingArea(false);
-                      setEditingAreaId(null);
+                      requestDraftClose("area");
                     }}
                   >
                     Cancel
@@ -3630,7 +4648,7 @@ export default function Home({
                       ? "Saving area…"
                       : editingAreaId
                         ? "Save changes"
-                        : "Create area"}
+                        : "Create deck"}
                   </Button>
                 </DialogFooter>
               </fieldset>
@@ -3640,7 +4658,7 @@ export default function Home({
         <Dialog
           open={addingCard && workspaceUnlocked}
           onOpenChange={(open) => {
-            if (!open) closeCardEditor();
+            if (!open) requestDraftClose("card");
           }}
         >
           <DialogContent
@@ -3654,7 +4672,7 @@ export default function Home({
                 size="icon"
                 className="absolute top-4 right-4 size-8 text-[var(--muted)] hover:bg-[var(--surface-hover)]"
                 disabled={cardSaving}
-                onClick={closeCardEditor}
+                onClick={() => requestDraftClose("card")}
                 aria-label="Close card editor"
               >
                 ×
@@ -3712,6 +4730,7 @@ export default function Home({
                     <label htmlFor="card-front">Question</label>
                     <Textarea
                       id="card-front"
+                      key={`question-${cardEditor.current.generation}`}
                       autoFocus
                       value={front}
                       onChange={(event) => setFront(event.target.value)}
@@ -3734,6 +4753,7 @@ export default function Home({
                     <label htmlFor="card-cloze-text">Cloze text</label>
                     <Textarea
                       id="card-cloze-text"
+                      key={`cloze-${cardEditor.current.generation}`}
                       autoFocus
                       value={clozeText}
                       onChange={(event) => setClozeText(event.target.value)}
@@ -3768,37 +4788,44 @@ export default function Home({
                     )}
                   </>
                 )}
-                {tutorAreaDocument && Either.isRight(tutorAreaDocument) && (
-                  <TutorPanel
-                    knowledgeArea={tutorAreaDocument.right}
-                    duplicateCandidates={duplicateCandidates}
-                    onApprove={async () => null}
-                    renderContent={(api) => (
-                      <CardAssistancePanel
-                        key={editingCardId ?? "new-card"}
-                        proposal={{
-                          front: cardKind === "cloze" ? clozeText : front,
-                          back,
-                          objectiveId: cardObjectiveIds[0] ?? null,
-                          rationale: "Improve this library card.",
-                        }}
-                        knowledgeArea={tutorAreaDocument.right}
-                        api={api}
-                        existingCard={Boolean(editingCardId)}
-                        duplicateCandidates={duplicateCandidates}
-                        {...(editingCardId ? { excludeCardId: editingCardId } : {})}
-                        onBusyChange={setCardSaving}
-                        disabled={
-                          cardSaving ||
-                          Boolean(mediaFile) ||
-                          cardDraftStale ||
-                          (!demo && (!ready || !cacheWritable))
-                        }
-                        onApply={applyCardRefinement}
-                      />
-                    )}
-                  />
-                )}
+                {tutorAreaDocument &&
+                  Either.isRight(tutorAreaDocument) &&
+                  (cardKind === "basic"
+                    ? Boolean(front.trim() && back.trim())
+                    : Boolean(clozePreview && Either.isRight(clozePreview))) && (
+                    <TutorPanel
+                      knowledgeArea={tutorAreaDocument.right}
+                      duplicateCandidates={duplicateCandidates}
+                      onApprove={async () => null}
+                      renderContent={(api) => (
+                        <CardAssistancePanel
+                          key={editingCardId ?? "new-card"}
+                          proposal={{
+                            front: cardKind === "cloze" ? clozeText : front,
+                            back:
+                              cardKind === "cloze" && clozePreview && Either.isRight(clozePreview)
+                                ? clozePreview.right.back
+                                : back,
+                            objectiveId: cardObjectiveIds[0] ?? null,
+                            rationale: "Improve this library card.",
+                          }}
+                          knowledgeArea={tutorAreaDocument.right}
+                          api={api}
+                          existingCard={Boolean(editingCardId)}
+                          duplicateCandidates={duplicateCandidates}
+                          {...(editingCardId ? { excludeCardId: editingCardId } : {})}
+                          onBusyChange={setCardSaving}
+                          disabled={
+                            cardSaving ||
+                            Boolean(mediaFile) ||
+                            cardDraftStale ||
+                            (!demo && (!ready || !cacheWritable))
+                          }
+                          onApply={applyCardRefinement}
+                        />
+                      )}
+                    />
+                  )}
                 <CardDuplicateWarnings
                   draft={duplicateDraft}
                   candidates={duplicateCandidates}
@@ -3887,8 +4914,24 @@ export default function Home({
                     </AccordionContent>
                   </AccordionItem>
                 </Accordion>
-                <DialogFooter className="flex items-center justify-end gap-2">
-                  <Button size="small" type="button" onClick={closeCardEditor}>
+                <DialogFooter className="flex flex-wrap items-center justify-end gap-2">
+                  {!editingCardId && (
+                    <Button
+                      size="small"
+                      type="submit"
+                      disabled={
+                        cardSaving ||
+                        !duplicatesAccepted ||
+                        (cardKind === "cloze"
+                          ? !clozePreview || Either.isLeft(clozePreview)
+                          : !front.trim() || !back.trim())
+                      }
+                      data-save-another="true"
+                    >
+                      Save and add another
+                    </Button>
+                  )}
+                  <Button size="small" type="button" onClick={() => requestDraftClose("card")}>
                     Cancel
                   </Button>
                   <Button
@@ -3901,7 +4944,11 @@ export default function Home({
                         : !front.trim() || !back.trim())
                     }
                   >
-                    {cardSaving ? "Saving card…" : editingCardId ? "Save changes" : "Add card"}
+                    {cardSaving
+                      ? "Saving card…"
+                      : editingCardId
+                        ? "Save changes"
+                        : "Save and finish"}
                   </Button>
                 </DialogFooter>
               </fieldset>

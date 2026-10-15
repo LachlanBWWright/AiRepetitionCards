@@ -103,6 +103,7 @@ export const PublishKnowledgeAreaRequestSchema = Schema.Struct({
   shareToken: Schema.optional(PublishedShareTokenSchema),
   sourceAreaId: AreaIdSchema,
   content: KnowledgeAreaSchema,
+  releaseNotes: Schema.optional(Schema.String.pipe(Schema.maxLength(4_000))),
   visibility: PublicationVisibilitySchema,
   attribution: Schema.optional(AttributionSchema),
   license: Schema.optional(LicenseSchema),
@@ -119,6 +120,7 @@ export const PublishedKnowledgeAreaVersionSchema = Schema.Struct({
   visibility: Schema.optional(PublicationVisibilitySchema),
   attribution: AttributionSchema,
   license: LicenseSchema,
+  releaseNotes: Schema.optional(Schema.String.pipe(Schema.maxLength(4_000))),
   forkedFromVersionId: Schema.NullOr(PublicationVersionIdSchema),
   createdAt: TimestampSchema,
 });
@@ -144,6 +146,7 @@ export const ReadPublishedKnowledgeAreaResponseSchema = Schema.Struct({
     contentHash: HashSchema,
     attribution: AttributionSchema,
     license: LicenseSchema,
+    releaseNotes: Schema.optional(Schema.String.pipe(Schema.maxLength(4_000))),
     forkedFromVersionId: Schema.NullOr(PublicationVersionIdSchema),
     createdAt: TimestampSchema,
   }),

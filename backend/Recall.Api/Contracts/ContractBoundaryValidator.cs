@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text;
 using System.Text.RegularExpressions;
 
 namespace Recall.Api.Contracts;
@@ -96,7 +97,8 @@ public static partial class ContractBoundaryValidator
             !Has(document, "tags", JsonValueKind.Array) || !AllStrings(document.GetProperty("tags")) ||
             !Has(document, "licence", JsonValueKind.Null, JsonValueKind.String) ||
             !OptionalNullableString(document, "attribution", 500) ||
-            !OptionalString(document, "forkedFromVersionId", 80))
+            !OptionalString(document, "forkedFromVersionId", 80) ||
+            !OptionalActivityDefinitions(document))
             return ContractValidationResult.Invalid("invalid-knowledge-area");
 
         var objectives = document.GetProperty("objectives");
@@ -140,6 +142,61 @@ public static partial class ContractBoundaryValidator
     }
 
     private static bool AllStrings(JsonElement array) => array.EnumerateArray().All(item => item.ValueKind == JsonValueKind.String);
+    private static bool OptionalActivityDefinitions(JsonElement document)
+    {
+        if (!document.TryGetProperty("activities", out var activities)) return true;
+        if (activities.ValueKind != JsonValueKind.Array || activities.GetArrayLength() > 500) return false;
+        var areaId = document.TryGetProperty("id", out var areaIdValue) ? areaIdValue.GetString() : null;
+        var ids = new HashSet<string>(StringComparer.Ordinal);
+        long totalBytes = 0;
+        foreach (var activity in activities.EnumerateArray())
+        {
+            if (!IsObject(activity) || !Has(activity, "id", JsonValueKind.String) || !BoundedId(activity.GetProperty("id")) ||
+                (activity.TryGetProperty("sourceId", out var sourceId) && !BoundedId(sourceId)) ||
+                !Has(activity, "areaId", JsonValueKind.String) || !BoundedId(activity.GetProperty("areaId")) ||
+                !string.Equals(activity.GetProperty("areaId").GetString(), areaId, StringComparison.Ordinal) ||
+                !Has(activity, "title", JsonValueKind.String) || StringLength(activity.GetProperty("title")) is < 1 or > 300 ||
+                !Has(activity, "pluginId", JsonValueKind.String) || !BoundedId(activity.GetProperty("pluginId")) ||
+                !PositiveInteger(activity, "pluginVersion") || !PositiveInteger(activity, "revision") ||
+                !Has(activity, "objectiveIds", JsonValueKind.Array) || activity.GetProperty("objectiveIds").GetArrayLength() is < 1 or > 20 ||
+                !activity.GetProperty("objectiveIds").EnumerateArray().All(BoundedId) ||
+                activity.GetProperty("objectiveIds").EnumerateArray().Select(item => item.GetString()).Distinct(StringComparer.Ordinal).Count() != activity.GetProperty("objectiveIds").GetArrayLength() ||
+                !Has(activity, "fallback", JsonValueKind.String) || StringLength(activity.GetProperty("fallback")) > 40_000 ||
+                !Has(activity, "payload", JsonValueKind.Object) || !BoundedActivityPayload(activity.GetProperty("payload")) ||
+                (activity.TryGetProperty("archived", out var archived) && archived.ValueKind is not (JsonValueKind.True or JsonValueKind.False))) return false;
+            var id = activity.GetProperty("id").GetString()!;
+            if (!ids.Add(id)) return false;
+            totalBytes += Encoding.UTF8.GetByteCount(activity.GetRawText());
+            if (totalBytes > 5_000_000) return false;
+        }
+        return true;
+    }
+    private static bool BoundedId(JsonElement value) => value.ValueKind == JsonValueKind.String &&
+        value.GetString() is { Length: > 0 and <= 200 } text && !string.IsNullOrWhiteSpace(text);
+    private static bool BoundedActivityPayload(JsonElement payload)
+    {
+        if (Encoding.UTF8.GetByteCount(payload.GetRawText()) > 100_000) return false;
+        var pending = new Stack<(JsonElement Value, int Depth)>();
+        pending.Push((payload, 0));
+        var visited = 0;
+        while (pending.TryPop(out var current))
+        {
+            if (++visited > 50_000 || current.Depth > 32) return false;
+            if (current.Value.ValueKind == JsonValueKind.Object)
+            {
+                foreach (var property in current.Value.EnumerateObject())
+                    pending.Push((property.Value, current.Depth + 1));
+            }
+            else if (current.Value.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var value in current.Value.EnumerateArray())
+                    pending.Push((value, current.Depth + 1));
+            }
+        }
+        return true;
+    }
+    private static bool PositiveInteger(JsonElement value, string name) => value.TryGetProperty(name, out var item) &&
+        item.ValueKind == JsonValueKind.Number && item.TryGetInt32(out var number) && number > 0;
     private static bool AllNonEmptyStrings(JsonElement array) => array.EnumerateArray().All(IsNonEmptyString);
     private static bool IsNonEmptyString(JsonElement value) => value.ValueKind == JsonValueKind.String && !string.IsNullOrEmpty(value.GetString());
     private static bool OptionalString(JsonElement parent, string name, int? maxLength = null) =>

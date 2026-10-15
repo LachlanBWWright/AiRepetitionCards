@@ -8,6 +8,7 @@ using Recall.Api.Features.Publishing;
 using Recall.Api.Features.RateLimits;
 using Recall.Api.Features.Sync;
 using Recall.Api.Features.Tutor;
+using Recall.Api.Features.Learning;
 using Recall.Api.Contracts;
 using Recall.Infrastructure.SupabaseAuth;
 using Recall.Infrastructure.SupabaseWorkspaceRead;
@@ -46,6 +47,7 @@ var authConfigured = SupabaseJwtConfiguration.TryCreate(
 builder.Services.AddHttpClient<SupabaseWorkspaceSnapshotReader>();
 builder.Services.AddHttpClient<TutorPrivacyOperations>();
 builder.Services.AddTransient<TutorApiOperations>();
+builder.Services.AddTransient<LearningActivityOperations>();
 builder.Services.AddHttpClient<OpenAiTutorProvider>();
 builder.Services.AddTransient<ITutorProvider>(services => services.GetRequiredService<OpenAiTutorProvider>());
 builder.Services.AddEndpointsApiExplorer();
@@ -103,6 +105,7 @@ app.MapAccountEndpoints();
 app.MapSyncEndpoints();
 app.MapPublishingEndpoints();
 app.MapTutorEndpoints();
+app.MapLearningActivityEndpoints();
 
 app.MapGet("/api/v1/workspace", async (
     HttpContext context,

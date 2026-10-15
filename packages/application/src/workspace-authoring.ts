@@ -12,6 +12,9 @@ import {
   type Workspace,
 } from "@recall/domain";
 import { Effect, Schema } from "effect";
+import { newSchedule } from "@recall/scheduler";
+import { captureCardVersion } from "./card-history";
+import { authoredTagsValid } from "./tag-input";
 import { CardProposalSchema } from "@recall/ai-core";
 import { createObjectiveId } from "@recall/domain";
 import { expandCloze } from "./cloze";
@@ -45,6 +48,25 @@ export const WorkspaceAuthoringCommandSchema = Schema.Union(
   }),
   Schema.Struct({ kind: Schema.Literal("update-card"), ...SaveCardSchema.fields }),
   Schema.Struct({ kind: Schema.Literal("delete-card"), ...DeleteCardSchema.fields }),
+  Schema.Struct({
+    kind: Schema.Literal("bulk-tag-cards"),
+    areaId: AreaIdSchema,
+    cardIds: Schema.Array(AssessmentIdSchema).pipe(Schema.minItems(1), Schema.maxItems(500)),
+    tags: Schema.Array(Schema.String),
+  }),
+  Schema.Struct({
+    kind: Schema.Literal("bulk-delete-cards"),
+    areaId: AreaIdSchema,
+    cardIds: Schema.Array(AssessmentIdSchema).pipe(Schema.minItems(1), Schema.maxItems(500)),
+  }),
+  Schema.Struct({
+    kind: Schema.Literal("bulk-move-cards"),
+    areaId: AreaIdSchema,
+    targetAreaId: AreaIdSchema,
+    cards: Schema.Array(
+      Schema.Struct({ cardId: AssessmentIdSchema, newCardId: AssessmentIdSchema }),
+    ).pipe(Schema.minItems(1), Schema.maxItems(500)),
+  }),
   Schema.Struct({ kind: Schema.Literal("restore-card"), ...RestoreCardVersionSchema.fields }),
   Schema.Struct({
     kind: Schema.Literal("replace-card"),
@@ -135,6 +157,31 @@ export function workspaceAuthoringBaseline(
     return undefined;
   const areaId = command.kind === "save-area" ? command.id : command.areaId;
   const area = workspace.areas.find((item) => item.id === areaId);
+  if (
+    command.kind === "bulk-tag-cards" ||
+    command.kind === "bulk-delete-cards" ||
+    command.kind === "bulk-move-cards"
+  ) {
+    const ids =
+      command.kind === "bulk-move-cards"
+        ? command.cards.map((card) => card.cardId)
+        : command.cardIds;
+    const target =
+      command.kind === "bulk-move-cards"
+        ? workspace.areas.find((item) => item.id === command.targetAreaId)
+        : undefined;
+    return JSON.stringify(
+      canonical({
+        owner: workspace.syncOwnerId ?? null,
+        area: area ? { id: area.id, objectives: area.objectives ?? [] } : null,
+        cards: [...new Set(ids)].sort().map((id) => {
+          const card = area?.cards.find((item) => item.id === id);
+          return card ? authoredCard(card) : null;
+        }),
+        target: target ? { id: target.id, objectives: target.objectives ?? [] } : null,
+      }),
+    );
+  }
   if (command.kind === "restore-card") {
     const card = area?.cards.find((card) => card.id === command.cardId);
     return JSON.stringify(
@@ -213,7 +260,11 @@ export function applyWorkspaceAuthoringCommand(
       return yield* Effect.fail(
         failure(
           "stale-content",
-          "This content changed while you were editing. Reopen it to review the latest version before saving.",
+          command.kind === "bulk-tag-cards" ||
+            command.kind === "bulk-move-cards" ||
+            command.kind === "bulk-delete-cards"
+            ? "Some selected cards changed. No new bulk changes were applied. Cancel the action, review the selection, then try again."
+            : "This content changed while you were editing. Reopen it to review the latest version before saving.",
         ),
       );
     if (command.kind === "update-scheduler-settings") {
@@ -224,6 +275,147 @@ export function applyWorkspaceAuthoringCommand(
     }
     const areaId = command.kind === "save-area" ? command.id : command.areaId;
     switch (command.kind) {
+      case "bulk-tag-cards":
+      case "bulk-delete-cards":
+      case "bulk-move-cards": {
+        const area = workspace.areas.find((item) => item.id === areaId);
+        const ids =
+          command.kind === "bulk-move-cards"
+            ? command.cards.map((item) => item.cardId)
+            : command.cardIds;
+        if (
+          !area ||
+          new Set(ids).size !== ids.length ||
+          ids.some((id) => !area.cards.some((card) => card.id === id)) ||
+          !Number.isFinite(now.getTime())
+        )
+          return yield* Effect.fail(
+            failure(
+              "authoring-rejected",
+              "The selection changed. Review the selected cards before trying again.",
+            ),
+          );
+        let next = workspace;
+        if (command.kind === "bulk-tag-cards") {
+          if (!authoredTagsValid(command.tags))
+            return yield* Effect.fail(
+              failure(
+                "invalid-input",
+                "Use up to 100 nonblank tags of at most 80 characters each.",
+              ),
+            );
+          for (const card of area.cards.filter((item) => ids.includes(item.id))) {
+            const tags = [...new Set([...(card.tags ?? []), ...command.tags])];
+            if (!authoredTagsValid(tags))
+              return yield* Effect.fail(
+                failure(
+                  "invalid-input",
+                  "A selected card would exceed the tag limits. No cards were changed.",
+                ),
+              );
+            if (JSON.stringify(tags) === JSON.stringify(card.tags ?? [])) continue;
+            next = captureCardVersion(next, area, card, "edit", now);
+            next = {
+              ...next,
+              areas: next.areas.map((item) =>
+                item.id === area.id
+                  ? {
+                      ...item,
+                      cards: item.cards.map((entry) =>
+                        entry.id === card.id ? { ...entry, tags } : entry,
+                      ),
+                    }
+                  : item,
+              ),
+            };
+          }
+        } else {
+          if (command.kind === "bulk-move-cards") {
+            const target = next.areas.find((item) => item.id === command.targetAreaId);
+            if (
+              !target ||
+              target.id === area.id ||
+              target.cards.length + ids.length > 500 ||
+              new Set(command.cards.map((item) => item.newCardId)).size !== ids.length
+            )
+              return yield* Effect.fail(
+                failure(
+                  "invalid-input",
+                  "Choose a different deck with room for all selected cards.",
+                ),
+              );
+            const used = new Set([
+              ...workspace.areas.flatMap((item) => item.cards.map((card) => card.id)),
+              ...(workspace.retainedReviewAreas ?? []).flatMap((item) =>
+                item.cards.map((card) => card.id),
+              ),
+              ...(workspace.deletedCards ?? []).map((item) => item.cardId),
+              ...(workspace.cardVersions ?? []).map((item) => item.cardId),
+              ...(workspace.reviewEvents ?? []).map((item) => item.cardId),
+            ]);
+            if (command.cards.some((item) => used.has(item.newCardId)))
+              return yield* Effect.fail(
+                failure(
+                  "invalid-input",
+                  "A destination card identifier has already been used. Try again.",
+                ),
+              );
+            const schedule = yield* Effect.try({
+              try: () => newSchedule(now),
+              catch: () =>
+                failure(
+                  "invalid-input",
+                  "New review schedules could not be created. No cards were moved.",
+                ),
+            });
+            const moved = command.cards.flatMap((item) => {
+              const original = area.cards.find((card) => card.id === item.cardId);
+              if (!original) return [];
+              const titles = (area.objectives ?? [])
+                .filter(
+                  (objective) =>
+                    original.objectiveIds?.includes(objective.id) ||
+                    original.objective === objective.title,
+                )
+                .map((objective) => objective.title);
+              const objectives = (target.objectives ?? []).filter((objective) =>
+                titles.includes(objective.title),
+              );
+              return [
+                {
+                  ...original,
+                  id: item.newCardId,
+                  schedule,
+                  objectiveIds: objectives.map((objective) => objective.id),
+                  objective:
+                    objectives.map((objective) => objective.title).join(" · ") ||
+                    original.objective,
+                },
+              ];
+            });
+            next = {
+              ...next,
+              areas: next.areas.map((item) =>
+                item.id === target.id ? { ...item, cards: [...item.cards, ...moved] } : item,
+              ),
+            };
+          }
+          for (const cardId of ids)
+            next = yield* deleteStudyCard(next, { areaId, cardId }, now).pipe(
+              Effect.mapError(authoringFailure),
+            );
+        }
+        return {
+          workspace: next,
+          selectedAreaId: areaId,
+          message:
+            command.kind === "bulk-tag-cards"
+              ? "Tags added to selected cards."
+              : command.kind === "bulk-delete-cards"
+                ? "Selected cards deleted. History is preserved; recover them in Deleted cards."
+                : "Cards moved with fresh schedules. Original history is preserved in Deleted cards.",
+        };
+      }
       case "save-area": {
         const next = yield* saveLearningArea(workspace, command).pipe(
           Effect.mapError(authoringFailure),

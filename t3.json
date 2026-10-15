@@ -1,0 +1,57 @@
+{
+  "$schema": "https://t3.codes/schema/t3.json",
+  "defaultThreadEnvMode": "local",
+  "scripts": [
+    {
+      "name": "Install dependencies",
+      "command": "pnpm install --frozen-lockfile",
+      "icon": "configure",
+      "runOnWorktreeCreate": true,
+      "async": false
+    },
+    {
+      "name": "Web app",
+      "command": "pnpm dev",
+      "icon": "play",
+      "previewUrl": "http://localhost:3000",
+      "autoOpenPreview": true
+    },
+    {
+      "name": "Desktop app (Linux)",
+      "command": "pnpm dev:desktop",
+      "icon": "play"
+    },
+    {
+      "name": "Web + local API",
+      "command": "pnpm dev:api:next",
+      "icon": "play",
+      "previewUrl": "http://localhost:3000",
+      "autoOpenPreview": true
+    },
+    {
+      "name": "Desktop + local API",
+      "command": "pnpm dev:api:desktop",
+      "icon": "play"
+    },
+    {
+      "name": "Mobile app",
+      "command": "pnpm dev:mobile",
+      "icon": "play"
+    },
+    {
+      "name": "Mobile + local API",
+      "command": "pnpm dev:api:mobile",
+      "icon": "play"
+    },
+    {
+      "name": "Build Linux desktop AppImage",
+      "command": "pnpm --filter desktop dist:linux",
+      "icon": "build"
+    },
+    {
+      "name": "Run checks",
+      "command": "pnpm check",
+      "icon": "test"
+    }
+  ]
+}

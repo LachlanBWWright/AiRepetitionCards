@@ -4,6 +4,7 @@ import { uncoordinatedWorkspaceStore } from "./browser-workspace-store";
 import { uncoordinatedMediaStore } from "./browser-media-store";
 import { coordinateLocalErasure } from "./local-write-coordinator";
 import { volatileStorage } from "@/lib/volatile-storage";
+import { clearDraftFiles } from "@/lib/library-notes-store";
 
 /** Drain active writes and clear the volatile web working copy. */
 export const eraseLocalData = () =>
@@ -16,6 +17,7 @@ export const eraseLocalData = () =>
       const keyedDataCleared = yield* Effect.try({
         try: () => {
           volatileStorage.clear();
+          clearDraftFiles();
           return true;
         },
         catch: () => ({ _tag: "LocalSessionCleanupFailure" }) as const,

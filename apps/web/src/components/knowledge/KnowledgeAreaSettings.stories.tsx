@@ -120,7 +120,7 @@ function SettingsStory({
                 : Effect.fail({
                     _tag: "AreaSettingsSaveFailure",
                     reason: "unavailable",
-                    message: "This knowledge area is no longer available.",
+                    message: "This deck is no longer available.",
                   } as const);
             }),
             Effect.tap((updated) => Effect.sync(() => setArea(updated))),
@@ -136,7 +136,7 @@ function SettingsStory({
   );
 }
 const meta = {
-  title: "Knowledge/Area settings",
+  title: "Knowledge/Deck settings",
   component: SettingsStory,
   parameters: { layout: "fullscreen" },
 } satisfies Meta<typeof SettingsStory>;

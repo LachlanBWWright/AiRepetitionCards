@@ -20,8 +20,11 @@ public static partial class PublishingEndpoints
         var authorization = context.Request.Headers.Authorization.ToString();
         if (identity is null || !authorization.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
             return Error("unauthenticated", 401);
+        if (!DeckOwnerHeaderMatches(context, identity.UserId)) return Error("unauthenticated", 401);
         if (!TryConfiguration(configuration, out var projectUrl, out var key))
             return Error("publication-unavailable", 503);
+        var serviceRoleKey = configuration["SUPABASE_SERVICE_ROLE_KEY"];
+        if (string.IsNullOrWhiteSpace(serviceRoleKey)) return Error("publication-unavailable", 503);
 
         JsonDocument? parsed = null;
         try
@@ -53,6 +56,10 @@ public static partial class PublishingEndpoints
                 return Error("invalid-share-token", 400);
             if (!OptionalNullableString(root, "license", 120) || !OptionalNullableString(root, "attribution", 500))
                 return Error("invalid-request", 400);
+            if (root.TryGetProperty("releaseNotes", out var releaseNotesValue) &&
+                (releaseNotesValue.ValueKind != JsonValueKind.String || (releaseNotesValue.GetString()?.Length ?? 0) > 4_000))
+                return Error("invalid-request", 400);
+            var releaseNotes = OptionalJsonString(root, "releaseNotes") ?? string.Empty;
             var token = OptionalJsonString(root, "shareToken");
             if ((visibility == "unlisted") != (token is not null)) return Error("invalid-request", 400);
             if (visibility != "private" && !reuseConfirmed && RequiresReuseConfirmation(content, OptionalJsonString(root, "license") ?? OptionalJsonString(content, "licence")))
@@ -85,21 +92,28 @@ public static partial class PublishingEndpoints
             var normalizedContent = JsonNodeFrom(content, license, attribution);
             var contentHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(CanonicalJson(normalizedContent)))).ToLowerInvariant();
             var versionId = DerivePublicationId(identity.UserId, sourceGuid, operationGuid);
-            var fingerprint = PublicationFingerprint(sourceGuid, normalizedContent, visibility, attribution, license, forkedFrom);
+            var fingerprint = PublicationFingerprint(sourceGuid, normalizedContent, visibility, attribution, license, forkedFrom, releaseNotes);
             var accessToken = authorization[7..].Trim();
             using var client = clients.CreateClient();
 
-            using var existingResponse = await GetAsync(client, projectUrl, key,
-                $"published_knowledge_area_versions?select=id,source_area_id,owner_id,version,content,content_hash,visibility,attribution,license,forked_from_version_id,created_at,share_token_hash&id=eq.{versionId:D}&owner_id=eq.{identity.UserId:D}&limit=1",
-                accessToken, cancellationToken);
+            // This narrowly scoped owner lookup includes the secret token hash, which
+            // is intentionally unavailable to authenticated PostgREST clients. The
+            // request is safe to make with the service role only after bearer identity
+            // and owner headers are validated, and it is constrained by both the
+            // deterministic publication ID and authenticated owner ID.
+            using var existingResponse = await GetAsync(client, projectUrl, serviceRoleKey,
+                $"published_knowledge_area_versions?select=id,source_area_id,owner_id,version,content,content_hash,visibility,attribution,license,forked_from_version_id,release_notes,created_at,share_token_hash&id=eq.{versionId:D}&owner_id=eq.{identity.UserId:D}&limit=1",
+                serviceRoleKey, cancellationToken);
             if (existingResponse.IsSuccessStatusCode)
             {
                 using var existingJson = await ParseJsonAsync(existingResponse, cancellationToken);
                 var existing = existingJson is null ? null : FirstRow(existingJson.RootElement);
                 if (existing is { } row)
                 {
-                    if (!TryValidatePublication(row, versionId, out var saved) ||
-                        !CryptographicOperations.FixedTimeEquals(Encoding.ASCII.GetBytes(fingerprint), Encoding.ASCII.GetBytes(PublicationFingerprint(sourceGuid, saved.Content, visibility, saved.Attribution, saved.License, saved.ForkedFromVersionId))))
+                    if (!TryString(row, "visibility", out var savedVisibility) || savedVisibility != visibility ||
+                        !TryValidatePublication(row, versionId, out var saved) ||
+                        !string.Equals(saved.ReleaseNotes, releaseNotes, StringComparison.Ordinal) ||
+                        !CryptographicOperations.FixedTimeEquals(Encoding.ASCII.GetBytes(fingerprint), Encoding.ASCII.GetBytes(PublicationFingerprint(sourceGuid, saved.Content, visibility, saved.Attribution, saved.License, saved.ForkedFromVersionId, saved.ReleaseNotes))))
                         return Error("publication-operation-conflict", 409);
                     var recoveredToken = token is not null && TryString(row, "share_token_hash", out var storedHash) &&
                         CryptographicOperations.FixedTimeEquals(Encoding.ASCII.GetBytes(Hash(token)), Encoding.ASCII.GetBytes(storedHash)) ? token : null;
@@ -141,35 +155,25 @@ public static partial class PublishingEndpoints
                 }
             }
 
-            using var latestResponse = await GetAsync(client, projectUrl, key,
-                $"published_knowledge_area_versions?select=version&source_area_id=eq.{sourceGuid:D}&order=version.desc&limit=1",
-                accessToken, cancellationToken);
-            if (!latestResponse.IsSuccessStatusCode) return Error("publication-unavailable", 503);
-            using var latestJson = await ParseJsonAsync(latestResponse, cancellationToken);
-            var latestRow = latestJson is null ? null : FirstRow(latestJson.RootElement);
-            var nextVersion = latestRow is { } latest && latest.TryGetProperty("version", out var number) && number.TryGetInt32(out var current)
-                ? current + 1 : 1;
-            if (nextVersion <= 0) return Error("version-conflict", 409);
-
-            var insert = new
+            var publicationArgs = new
             {
-                id = versionId,
-                source_area_id = sourceGuid,
-                owner_id = identity.UserId,
-                version = nextVersion,
-                content = normalizedContent,
-                content_hash = contentHash,
-                visibility,
-                attribution,
-                license,
-                forked_from_version_id = forkedFrom,
-                share_token_hash = token is null ? null : Hash(token),
-                created_by = identity.UserId
+                p_version_id = versionId,
+                p_source_area_id = sourceGuid,
+                p_owner_id = identity.UserId,
+                p_operation_id = operationGuid,
+                p_content = normalizedContent,
+                p_content_hash = contentHash,
+                p_visibility = visibility,
+                p_attribution = attribution,
+                p_license = license,
+                p_forked_from_version_id = forkedFrom,
+                p_release_notes = releaseNotes,
+                p_share_token_hash = token is null ? null : Hash(token)
             };
-            using var insertRequest = BuildRequest(HttpMethod.Post, projectUrl, key,
-                "published_knowledge_area_versions?select=id,source_area_id,version,content,content_hash,visibility,attribution,license,forked_from_version_id,created_at", accessToken);
+            using var insertRequest = BuildRequest(HttpMethod.Post, projectUrl, serviceRoleKey,
+                "rpc/create_deck_publication?select=id,source_area_id,version,content,content_hash,visibility,attribution,license,forked_from_version_id,release_notes,created_at,share_token_hash", serviceRoleKey);
             insertRequest.Headers.TryAddWithoutValidation("Prefer", "return=representation");
-            insertRequest.Content = JsonContent.Create(insert);
+            insertRequest.Content = JsonContent.Create(publicationArgs);
             using var insertResponse = await SendAsync(client, insertRequest, cancellationToken);
             if (!insertResponse.IsSuccessStatusCode)
             {
@@ -180,8 +184,12 @@ public static partial class PublishingEndpoints
             var savedRow = savedJson is null ? null : FirstRow(savedJson.RootElement);
             if (savedRow is null || !TryValidatePublication(savedRow.Value, versionId, out var savedPublication))
                 return Error("publication-response-invalid", 502);
+            var returnedToken = token is not null && savedRow.Value.TryGetProperty("share_token_hash", out var returnedHash) &&
+                returnedHash.ValueKind == JsonValueKind.String &&
+                CryptographicOperations.FixedTimeEquals(Encoding.ASCII.GetBytes(Hash(token)), Encoding.ASCII.GetBytes(returnedHash.GetString() ?? string.Empty))
+                ? token : null;
             context.Response.Headers.CacheControl = "private, no-store";
-            return Results.Json(PublishResponse(operationGuid, versionId, sourceGuid, visibility, savedPublication, token), statusCode: 201);
+            return Results.Json(PublishResponse(operationGuid, versionId, sourceGuid, visibility, savedPublication, returnedToken), statusCode: 201);
         }
         catch (JsonException) { return Error("invalid-request", 400); }
         catch (IOException) { return Error("invalid-request", 400); }
@@ -280,7 +288,7 @@ public static partial class PublishingEndpoints
         return Guid.Parse(id);
     }
 
-    private static string PublicationFingerprint(Guid sourceAreaId, JsonElement content, string visibility, string? attribution, string? license, string? forkedFrom)
+    private static string PublicationFingerprint(Guid sourceAreaId, JsonElement content, string visibility, string? attribution, string? license, string? forkedFrom, string releaseNotes)
     {
         var value = JsonSerializer.SerializeToElement(new
         {
@@ -289,6 +297,7 @@ public static partial class PublishingEndpoints
             visibility,
             attribution,
             license,
+            releaseNotes,
             forkedFromVersionId = forkedFrom
         });
         return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(CanonicalJson(value)))).ToLowerInvariant();
@@ -310,6 +319,7 @@ public static partial class PublishingEndpoints
                 visibility,
                 attribution = publication.Attribution,
                 license = publication.License,
+                releaseNotes = publication.ReleaseNotes,
                 forkedFromVersionId = publication.ForkedFromVersionId,
                 createdAt = publication.CreatedAt
             }

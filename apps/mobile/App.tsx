@@ -1,6 +1,13 @@
+import { emptyActivityLibrary } from "@recall/domain";
+import { useLibraryNotes } from "./src/hooks/use-library-notes";
+import {
+  createNativeLibraryNotesStore,
+  clearNativeLibraryNotes,
+} from "./src/storage/native-library-notes";
+import { withNativeOperationStoreLane } from "./src/storage/native-operation-store";
 import { NativeButton } from "./src/components/ui/NativeButton";
 import { useCallback, useEffect, useMemo, useRef, useState, type SetStateAction } from "react";
-import { Alert, View } from "react-native";
+import { Text, Alert, View } from "react-native";
 import { Effect, Either, Schema } from "effect";
 import * as Crypto from "expo-crypto";
 import * as Linking from "expo-linking";
@@ -10,6 +17,7 @@ import {
   clearWorkspaceAndMedia,
   applyWorkspaceSyncChanges,
   applyWorkspaceAuthoringCommand,
+  WorkspaceAuthoringCommandSchema,
   bindWorkspaceOwner,
   workspaceHasRemoteSyncMetadata,
   applyWorkspaceContentConflict,
@@ -23,6 +31,14 @@ import {
   toKnowledgeArea,
   workspaceDuplicateCandidates,
   type WorkspaceSearchResult,
+  recommendLearningActivities,
+  mergeActivityLibraries,
+  applyDeckWorkspaceUpdate,
+  retainPublishedActivityDefinitions,
+  publicationContentHash,
+  retainLibraryDraft,
+  discardLibraryDraft,
+  toggleCardFlag,
 } from "@recall/application";
 import type {
   AnkiImportProposal,
@@ -30,7 +46,7 @@ import type {
   WorkspaceMediaClearResult,
 } from "@recall/application";
 import { type ReviewRating } from "@recall/scheduler";
-import type { Assessment, Workspace } from "@recall/domain";
+import type { Assessment, Workspace, ReviewEvent } from "@recall/domain";
 import { createAreaId } from "@recall/domain";
 import type { MediaStore, WorkspaceStore, StoredMediaAsset } from "@recall/local-store";
 import {
@@ -45,12 +61,15 @@ import {
 import { syncNativeWorkspace } from "./src/storage/native-workspace-sync";
 import { makeNativeWorkspaceMediaGateway } from "./src/storage/native-workspace-media-gateway";
 import { makeNativePublishingClients } from "./src/storage/native-publishing-api";
+import { makeNativeDeckSharingApi } from "./src/storage/native-deck-sharing-api";
 import {
   pickKnowledgeArea,
   pickWorkspaceBackup,
   shareKnowledgeArea,
   shareWorkspaceBackup,
 } from "./src/storage/native-interchange";
+import { createNativeActivityServices } from "./src/storage/native-activity-services";
+import { NativeLearningActivitiesPanel } from "./src/components/NativeLearningActivitiesPanel";
 import { NativeWorkspaceAuthoringPanel } from "./src/components/NativeWorkspaceAuthoringPanel";
 import { NativeWorkspaceSearchPanel } from "./src/components/NativeWorkspaceSearchPanel";
 import { NativeTodayScreen } from "./src/components/NativeTodayScreen";
@@ -65,6 +84,7 @@ import { NativeAccountPanel } from "./src/components/NativeAccountPanel";
 import { pickAnkiImport } from "./src/storage/native-anki-import";
 import { pickNativeMedia } from "./src/storage/native-media-picker";
 import { NativePublishingPanel } from "./src/components/NativePublishingPanel";
+import { NativeDeckSharingPanel } from "./src/components/NativeDeckSharingPanel";
 import { createNativeForkOperationStore } from "./src/storage/native-fork-operation-store";
 import { createNativePublicationOperationStore } from "./src/storage/native-publication-operation-store";
 import { clearNativePendingOperations } from "./src/storage/native-operation-store";
@@ -137,6 +157,13 @@ export default function App() {
     generation: 0,
   });
   const [accountUserId, setAccountUserId] = useState<string | null>(null);
+  const [selectedDeckVersion, setSelectedDeckVersion] = useState<{
+    readonly versionId: string;
+    readonly token?: string;
+    readonly owner: string | null;
+  } | null>(null);
+  const visibleSelectedDeckVersion =
+    selectedDeckVersion?.owner === accountUserId ? selectedDeckVersion : null;
   const [syncOwnershipIssue, setSyncOwnershipIssue] = useState<
     "account-mismatch" | "owner-adoption-required" | null
   >(null);
@@ -157,6 +184,7 @@ export default function App() {
     [operationGeneration, workspaceLifetime],
   );
   function invalidateWorkspaceOperations() {
+    setStudySession(null);
     setSyncOwnershipIssue(null);
     setSearchOpen(false);
     setSearchTarget(null);
@@ -262,7 +290,64 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<NativeAppTab>(AppTab.Today);
   const openReminderToday = useCallback(() => setActiveTab(AppTab.Today), [setActiveTab]);
   const dailyReminders = useNativeDailyReminders(openReminderToday);
-  const [activeAreaId, setActiveAreaId] = useState<string | null>(null);
+  const [studySession, setStudySession] = useState<{
+    readonly areaId: string;
+    readonly events: readonly ReviewEvent[];
+  } | null>(null);
+  const [tutorActivity, setTutorActivity] = useState<"materials" | undefined>();
+  const [onlyFlagged, setOnlyFlagged] = useState(false);
+  const [libraryTransfer, setLibraryTransfer] = useState<"export" | "backup" | null>(null);
+  const [transferPending, setTransferPending] = useState(false);
+  const [showImportChoices, setShowImportChoices] = useState(false);
+  const [importingCards, setImportingCards] = useState(false);
+  const notesWritable = !workspaceLifetime.isBlocked();
+  const notesStore = useMemo(() => {
+    const owner = workspace?.syncOwnerId ?? "local";
+    return createNativeLibraryNotesStore(
+      `${owner}:${operationGeneration}`,
+      () =>
+        notesWritable &&
+        !workspaceLifetime.isBlocked() &&
+        workspaceLifetime.generation() === operationGeneration,
+      mediaStore,
+      owner,
+    );
+  }, [workspace?.syncOwnerId, workspaceLifetime, operationGeneration, mediaStore, notesWritable]);
+  const libraryNotes = useLibraryNotes(notesStore);
+  const [activityRestoreError, setActivityRestoreError] = useState<string | null>(null);
+  const [deckUpdateInProgress, setDeckUpdateInProgress] = useState(false);
+  const deckUpdateInProgressRef = useRef(false);
+  const notesLoaded = libraryNotes.loaded;
+  const updateActivityNotes = libraryNotes.update;
+  useEffect(() => {
+    const restored = workspace?.activityLibrary;
+    if (!restored || !notesLoaded) return;
+    updateActivityNotes((notes) => {
+      const merged = Effect.runSync(
+        Effect.either(
+          mergeActivityLibraries(restored, notes.activityLibrary ?? emptyActivityLibrary),
+        ),
+      );
+      if (Either.isLeft(merged)) {
+        setActivityRestoreError(merged.left.message);
+        return notes;
+      }
+      setActivityRestoreError(null);
+      return { ...notes, activityLibrary: merged.right };
+    });
+  }, [workspace?.activityLibrary, notesLoaded, updateActivityNotes]);
+
+  const [learningActivityId, setLearningActivityId] = useState<string | undefined>();
+  const [activeAreaId, setActiveAreaIdState] = useState<string | null>(null);
+  const activeAreaIdRef = useRef<string | null>(null);
+  const setActiveAreaId = useCallback(
+    (areaId: string | null) => {
+      setLearningActivityId(undefined);
+      activeAreaIdRef.current = areaId;
+      setActiveAreaIdState(areaId);
+    },
+    [setLearningActivityId, setActiveAreaIdState],
+  );
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchTarget, setSearchTarget] = useState<WorkspaceSearchResult | null>(null);
   const [syncConflictWorkspace, setSyncConflictWorkspace] = useState<Workspace | null>(null);
@@ -298,6 +383,7 @@ export default function App() {
       );
       const tutorSessions = yield* Effect.either(clearNativeTutorSessionIds(targets.areaIds));
       const pendingOperationsCleared = Either.isRight(pendingOperations);
+      const libraryDrafts = yield* Effect.either(clearNativeLibraryNotes);
       const notebooks = yield* Effect.either(clearNativeKnowledgeNotebooks(null));
       const reminders = yield* Effect.either(clearNativeDailyReminders);
       if (Either.isRight(reminders)) dailyReminders.markCleared();
@@ -305,6 +391,7 @@ export default function App() {
       const tutorSessionsCleared =
         Either.isRight(tutorSessions) &&
         Either.isRight(notebooks) &&
+        Either.isRight(libraryDrafts) &&
         Either.isRight(reminders) &&
         Either.isRight(budgets);
       if (pendingOperationsCleared && tutorSessionsCleared) {
@@ -338,6 +425,53 @@ export default function App() {
           : null;
       },
       () => accountUserId,
+    );
+  }, [accountUserId]);
+
+  const deckSharingApi = useMemo(() => {
+    const apiUrl = process.env.EXPO_PUBLIC_RECALL_API_URL ?? "";
+    if (!apiUrl.trim()) return null;
+    const owner = accountUserId;
+    return makeNativeDeckSharingApi(
+      apiUrl,
+      async () => {
+        const authClient = supabaseAuthClient;
+        if (!owner || !authClient) return null;
+        const result = await Effect.runPromise(
+          Effect.either(
+            Effect.tryPromise({
+              try: () => authClient.auth.getSession(),
+              catch: () => ({ _tag: "DeckSharingSessionReadFailure" }) as const,
+            }),
+          ),
+        );
+        if (Either.isLeft(result)) return null;
+        const session = result.right.data.session;
+        const user = Schema.decodeUnknownEither(Schema.UUID)(session?.user.id);
+        return Either.isRight(user) && user.right === owner
+          ? (session?.access_token ?? null)
+          : null;
+      },
+      owner ?? undefined,
+    );
+  }, [accountUserId]);
+
+  const activityServices = useMemo(() => {
+    const url =
+      process.env.EXPO_PUBLIC_RECALL_ACTIVITY_API_URL ??
+      process.env.EXPO_PUBLIC_RECALL_API_URL ??
+      "";
+    if (!url.trim() || !supabaseAuthClient || !accountUserId) return null;
+    const owner = accountUserId;
+    return createNativeActivityServices(
+      url,
+      async () => {
+        const client = supabaseAuthClient;
+        if (!client) return null;
+        const result = await client.auth.getSession();
+        return result.data.session?.user.id === owner ? result.data.session.access_token : null;
+      },
+      owner,
     );
   }, [accountUserId]);
 
@@ -549,7 +683,18 @@ export default function App() {
     ? Effect.runSync(Effect.either(toKnowledgeArea(activeArea, false, true)))
     : null;
   const activePublishingArea = activeArea
-    ? Effect.runSync(Effect.either(toKnowledgeArea(activeArea, true, true)))
+    ? Effect.runSync(
+        Effect.either(
+          toKnowledgeArea(activeArea, true, true).pipe(
+            Effect.map((document) => ({
+              ...document,
+              activities: (libraryNotes.notes.activityLibrary?.activities ?? []).filter(
+                (activity) => activity.areaId === activeArea.id && !activity.archived,
+              ),
+            })),
+          ),
+        ),
+      )
     : null;
   const dueCards = useMemo(
     () => activeArea?.cards.filter((card) => dueNow(card, now)) ?? [],
@@ -608,6 +753,7 @@ export default function App() {
     const areaId = activeArea.id;
     const cardId = card.id;
     const ratedAt = new Date().toISOString();
+    let sessionEvent: ReviewEvent | null = null;
     const program = commitWorkspaceChange((current) =>
       Effect.gen(function* () {
         const eventId = yield* Effect.try({
@@ -622,19 +768,39 @@ export default function App() {
           eventId,
           ratedAt,
         });
+        sessionEvent = transition.event;
         return transition.workspace;
       }),
     ).pipe(
       Effect.match({
         onFailure: (failure) => {
-          if (failure._tag === "NativeWorkspacePersistenceFailed") setCacheWritable(false);
+          if (failure._tag === "NativeWorkspacePersistenceFailed") {
+            setCacheWritable(false);
+            const recorded = workspaceRef.current?.reviewEvents?.find(
+              (event) => event.id === sessionEvent?.id,
+            );
+            if (recorded)
+              setStudySession((current) => ({
+                areaId,
+                events: [...(current?.areaId === areaId ? current.events : []), recorded],
+              }));
+          }
           setMessage(
             failure._tag === "NativeWorkspacePersistenceFailed"
               ? "Your review is recorded in this session, but local storage could not save it."
               : "That review could not be recorded. Your existing history has been preserved.",
           );
         },
-        onSuccess: () => setNow(Date.now()),
+        onSuccess: () => {
+          if (sessionEvent) {
+            const event = sessionEvent;
+            setStudySession((current) => ({
+              areaId,
+              events: [...(current?.areaId === areaId ? current.events : []), event],
+            }));
+          }
+          setNow(Date.now());
+        },
       }),
       Effect.ensuring(
         Effect.sync(() => {
@@ -655,7 +821,7 @@ export default function App() {
     setSyncConflictWorkspace(null);
     void Effect.runPromise(
       Effect.gen(function* () {
-        const workspaceAndMedia = yield* clearLocalStores.current;
+        const workspaceAndMedia = yield* withNativeOperationStoreLane(clearLocalStores.current);
         const auxiliary = yield* clearAuxiliaryNativeData(targets);
         return { ...workspaceAndMedia, ...auxiliary };
       }),
@@ -899,7 +1065,7 @@ export default function App() {
     const remainingPendingReviews = committed.right.pendingReviewEventIds?.length ?? 0;
     if (remainingPendingReviews > 0)
       return `Sync progress saved. ${remainingPendingReviews} pending review${remainingPendingReviews === 1 ? " remains" : "s remain"}; sync again to continue.`;
-    return "Your learning areas and reviews are synced.";
+    return "Your decks and reviews are synced.";
   }
 
   async function useServerWorkspace(): Promise<string> {
@@ -960,14 +1126,14 @@ export default function App() {
     if (Either.isLeft(imported))
       return format
         ? "Import failed. Choose a valid CSV/TSV with question and answer columns, at most 500 cards and 200 objective labels. Large text files and malformed quoted fields are rejected."
-        : "Import failed. Choose a valid Knowledge Area JSON or media ZIP file smaller than 25 MB.";
+        : "Import failed. Choose a valid Deck JSON or media ZIP file smaller than 25 MB.";
     const proposal = imported.right;
     if (!proposal) return "Import canceled.";
-    if (format) {
+    {
       const accepted = await new Promise<boolean>((resolve) => {
         Alert.alert(
-          `Import ${format.toUpperCase()} cards?`,
-          `${proposal.area.title}\n${proposal.area.cards.length} cards · ${proposal.area.objectives?.length ?? 0} objectives\n\nA separate area will be added with fresh identities and schedules. Tags and objective labels are preserved. Attachments and review history are not imported; your existing library stays available.`,
+          format ? `Import ${format.toUpperCase()} cards?` : "Import deck package?",
+          `${proposal.area.title}\n${proposal.area.cards.length} cards · ${proposal.area.objectives?.length ?? 0} objectives\n\nA separate deck will be added with fresh identities and schedules. Tags and objective labels are preserved. ${format ? "Attachments and review history are not imported." : "Packaged attachments are included; review history starts fresh."} Your existing library stays available.`,
           [
             { text: "Cancel", style: "cancel", onPress: () => resolve(false) },
             { text: "Import", onPress: () => resolve(true) },
@@ -997,19 +1163,20 @@ export default function App() {
         : "The area was not imported because its workspace or attachments could not be saved.";
     }
     setActiveAreaId(proposal.area.id);
+    setNow(Date.now());
     return `${proposal.area.title} imported. Its review history and schedule start fresh.`;
   }
 
   async function exportActiveArea(format?: "csv" | "tsv"): Promise<string> {
     const area = workspace?.areas.find((item) => item.id === activeAreaId) ?? workspace?.areas[0];
-    if (!area) return "There is no learning area to export.";
+    if (!area) return "There is no deck to export.";
     if (!mediaStore) return "Local attachment storage is unavailable.";
     const result = await Effect.runPromise(
       Effect.either(shareKnowledgeArea(area, mediaStore, format)),
     );
     return Either.isRight(result)
       ? `${area.title} is ready to share.`
-      : "The learning area could not be exported.";
+      : "The deck could not be exported.";
   }
 
   async function restorePrivateBackup(): Promise<string> {
@@ -1023,7 +1190,7 @@ export default function App() {
     const accepted = await new Promise<boolean>((resolve) => {
       Alert.alert(
         "Replace this workspace?",
-        "The backup will replace learning areas, review history, schedules and local attachments. Its saved cloud account binding is retained.",
+        "The backup will replace decks, review history, schedules and local attachments. Its saved cloud account binding is retained.",
         [
           { text: "Cancel", style: "cancel", onPress: () => resolve(false) },
           { text: "Restore backup", style: "destructive", onPress: () => resolve(true) },
@@ -1092,8 +1259,27 @@ export default function App() {
 
   async function exportPrivateBackup(): Promise<string> {
     if (!workspace || !mediaStore) return "Workspace or attachment storage is unavailable.";
+    if (!libraryNotes.loaded)
+      return "Wait for learning activities to load before exporting a complete backup.";
+    const merged = Effect.runSync(
+      Effect.either(
+        mergeActivityLibraries(
+          workspace.activityLibrary ?? emptyActivityLibrary,
+          libraryNotes.notes.activityLibrary ?? emptyActivityLibrary,
+        ),
+      ),
+    );
+    if (Either.isLeft(merged)) return merged.left.message;
     const result = await Effect.runPromise(
-      Effect.either(shareWorkspaceBackup(workspace, mediaStore)),
+      Effect.either(
+        shareWorkspaceBackup(
+          {
+            ...workspace,
+            activityLibrary: merged.right,
+          },
+          mediaStore,
+        ),
+      ),
     );
     return Either.isRight(result)
       ? "Private workspace backup is ready to share."
@@ -1125,7 +1311,7 @@ export default function App() {
       Effect.gen(function* () {
         const workspaceAndMedia =
           store && mediaStore
-            ? yield* clearLocalStores.current
+            ? yield* withNativeOperationStoreLane(clearLocalStores.current)
             : { workspaceCleared: false, mediaCleared: false };
         const auxiliary = yield* clearAuxiliaryNativeData(targets);
         return {
@@ -1181,7 +1367,7 @@ export default function App() {
               if (existing) {
                 if (existing.forkedFromVersionId !== forkedFromVersionId)
                   return yield* Effect.fail({ _tag: "NativeForkConflict" } as const);
-                return current;
+                return yield* retainPublishedActivityDefinitions(current, document);
               }
               const imported = yield* fromKnowledgeArea(
                 { ...document, attribution, licence: license, forkedFromVersionId },
@@ -1193,14 +1379,17 @@ export default function App() {
                 new Date(),
                 true,
               );
-              return {
-                ...current,
-                areas: [...current.areas, imported],
-                syncContentHashes: {
-                  ...(current.syncContentHashes ?? {}),
-                  [imported.id]: contentHash,
+              return yield* retainPublishedActivityDefinitions(
+                {
+                  ...current,
+                  areas: [...current.areas, imported],
+                  syncContentHashes: {
+                    ...(current.syncContentHashes ?? {}),
+                    [imported.id]: contentHash,
+                  },
                 },
-              };
+                document,
+              );
             }),
           operationGeneration,
           {
@@ -1288,7 +1477,8 @@ export default function App() {
     if (!store || !cacheWritable || workspaceLifetime.isBlocked())
       return {
         ok: false,
-        message: "Local storage must be writable and cleanup complete before editing.",
+        message:
+          "Your changes can’t be saved yet. Finish the device reset or reopen the app before editing. Your cards are still available.",
       };
     if (stagedMedia.length > 20 || stagedMedia.some((asset) => !verifyMediaAsset(asset)))
       return { ok: false, message: "Attachments could not be verified. Choose the files again." };
@@ -1341,7 +1531,7 @@ export default function App() {
             ? failure.persisted
               ? "Changes were saved locally before your account changed. Review the current library before retrying your draft."
               : "This workspace or account changed. Review your draft before trying again."
-            : "Changes could not be saved. Your draft remains open; restore local storage before retrying.";
+            : "Save not confirmed. The draft is still here. Free device storage or reopen the app, then retry saving.";
       setMessage(notice);
       return { ok: false, message: notice };
     }
@@ -1359,7 +1549,16 @@ export default function App() {
     );
     setShowAnswer(false);
     setMediaUris({});
+    setNow(Date.now());
     setMediaRevision((revision) => revision + 1);
+    const decodedCommand = Schema.decodeUnknownEither(WorkspaceAuthoringCommandSchema)(command);
+    if (Either.isRight(decodedCommand) && decodedCommand.right.kind === "update-card") {
+      const editedId = decodedCommand.right.cardId;
+      libraryNotes.update((notes) => ({
+        ...notes,
+        flaggedCardIds: notes.flaggedCardIds.filter((id) => id !== editedId),
+      }));
+    }
     setMessage(successMessage);
     return { ok: true, message: successMessage };
   }
@@ -1373,6 +1572,46 @@ export default function App() {
           ? "Wait for the pending review to save before editing."
           : undefined;
 
+  function startStudy(areaId: string) {
+    if (reviewPending || workspaceLifetime.isBlocked()) return;
+    setActiveAreaId(areaId);
+    setStudySession({ areaId, events: [] });
+    setShowAnswer(false);
+    setMediaUris({});
+    setNow(Date.now());
+    setActiveTab(AppTab.Today);
+  }
+  async function importCards(format?: "csv" | "tsv") {
+    if (importingCards) return;
+    setImportingCards(true);
+    const result = await Effect.runPromise(
+      Effect.either(
+        Effect.tryPromise({
+          try: () => importKnowledgeArea(format),
+          catch: () => ({ _tag: "NativeCardImportUnavailable" }) as const,
+        }),
+      ),
+    );
+    setMessage(Either.isRight(result) ? result.right : "Cards could not be imported. Try again.");
+    setImportingCards(false);
+    if (Either.isRight(result) && result.right.includes("imported.")) setShowImportChoices(false);
+  }
+  async function runLibraryTransfer(action: () => Promise<string>) {
+    if (transferPending) return;
+    setTransferPending(true);
+    const outcome = await Effect.runPromise(
+      Effect.either(
+        Effect.tryPromise({
+          try: action,
+          catch: () => ({
+            message: "The file action couldn’t finish. Your workspace is unchanged. Try again.",
+          }),
+        }),
+      ),
+    );
+    setMessage(Either.isRight(outcome) ? outcome.right : outcome.left.message);
+    setTransferPending(false);
+  }
   const authoringPanel = (
     <View className="gap-4">
       <NativeButton
@@ -1405,7 +1644,160 @@ export default function App() {
           }}
         />
       )}
+      <View className="gap-2">
+        <NativeButton
+          label="Export deck"
+          tone="soft"
+          disabled={reviewPending || !activeArea || transferPending}
+          onPress={() => {
+            setLibraryTransfer("export");
+            setShowImportChoices(false);
+          }}
+        />
+        <NativeButton
+          label="Workspace backup"
+          tone="soft"
+          disabled={reviewPending || transferPending}
+          onPress={() => {
+            setLibraryTransfer("backup");
+            setShowImportChoices(false);
+          }}
+        />
+      </View>
+      {libraryTransfer && (
+        <View className="gap-3 rounded-xl border border-recall-line p-4">
+          <Text className="text-lg font-bold">
+            {libraryTransfer === "export" ? "Export deck" : "Workspace backup"}
+          </Text>
+          <Text className="text-sm text-recall-muted">
+            {libraryTransfer === "export"
+              ? `Export ${activeArea?.title ?? "the selected deck"}. CSV/TSV contains text and tags; deck packages also include attachments. Reviews stay private.`
+              : "Backups include decks, schedules, review history and attachments. Restoring replaces the workspace. Drafts and editing flags are stored separately."}
+          </Text>
+          {libraryTransfer === "export" ? (
+            <>
+              <NativeButton
+                label="Export CSV"
+                disabled={transferPending}
+                onPress={() => void runLibraryTransfer(() => exportActiveArea("csv"))}
+              />
+              <NativeButton
+                label="Export TSV"
+                tone="soft"
+                disabled={transferPending}
+                onPress={() => void runLibraryTransfer(() => exportActiveArea("tsv"))}
+              />
+              <NativeButton
+                label="Export deck package"
+                tone="soft"
+                disabled={transferPending}
+                onPress={() => void runLibraryTransfer(() => exportActiveArea())}
+              />
+            </>
+          ) : (
+            <>
+              <NativeButton
+                label="Save workspace backup"
+                disabled={transferPending}
+                onPress={() => void runLibraryTransfer(exportPrivateBackup)}
+              />
+              <NativeButton
+                label="Restore workspace backup"
+                tone="soft"
+                disabled={transferPending}
+                onPress={() => void runLibraryTransfer(restorePrivateBackup)}
+              />
+            </>
+          )}
+          {message && <Text accessibilityRole="alert">{message}</Text>}
+          <NativeButton
+            label="Close file tools"
+            tone="soft"
+            disabled={transferPending}
+            onPress={() => setLibraryTransfer(null)}
+          />
+        </View>
+      )}
+      {showImportChoices && (
+        <View className="gap-3 rounded-xl border border-recall-line p-4">
+          <Text className="text-lg font-bold text-recall-ink">Import cards</Text>
+          <Text className="text-sm text-recall-muted">
+            Imports are validated and added as a separate deck. Review the destination and card
+            count before saving.
+          </Text>
+          <NativeButton
+            label="Import Anki deck"
+            disabled={importingCards || reviewPending}
+            onPress={() => {
+              setShowImportChoices(false);
+              void importAnkiDeck();
+            }}
+          />
+          <NativeButton
+            label="Import CSV"
+            tone="soft"
+            disabled={importingCards || reviewPending}
+            onPress={() => void importCards("csv")}
+          />
+          <NativeButton
+            label="Import TSV"
+            tone="soft"
+            disabled={importingCards || reviewPending}
+            onPress={() => void importCards("tsv")}
+          />
+          <NativeButton
+            label="Import deck package"
+            tone="soft"
+            disabled={importingCards || reviewPending}
+            onPress={() => void importCards()}
+          />
+          <NativeButton
+            label="Close import"
+            tone="soft"
+            disabled={importingCards}
+            onPress={() => setShowImportChoices(false)}
+          />
+          {message && (
+            <Text accessibilityRole="alert" className="text-sm text-recall-muted">
+              {message}
+            </Text>
+          )}
+        </View>
+      )}
+      {(libraryNotes.error || activityRestoreError) && (
+        <View className="gap-2">
+          <Text accessibilityRole="alert">{libraryNotes.error ?? activityRestoreError}</Text>
+          <NativeButton label="Retry draft save" onPress={libraryNotes.retry} />
+        </View>
+      )}
       <NativeWorkspaceAuthoringPanel
+        flaggedOnly={onlyFlagged}
+        onFlaggedFilterChange={setOnlyFlagged}
+        notes={libraryNotes.notes}
+        notesLoaded={libraryNotes.loaded}
+        onFlushDraft={libraryNotes.flush}
+        onRetainDraft={(draft, assets) =>
+          libraryNotes.update((notes) => retainLibraryDraft(notes, draft), assets)
+        }
+        onDiscardDraft={(key) => libraryNotes.update((notes) => discardLibraryDraft(notes, key))}
+        onFlag={(id) => libraryNotes.update((notes) => toggleCardFlag(notes, id))}
+        onSelectDeck={(id) => {
+          setOnlyFlagged(false);
+          setActiveAreaId(id);
+          setSearchTarget(null);
+          setShowAnswer(false);
+        }}
+        now={now}
+        onStudy={startStudy}
+        onImportCards={() => {
+          setLibraryTransfer(null);
+          setShowImportChoices(true);
+        }}
+        onGenerateCards={() => {
+          setTutorActivity("materials");
+          setSearchTarget(null);
+          setActiveTab(AppTab.Tutor);
+        }}
         workspace={workspace}
         activeAreaId={activeAreaId}
         tutorApi={tutorApi}
@@ -1418,12 +1810,56 @@ export default function App() {
         onCommand={applyAuthoringCommand}
         searchTarget={searchTarget}
       />
+      {activeArea && (
+        <NativeLearningActivitiesPanel
+          key={`activities:${notesStore.scope}:${activeArea.id}`}
+          areaId={activeArea.id}
+          {...(learningActivityId ? { initialActivityId: learningActivityId } : {})}
+          cards={activeArea.cards}
+          {...(activityServices ? { services: activityServices } : {})}
+          objectives={activeArea.objectives ?? []}
+          {...(libraryNotes.notes.activityLibrary
+            ? { library: libraryNotes.notes.activityLibrary }
+            : {})}
+          disabled={
+            deckUpdateInProgress || !libraryNotes.loaded || authoringDisabledReason !== undefined
+          }
+          createId={Crypto.randomUUID}
+          onSave={(activityLibrary) => {
+            if (
+              workspaceLifetime.isBlocked() ||
+              workspaceLifetime.generation() !== operationGeneration ||
+              !libraryNotes.loaded ||
+              authoringDisabledReason !== undefined
+            )
+              return Promise.resolve(false);
+            let valid = true;
+            libraryNotes.update((notes) => {
+              const merged = Effect.runSync(
+                Effect.either(
+                  mergeActivityLibraries(
+                    activityLibrary,
+                    notes.activityLibrary ?? emptyActivityLibrary,
+                  ),
+                ),
+              );
+              if (Either.isLeft(merged)) {
+                valid = false;
+                return notes;
+              }
+              return { ...notes, activityLibrary: merged.right };
+            });
+            return valid ? libraryNotes.flush() : Promise.resolve(false);
+          }}
+        />
+      )}
     </View>
   );
   const tutorPanel =
     activePublishingArea && Either.isRight(activePublishingArea) ? (
       <NativeTutorPanel
-        key={activeArea?.id ?? "no-area"}
+        initialActivity={tutorActivity}
+        key={`${activeArea?.id ?? "no-area"}:${tutorActivity ?? "practice"}`}
         area={activePublishingArea.right}
         duplicateCandidates={workspace ? workspaceDuplicateCandidates(workspace) : []}
         {...(searchTarget && searchTarget.areaId === activeArea?.id
@@ -1465,12 +1901,212 @@ export default function App() {
         }}
         onApproveProposal={approveTutorProposal}
         onStartReview={() => {
-          setNow(Date.now());
-          setShowAnswer(false);
-          setActiveTab(AppTab.Today);
+          if (activeArea) startStudy(activeArea.id);
         }}
       />
     ) : null;
+  const deepPracticeRecommendations = (workspace?.areas ?? [])
+    .flatMap((item) =>
+      recommendLearningActivities(
+        libraryNotes.notes.activityLibrary ?? emptyActivityLibrary,
+        item.id,
+        now,
+      ),
+    )
+    .sort(
+      (left, right) =>
+        right.priority - left.priority || left.activity.id.localeCompare(right.activity.id, "en"),
+    )
+    .slice(0, 3);
+  const activityDefinitionSnapshot = (
+    notes: NonNullable<ReturnType<typeof libraryNotes.getCurrentNotes>>,
+    areaId: string,
+  ) =>
+    JSON.stringify(
+      (notes.activityLibrary?.activities ?? [])
+        .filter((activity) => activity.areaId === areaId && !activity.archived)
+        .sort((left, right) => left.id.localeCompare(right.id, "en")),
+    );
+  async function saveDeckUpdate(
+    updatedArea: import("@recall/domain").KnowledgeArea,
+    versionId: string,
+    advanceBaseline: boolean,
+    assets: readonly StoredMediaAsset[],
+  ): Promise<boolean> {
+    if (deckUpdateInProgressRef.current) return false;
+    const expectedAreaId = activeArea?.id;
+    const expectedPortable = activeArea
+      ? Effect.runSync(Effect.either(toKnowledgeArea(activeArea, true, true)))
+      : null;
+    const expectedAreaSnapshot =
+      expectedPortable && Either.isRight(expectedPortable)
+        ? JSON.stringify(expectedPortable.right)
+        : null;
+    const expectedGeneration = operationGeneration;
+    const expectedOwner = accountUserId;
+    const invocationNotes = libraryNotes.getCurrentNotes();
+    if (
+      !expectedAreaId ||
+      updatedArea.id !== expectedAreaId ||
+      !expectedAreaSnapshot ||
+      !invocationNotes
+    )
+      return false;
+    const expectedActivityDefinitions = activityDefinitionSnapshot(invocationNotes, expectedAreaId);
+    deckUpdateInProgressRef.current = true;
+    setDeckUpdateInProgress(true);
+    try {
+      const flushed = await libraryNotes.flush();
+      const flushedNotes = libraryNotes.getCurrentNotes();
+      if (
+        !flushed ||
+        !flushedNotes ||
+        activityDefinitionSnapshot(flushedNotes, expectedAreaId) !== expectedActivityDefinitions
+      )
+        return false;
+      return await persistDeckUpdate(
+        updatedArea,
+        versionId,
+        advanceBaseline,
+        assets,
+        expectedAreaId,
+        expectedAreaSnapshot,
+        expectedGeneration,
+        expectedOwner,
+        expectedActivityDefinitions,
+      );
+    } finally {
+      deckUpdateInProgressRef.current = false;
+      setDeckUpdateInProgress(false);
+    }
+  }
+
+  async function persistDeckUpdate(
+    updatedArea: import("@recall/domain").KnowledgeArea,
+    versionId: string,
+    advanceBaseline: boolean,
+    assets: readonly StoredMediaAsset[],
+    expectedAreaId: string,
+    expectedAreaSnapshot: string,
+    expectedGeneration: number,
+    expectedOwner: string | null,
+    expectedActivityDefinitions: string,
+  ): Promise<boolean> {
+    if (!store || !cacheWritable) return false;
+    const workspaceIsCurrent = () =>
+      !workspaceLifetime.isBlocked() &&
+      workspaceLifetime.generation() === expectedGeneration &&
+      activeAreaIdRef.current === expectedAreaId &&
+      authSession.current.userId === expectedOwner;
+    const activityDefinitionsAreCurrent = () => {
+      const latest = libraryNotes.getCurrentNotes();
+      return (
+        latest !== null &&
+        activityDefinitionSnapshot(latest, expectedAreaId) === expectedActivityDefinitions
+      );
+    };
+    const isCurrent = () => workspaceIsCurrent() && activityDefinitionsAreCurrent();
+    if (!isCurrent()) return false;
+    const result = await Effect.runPromise(
+      Effect.either(
+        commitWorkspaceChange(
+          (current) =>
+            Effect.gen(function* () {
+              const currentArea = current.areas.find((item) => item.id === expectedAreaId);
+              if (!currentArea)
+                return yield* Effect.fail({ _tag: "NativeDeckUpdateStale" } as const);
+              const latestNotes = libraryNotes.getCurrentNotes();
+              if (!latestNotes)
+                return yield* Effect.fail({ _tag: "NativeDeckUpdateInvalid" } as const);
+              if (
+                activityDefinitionSnapshot(latestNotes, expectedAreaId) !==
+                expectedActivityDefinitions
+              )
+                return yield* Effect.fail({ _tag: "NativeDeckUpdateStale" } as const);
+              const latestActivityLibrary = yield* mergeActivityLibraries(
+                current.activityLibrary ?? emptyActivityLibrary,
+                latestNotes.activityLibrary ?? emptyActivityLibrary,
+              ).pipe(Effect.mapError(() => ({ _tag: "NativeDeckUpdateInvalid" }) as const));
+              const currentDocument = yield* toKnowledgeArea(currentArea, true, true).pipe(
+                Effect.mapError(() => ({ _tag: "NativeDeckUpdateInvalid" }) as const),
+              );
+              if (JSON.stringify(currentDocument) !== expectedAreaSnapshot)
+                return yield* Effect.fail({ _tag: "NativeDeckUpdateStale" } as const);
+              return yield* applyDeckWorkspaceUpdate(
+                {
+                  workspace: { ...current, activityLibrary: latestActivityLibrary },
+                  updatedArea,
+                  newVersionId: versionId,
+                  advanceBaseline,
+                  expectedCurrentAreaContentFingerprint: publicationContentHash(currentDocument),
+                },
+                new Date(),
+                () => Crypto.randomUUID(),
+              );
+            }),
+          expectedGeneration,
+          {
+            persistFirst: true,
+            isCurrent,
+            mediaForWorkspace: (next) => {
+              const area = next.areas.find((item) => item.id === expectedAreaId);
+              const required = new Set(
+                area?.cards.flatMap((card) => card.media?.map((reference) => reference.id) ?? []) ??
+                  [],
+              );
+              return assets.filter((asset) => required.has(asset.reference.id));
+            },
+          },
+        ),
+      ),
+    );
+    if (Either.isLeft(result) || !isCurrent()) {
+      if (
+        Either.isLeft(result) &&
+        result.left._tag === "NativeWorkspaceUnavailable" &&
+        workspaceIsCurrent() &&
+        !activityDefinitionsAreCurrent()
+      ) {
+        await Effect.runPromise(
+          Effect.either(
+            commitWorkspaceChange(
+              (current) =>
+                Effect.gen(function* () {
+                  const latestNotes = libraryNotes.getCurrentNotes();
+                  if (!latestNotes)
+                    return yield* Effect.fail({ _tag: "NativeDeckUpdateInvalid" } as const);
+                  const latestActivityLibrary = yield* mergeActivityLibraries(
+                    current.activityLibrary ?? emptyActivityLibrary,
+                    latestNotes.activityLibrary ?? emptyActivityLibrary,
+                  ).pipe(Effect.mapError(() => ({ _tag: "NativeDeckUpdateInvalid" }) as const));
+                  return { ...current, activityLibrary: latestActivityLibrary };
+                }),
+              expectedGeneration,
+              { persistFirst: true, isCurrent: workspaceIsCurrent },
+            ),
+          ),
+        );
+      }
+      return false;
+    }
+    const savedLibrary = result.right.activityLibrary;
+    if (savedLibrary) {
+      libraryNotes.update((notes) => {
+        const merged = Effect.runSync(
+          Effect.either(
+            mergeActivityLibraries(notes.activityLibrary ?? emptyActivityLibrary, savedLibrary),
+          ),
+        );
+        if (Either.isLeft(merged)) {
+          setActivityRestoreError(merged.left.message);
+          return notes;
+        }
+        setActivityRestoreError(null);
+        return { ...notes, activityLibrary: merged.right };
+      });
+    }
+    return true;
+  }
   return (
     <NativeAppShell
       activeTab={activeTab}
@@ -1479,12 +2115,62 @@ export default function App() {
       activeAreaId={activeAreaId}
       selectionDisabled={reviewPending}
       onSelectArea={(areaId) => {
+        setStudySession({ areaId, events: [] });
         setActiveAreaId(areaId);
         setShowAnswer(false);
         setMediaUris({});
       }}
       today={
         <NativeTodayScreen
+          deepPractice={
+            deepPracticeRecommendations.length > 0 ? (
+              <View className="mt-5 gap-3">
+                <Text className="text-xl font-bold">Deeper practice</Text>
+                <Text className="text-sm text-recall-muted">
+                  Longer activities build evidence beyond quick recall reviews.
+                </Text>
+                {deepPracticeRecommendations.map((recommendation) => (
+                  <View
+                    key={recommendation.activity.id}
+                    className="gap-2 rounded-xl border border-recall-line p-4"
+                  >
+                    <Text className="font-bold">{recommendation.activity.title}</Text>
+                    <Text className="text-sm text-recall-muted">
+                      About {recommendation.estimatedMinutes} minutes · {recommendation.reason}
+                    </Text>
+                    <NativeButton
+                      label="Start activity"
+                      tone="soft"
+                      disabled={!libraryNotes.loaded || authoringDisabledReason !== undefined}
+                      onPress={() => {
+                        setActiveAreaId(recommendation.activity.areaId);
+                        setLearningActivityId(recommendation.activity.id);
+                        setOnlyFlagged(false);
+                        setActiveTab(AppTab.Library);
+                      }}
+                    />
+                  </View>
+                ))}
+              </View>
+            ) : null
+          }
+          flaggedCardIds={libraryNotes.notes.flaggedCardIds}
+          onFlag={(id) => libraryNotes.update((notes) => toggleCardFlag(notes, id))}
+          onEditFlagged={() => {
+            setOnlyFlagged(true);
+            setActiveTab(AppTab.Library);
+          }}
+          sessionEvents={
+            studySession && studySession.areaId === activeArea?.id ? studySession.events : []
+          }
+          onNextDeck={() => {
+            const next = workspace?.areas.find(
+              (area) =>
+                area.id !== activeArea?.id &&
+                area.cards.some((card) => Date.parse(card.schedule.due) <= now),
+            );
+            if (next) startStudy(next.id);
+          }}
           onOpenLibrary={() => setActiveTab(AppTab.Library)}
           ready={ready}
           workspace={workspace}
@@ -1495,7 +2181,7 @@ export default function App() {
           showAnswer={showAnswer}
           reviewPending={reviewPending}
           canReset={store !== null}
-          onSelectArea={setActiveAreaId}
+          onSelectArea={startStudy}
           onHideAnswer={() => setShowAnswer(false)}
           onShowAnswer={() => setShowAnswer(true)}
           onReview={(rating) => void review(rating)}
@@ -1506,28 +2192,73 @@ export default function App() {
       library={authoringPanel}
       tutor={tutorPanel}
       sharing={
-        <NativePublishingPanel
-          key={activeArea?.id ?? "receive-shared-area"}
-          forkOperationStore={nativeForkOperationStore}
-          createForkOperationId={Crypto.randomUUID}
-          publicationOperationStore={nativePublicationOperationStore}
-          createPublishShareToken={() => encodePublicationShareToken(Crypto.getRandomBytes(32))}
-          area={
-            activePublishingArea && Either.isRight(activePublishingArea)
-              ? activePublishingArea.right
-              : null
-          }
-          lineageArea={
-            activeKnowledgeArea && Either.isRight(activeKnowledgeArea)
-              ? activeKnowledgeArea.right
-              : null
-          }
-          mediaStore={mediaStore}
-          {...(process.env.EXPO_PUBLIC_RECALL_API_URL?.trim()
-            ? { clients: nativePublishingClients }
-            : {})}
-          onFork={addPublishedFork}
-        />
+        <View className="gap-4">
+          {deckSharingApi ? (
+            <NativeDeckSharingPanel
+              key={`deck-sharing-${accountUserId ?? "anonymous"}`}
+              api={deckSharingApi}
+              accountId={accountUserId}
+              currentArea={
+                activePublishingArea && Either.isRight(activePublishingArea)
+                  ? {
+                      id: activePublishingArea.right.id,
+                      title: activePublishingArea.right.title,
+                      ...(activePublishingArea.right.sourceId
+                        ? { sourceId: activePublishingArea.right.sourceId }
+                        : {}),
+                      ...(activePublishingArea.right.forkedFromVersionId
+                        ? { sourceVersionId: activePublishingArea.right.forkedFromVersionId }
+                        : {}),
+                    }
+                  : null
+              }
+              onReviewVersion={(versionId, token) =>
+                setSelectedDeckVersion({
+                  versionId,
+                  owner: accountUserId,
+                  ...(token ? { token } : {}),
+                })
+              }
+            />
+          ) : (
+            <Text className="text-sm text-recall-muted">
+              Deck sharing is unavailable until the API URL is configured.
+            </Text>
+          )}
+          <NativePublishingPanel
+            key={`${accountUserId ?? "anonymous"}:${visibleSelectedDeckVersion?.versionId ?? activeArea?.id ?? "receive-shared-area"}`}
+            forkOperationStore={nativeForkOperationStore}
+            createForkOperationId={Crypto.randomUUID}
+            publicationOperationStore={nativePublicationOperationStore}
+            createPublishShareToken={() => encodePublicationShareToken(Crypto.getRandomBytes(32))}
+            area={
+              activePublishingArea && Either.isRight(activePublishingArea)
+                ? activePublishingArea.right
+                : null
+            }
+            lineageArea={
+              activeKnowledgeArea && Either.isRight(activeKnowledgeArea)
+                ? activeKnowledgeArea.right
+                : null
+            }
+            mediaStore={mediaStore}
+            {...(process.env.EXPO_PUBLIC_RECALL_API_URL?.trim()
+              ? { clients: nativePublishingClients }
+              : {})}
+            {...(visibleSelectedDeckVersion
+              ? {
+                  initialVersionId: visibleSelectedDeckVersion.versionId,
+                  initialToken: visibleSelectedDeckVersion.token,
+                }
+              : {})}
+            onFork={async (...args) => {
+              const forked = await addPublishedFork(...args);
+              if (forked) setSelectedDeckVersion(null);
+              return forked;
+            }}
+            onUpdate={saveDeckUpdate}
+          />
+        </View>
       }
       account={
         <>

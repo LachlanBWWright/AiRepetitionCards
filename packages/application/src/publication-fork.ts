@@ -1,6 +1,10 @@
 import { sha256 } from "@noble/hashes/sha2.js";
 import { Effect, Either, Schema } from "effect";
-import { decodeAndMigrateKnowledgeArea, type KnowledgeArea } from "@recall/domain";
+import {
+  decodeAndMigrateKnowledgeArea,
+  type ActivityJson,
+  type KnowledgeArea,
+} from "@recall/domain";
 import {
   PublicationForkOperationIdSchema,
   PublicationVersionIdSchema,
@@ -106,6 +110,7 @@ export const PublicationForkIdKind = {
   Objective: "objective",
   Card: "card",
   CardRevision: "card-revision",
+  Activity: "activity",
 } as const;
 type PublicationForkIdKind = (typeof PublicationForkIdKind)[keyof typeof PublicationForkIdKind];
 const ForkIdentityInput = Schema.Struct({
@@ -151,12 +156,35 @@ export function createPublicationFork(input: {
 }) {
   return Effect.gen(function* () {
     const identity = yield* publicationForkIdentity(input);
-    const objectives = new Map(
+    const objectives = new Map<string, string>(
       input.source.objectives.map((objective) => [
         objective.id,
         identity.id(PublicationForkIdKind.Objective, objective.id),
       ]),
     );
+    const cards = new Map<string, string>(
+      input.source.cards.map((card) => [card.id, identity.id(PublicationForkIdKind.Card, card.id)]),
+    );
+    const remapBuiltinReferences = (value: ActivityJson): ActivityJson => {
+      if (Array.isArray(value)) return value.map(remapBuiltinReferences);
+      if (typeof value !== "object" || value === null) return value;
+      return Object.fromEntries(
+        Object.entries(value as Readonly<Record<string, ActivityJson>>).map(
+          ([key, entry]): [string, ActivityJson] => {
+            if (key === "cardId" && typeof entry === "string")
+              return [key, cards.get(entry) ?? entry];
+            if (key === "cardIds" && Array.isArray(entry))
+              return [
+                key,
+                (entry as readonly ActivityJson[]).map((id: ActivityJson): ActivityJson =>
+                  typeof id === "string" ? (cards.get(id) ?? id) : id,
+                ),
+              ];
+            return [key, remapBuiltinReferences(entry)];
+          },
+        ),
+      );
+    };
     const document = yield* decodeAndMigrateKnowledgeArea({
       ...input.source,
       id: identity.areaId,
@@ -176,6 +204,22 @@ export function createPublicationFork(input: {
         sourceId: card.sourceId ?? card.id,
         objectiveIds: card.objectiveIds.map((id) => objectives.get(id)),
       })),
+      ...(input.source.activities === undefined
+        ? {}
+        : {
+            activities: input.source.activities.map((activity) => ({
+              ...activity,
+              id: identity.id(PublicationForkIdKind.Activity, activity.id),
+              sourceId: activity.sourceId ?? activity.id,
+              areaId: identity.areaId,
+              objectiveIds: activity.objectiveIds.map(
+                (id) => objectives.get(id) ?? identity.id(PublicationForkIdKind.Objective, id),
+              ),
+              ...(activity.pluginId.startsWith("recall.")
+                ? { payload: remapBuiltinReferences(activity.payload) }
+                : {}),
+            })),
+          }),
     }).pipe(Effect.mapError(() => ({ _tag: "PublicationForkFailure" }) as const));
     return { ...identity, document };
   });

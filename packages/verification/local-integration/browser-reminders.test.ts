@@ -60,6 +60,7 @@ function fixture(t: TestContext, permission: NotificationPermission = "granted")
     },
   };
   const browser = Object.assign(windowEvents, {
+    localStorage: storage,
     setInterval: (callback: () => void) => {
       intervals.set(1, callback);
       return 1;
@@ -67,7 +68,7 @@ function fixture(t: TestContext, permission: NotificationPermission = "granted")
     focus: () => {
       focus += 1;
     },
-    recallDesktop: undefined,
+    recallDesktop: {},
   });
   const navigatorPort = {
     serviceWorker: Object.assign(workerEvents, {

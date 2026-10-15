@@ -26,7 +26,8 @@
   "dependencies": {
     "@recall/ai-core": "workspace:*",
     "@supabase/supabase-js": "2.117.2",
-    "effect": "^3.19.0"
+    "effect": "^3.19.0",
+    "@recall/domain": "workspace:*"
   },
   "scripts": {
     "typecheck": "tsc --noEmit --project tsconfig.json"
