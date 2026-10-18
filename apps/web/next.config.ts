@@ -57,8 +57,8 @@ const nextConfig: NextConfig = {
   output: "standalone",
   outputFileTracingRoot: fileURLToPath(new URL("../../", import.meta.url)),
   transpilePackages: ["@recall/ui-web"],
-  async headers() {
-    return [
+  headers() {
+    return Promise.resolve([
       { source: "/:path*", headers: securityHeaders },
       {
         source: "/app-shell/:path*",
@@ -75,7 +75,7 @@ const nextConfig: NextConfig = {
           { key: "Service-Worker-Allowed", value: "/" },
         ],
       },
-    ];
+    ]);
   },
 };
 

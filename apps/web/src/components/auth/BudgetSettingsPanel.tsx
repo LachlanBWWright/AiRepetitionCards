@@ -88,6 +88,12 @@ export function BudgetSettingsPanel({
       toast.success("AI usage limits saved.");
     } else setMessage(result.left.message);
   }
+  const updateField = (index: number, value: string) => {
+    setFields(fields.map((field, position) => (position === index ? value : field)));
+  };
+  const updateFieldAt = (index: number) => (value: string) => {
+    updateField(index, value);
+  };
   return (
     <section className="space-y-4 py-4" aria-label="AI budget settings">
       <h2 className="mb-2 text-lg font-semibold">AI usage limits</h2>
@@ -125,24 +131,13 @@ export function BudgetSettingsPanel({
           </Collapsible>
           {(["Daily requests", "Weekly requests", "Daily research requests"] as const).map(
             (label, index) => (
-              <label key={label} className="mb-3 block">
-                {label}
-                <Input
-                  aria-label={label}
-                  type="text"
-                  inputMode="numeric"
-                  value={fields[index] ?? ""}
-                  disabled={busy}
-                  onChange={(event) =>
-                    setFields(
-                      fields.map((value, position) =>
-                        position === index ? event.target.value : value,
-                      ),
-                    )
-                  }
-                  placeholder="Unlimited"
-                />
-              </label>
+              <BudgetLimitField
+                key={label}
+                label={label}
+                value={fields[index] ?? ""}
+                disabled={busy}
+                onChange={updateFieldAt(index)}
+              />
             ),
           )}
           <Button type="button" disabled={busy} onClick={() => void save()}>
@@ -152,5 +147,34 @@ export function BudgetSettingsPanel({
       )}
       {message && <Alert variant="destructive">{message}</Alert>}
     </section>
+  );
+}
+
+function BudgetLimitField({
+  label,
+  value,
+  disabled,
+  onChange,
+}: {
+  readonly label: string;
+  readonly value: string;
+  readonly disabled: boolean;
+  readonly onChange: (value: string) => void;
+}) {
+  return (
+    <label className="mb-3 block">
+      {label}
+      <Input
+        aria-label={label}
+        type="text"
+        inputMode="numeric"
+        value={value}
+        disabled={disabled}
+        onChange={(event) => {
+          onChange(event.target.value);
+        }}
+        placeholder="Unlimited"
+      />
+    </label>
   );
 }

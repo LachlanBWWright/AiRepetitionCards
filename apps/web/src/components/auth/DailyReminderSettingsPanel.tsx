@@ -70,7 +70,9 @@ export function DailyReminderSettingsPanel({
           id="daily-reminder-enabled"
           checked={settings.enabled}
           disabled={busy}
-          onCheckedChange={(checked) => setSettings({ ...settings, enabled: checked === true })}
+          onCheckedChange={(checked) => {
+            setSettings({ ...settings, enabled: checked === true });
+          }}
         />{" "}
         Enable daily reminder
       </label>

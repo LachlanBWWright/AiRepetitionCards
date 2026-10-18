@@ -10,12 +10,16 @@ import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { mockWorkspace } from "@/features/workspace/mock-data";
 import { AnkiImportAction, type AnkiImportState } from "./AnkiImportAction";
 
-const baseArea = mockWorkspace.areas[0]!;
+function fallbackImportSchedule() {
+  return newSchedule(new Date("2026-10-01T09:00:00.000Z"));
+}
+
+const baseArea = Effect.runSync(Effect.fromNullable(mockWorkspace.areas[0]));
 const importedAreaId = createAreaId("00000000-0000-4000-8000-000000000301");
 const importedCards = baseArea.cards.slice(0, 4).map((card, index) => ({
   ...card,
   id: createAssessmentId(`00000000-0000-4000-8000-${String(311 + index).padStart(12, "0")}`),
-  sourceId: `anki:sample-guid-${index + 1}:${index === 3 ? 1 : 0}`,
+  sourceId: `anki:sample-guid-${String(index + 1)}:${String(index === 3 ? 1 : 0)}`,
   origin: "imported" as const,
   tags: ["cell-biology", "foundations"],
 }));
@@ -23,7 +27,7 @@ const importedReviews: readonly ReviewEvent[] = [
   {
     id: createReviewEventId("00000000-0000-4000-8000-000000000321"),
     areaId: importedAreaId,
-    cardId: importedCards[0]!.id,
+    cardId: Effect.runSync(Effect.fromNullable(importedCards[0])).id,
     ratedAt: "2026-10-01T09:00:00.000Z",
     rating: "good",
     schedulerFamily: "fsrs",
@@ -34,7 +38,7 @@ const importedReviews: readonly ReviewEvent[] = [
   {
     id: createReviewEventId("00000000-0000-4000-8000-000000000322"),
     areaId: importedAreaId,
-    cardId: importedCards[0]!.id,
+    cardId: Effect.runSync(Effect.fromNullable(importedCards[0])).id,
     ratedAt: "2026-10-02T09:00:00.000Z",
     rating: "easy",
     schedulerFamily: "fsrs",
@@ -51,13 +55,11 @@ const proposal = {
     sourceId: "anki-apkg",
     cards: importedCards.map((card) => ({
       ...card,
-      ...(card.id === importedCards[0]!.id
+      ...(card.id === Effect.runSync(Effect.fromNullable(importedCards[0])).id
         ? {
             schedule: Effect.runSync(
               rebuildSchedule(importedReviews.filter((review) => review.cardId === card.id)).pipe(
-                Effect.catchAll(() =>
-                  Effect.succeed(newSchedule(new Date("2026-10-01T09:00:00.000Z"))),
-                ),
+                Effect.catchAll(() => Effect.succeed(fallbackImportSchedule())),
               ),
             ),
           }

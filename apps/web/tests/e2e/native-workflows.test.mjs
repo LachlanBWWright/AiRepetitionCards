@@ -12,9 +12,9 @@ test("native card draft survives bottom navigation", async (t) => {
       const question = page.getByRole("textbox", { name: "Question", exact: true });
       await expectVisible(question);
       await question.fill("Which molecule supplies usable energy to cells?");
-      await page.getByRole("button", { name: "Today tab", exact: true }).click();
+      await page.getByRole("tab", { name: /Today/ }).click();
       await expectVisible(page.getByRole("button", { name: "Show answer", exact: true }));
-      await page.getByRole("button", { name: "Library tab", exact: true }).click();
+      await page.getByRole("tab", { name: /Library/ }).click();
       assert.equal(await question.inputValue(), "Which molecule supplies usable energy to cells?");
     },
     mobileViewport,
@@ -32,7 +32,7 @@ test("native duplicate consent resets when the draft changes or is cancelled", a
       await question.fill(questionText);
       await answer.fill("ATP.");
       await expectVisible(page.getByRole("button", { name: "Keep both", exact: true }));
-      await page.getByRole("button", { name: "Save card", exact: true }).click();
+      await page.getByRole("button", { name: "Save and finish", exact: true }).click();
       await expectVisible(page.getByRole("alert"));
       assert.match(await page.getByRole("alert").innerText(), /choose Keep both/);
       await page.getByRole("button", { name: "Keep both", exact: true }).click();
@@ -57,7 +57,7 @@ test("native pending saves prevent draft edits and cancellation", async (t) => {
       await page.goto(storyUrl("screens-native-workspace-authoring--pending-save-interaction"));
       const question = page.getByRole("textbox", { name: "Question", exact: true });
       await expectVisible(question);
-      await page.getByRole("button", { name: "Save card", exact: true }).click();
+      await page.getByRole("button", { name: "Save changes", exact: true }).click();
       await expectVisible(page.getByRole("button", { name: "Complete mock save", exact: true }));
       assert.equal(await question.isEditable(), false);
       assert.equal(
@@ -87,7 +87,7 @@ test("native failed saves retain the edited card", async (t) => {
       const question = page.getByRole("textbox", { name: "Question", exact: true });
       await expectVisible(question);
       await question.fill("An unfinished revision to mitochondria.");
-      await page.getByRole("button", { name: "Save card", exact: true }).click();
+      await page.getByRole("button", { name: "Save changes", exact: true }).click();
       await expectVisible(
         page.getByText("Storage is unavailable. Your draft remains here.", { exact: true }),
       );
@@ -103,7 +103,7 @@ test("native search filters card results and returns explicit no matches", async
     t,
     async ({ page }) => {
       await page.goto(storyUrl("screens-native-workspace-search--search"));
-      const search = page.getByRole("textbox", { name: "Search everything", exact: true });
+      const search = page.getByRole("textbox", { name: "Search", exact: true });
       await expectVisible(search);
       await search.fill("mitochondria");
       const result = page.getByRole("button", { name: /What is the main role of mitochondria/ });

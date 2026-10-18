@@ -77,6 +77,47 @@ export function ReviewCard({
         )
       : null;
   const emptyDeck = session?.cardCount === 0;
+  const emptyTitle = !area
+    ? "Your library is empty"
+    : emptyDeck
+      ? "Build your deck"
+      : session && session.reviewed > 0
+        ? `You’re caught up in ${area.title}`
+        : "Already caught up";
+  const flaggedAction =
+    flaggedCount > 0 && onEditFlagged ? (
+      <Button variant="secondary" onClick={onEditFlagged}>
+        Edit flagged cards ({flaggedCount})
+      </Button>
+    ) : null;
+  const navigationAction =
+    area && !emptyDeck ? (
+      onNextDeck ? (
+        <Button onClick={onNextDeck}>Review next deck</Button>
+      ) : onBack ? (
+        <Button onClick={onBack}>Back to Today</Button>
+      ) : null
+    ) : null;
+  const ratingDelays =
+    preview && Either.isRight(preview) && now
+      ? Object.fromEntries(
+          ratings.map(({ rating }) => [
+            rating,
+            formatReviewDelay(preview.right[rating].due, now.getTime()),
+          ]),
+        )
+      : {};
+  const deleteCardAction =
+    onDelete && card ? (
+      <DropdownMenuItem
+        variant="destructive"
+        onSelect={() => {
+          onDelete(card);
+        }}
+      >
+        Delete card
+      </DropdownMenuItem>
+    ) : null;
   useEffect(() => {
     if (!keyboardActive || !card || disabled || saving) return;
     const handleKey = (event: KeyboardEvent) => {
@@ -110,8 +151,13 @@ export function ReviewCard({
       }
     };
     window.addEventListener("keydown", handleKey);
-    return () => window.removeEventListener("keydown", handleKey);
+    return () => {
+      window.removeEventListener("keydown", handleKey);
+    };
   }, [keyboardActive, card, showAnswer, onReveal, onRate, disabled, saving]);
+  const editCard = () => {
+    if (card && onEdit) onEdit(card);
+  };
   return (
     <article className="flex min-h-[262px] flex-col rounded-[11px] border border-[var(--line)] bg-[var(--surface)] px-[17px] pt-[14px]">
       {session && card && (
@@ -129,7 +175,9 @@ export function ReviewCard({
             size="sm"
             disabled={disabled || saving}
             aria-pressed={flagged}
-            onClick={() => onFlag(card)}
+            onClick={() => {
+              onFlag(card);
+            }}
           >
             {flagged ? "Flagged for editing" : "Improve later"}
           </Button>
@@ -152,14 +200,8 @@ export function ReviewCard({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              {onEdit && (
-                <DropdownMenuItem onSelect={() => onEdit(card)}>Edit card</DropdownMenuItem>
-              )}
-              {onDelete && (
-                <DropdownMenuItem variant="destructive" onSelect={() => onDelete(card)}>
-                  Delete card
-                </DropdownMenuItem>
-              )}
+              {onEdit && <DropdownMenuItem onSelect={editCard}>Edit card</DropdownMenuItem>}
+              {deleteCardAction}
             </DropdownMenuContent>
           </DropdownMenu>
         )}
@@ -179,26 +221,7 @@ export function ReviewCard({
               className="mx-auto mb-5 flex max-w-[720px] flex-wrap justify-center gap-3"
               aria-label="Card media"
             >
-              {mediaPreviews.map((preview) =>
-                preview.mimeType.startsWith("image/") ? (
-                  <InlineImage
-                    key={preview.url}
-                    src={preview.url}
-                    alt="Study card attachment"
-                    width={640}
-                    height={400}
-                    className="max-h-[300px] max-w-[min(100%,420px)] rounded-[10px] object-contain"
-                  />
-                ) : (
-                  <audio
-                    key={preview.url}
-                    controls
-                    src={preview.url}
-                    aria-label="Study card audio"
-                    className="w-[min(100%,420px)]"
-                  />
-                ),
-              )}
+              {mediaPreviews.map(renderReviewMediaPreview)}
             </div>
           )}
           {showAnswer ? (
@@ -206,26 +229,12 @@ export function ReviewCard({
               <span className="text-sm text-[var(--muted)]" role={saving ? "status" : undefined}>
                 {saving ? "Saving review…" : "How well did you recall it?"}
               </span>
-              <div className="flex gap-1.5 max-[640px]:w-full max-[640px]:[&>button]:min-w-0 max-[640px]:[&>button]:flex-1">
-                {ratings.map(({ rating, label }, index) => (
-                  <Button
-                    variant={rating === "again" ? "destructive" : "secondary"}
-                    className={`min-h-12 min-w-[72px] flex-col rounded-md border border-[var(--line)] bg-[var(--surface)] px-3 py-2 text-sm ${rating === "again" || rating === "hard" ? "text-[var(--status-warning-fg)]" : "text-[var(--status-success-fg)]"}`}
-                    key={rating}
-                    disabled={disabled || saving}
-                    onClick={() => onRate(rating)}
-                    aria-keyshortcuts={keyboardActive ? String(index + 1) : undefined}
-                  >
-                    {label}
-                    {keyboardActive ? ` · ${String(index + 1)}` : ""}
-                    {preview && Either.isRight(preview) && now && (
-                      <span className="text-xs font-normal">
-                        {formatReviewDelay(preview.right[rating].due, now.getTime())}
-                      </span>
-                    )}
-                  </Button>
-                ))}
-              </div>
+              <ReviewRatingButtons
+                disabled={disabled || saving}
+                keyboardActive={keyboardActive}
+                delays={ratingDelays}
+                onRate={onRate}
+              />
               <p className="text-xs text-muted-foreground text-center">
                 Again: forgot · Hard: recalled with difficulty · Good: recalled · Easy: effortless
               </p>
@@ -246,36 +255,18 @@ export function ReviewCard({
         <EmptyState
           className="flex flex-1 flex-col items-center justify-center p-6 text-center [&_p]:text-sm [&_h3]:text-xl"
           icon="✳"
-          title={
-            !area
-              ? "Your library is empty"
-              : emptyDeck
-                ? "Build your deck"
-                : session && session.reviewed > 0
-                  ? `You’re caught up in ${area.title}`
-                  : "Already caught up"
-          }
+          title={emptyTitle}
           description={
             !area
               ? "Create a deck to add cards."
               : emptyDeck
                 ? "Add your first card to start studying."
-                : `${session?.reviewed ? `${session.reviewed} ${session.reviewed === 1 ? "review" : "reviews"} this session · ${session.recalled} recalled. ` : "No cards due right now. "}${session?.nextReviewAt ? `Next review: ${new Date(session.nextReviewAt).toLocaleString()}.` : ""}`
+                : `${session?.reviewed ? `${String(session.reviewed)} ${session.reviewed === 1 ? "review" : "reviews"} this session · ${String(session.recalled)} recalled. ` : "No cards due right now. "}${session?.nextReviewAt ? `Next review: ${new Date(session.nextReviewAt).toLocaleString()}.` : ""}`
           }
           action={
             <div className="flex flex-wrap justify-center gap-2 pb-5">
-              {flaggedCount > 0 && onEditFlagged && (
-                <Button variant="secondary" onClick={onEditFlagged}>
-                  Edit flagged cards ({flaggedCount})
-                </Button>
-              )}
-              {area &&
-                !emptyDeck &&
-                (onNextDeck ? (
-                  <Button onClick={onNextDeck}>Review next deck</Button>
-                ) : onBack ? (
-                  <Button onClick={onBack}>Back to Today</Button>
-                ) : null)}
+              {flaggedAction}
+              {navigationAction}
               <Button variant={area && !emptyDeck ? "secondary" : "default"} onClick={onAddCard}>
                 {area ? (emptyDeck ? "Add your first card" : "Add more cards") : "New deck"}
               </Button>
@@ -284,5 +275,59 @@ export function ReviewCard({
         />
       )}
     </article>
+  );
+}
+
+function ReviewRatingButtons({
+  disabled,
+  keyboardActive,
+  delays,
+  onRate,
+}: {
+  readonly disabled: boolean;
+  readonly keyboardActive: boolean;
+  readonly delays: Partial<Record<ReviewRating, string>>;
+  readonly onRate: (rating: ReviewRating) => void;
+}) {
+  return (
+    <div className="flex gap-1.5 max-[640px]:w-full max-[640px]:[&>button]:min-w-0 max-[640px]:[&>button]:flex-1">
+      {ratings.map(({ rating, label }, index) => (
+        <Button
+          variant={rating === "again" ? "destructive" : "secondary"}
+          className={`min-h-12 min-w-[72px] flex-col rounded-md border border-[var(--line)] bg-[var(--surface)] px-3 py-2 text-sm ${rating === "again" || rating === "hard" ? "text-[var(--status-warning-fg)]" : "text-[var(--status-success-fg)]"}`}
+          key={rating}
+          disabled={disabled}
+          onClick={() => {
+            onRate(rating);
+          }}
+          aria-keyshortcuts={keyboardActive ? String(index + 1) : undefined}
+        >
+          {label}
+          {keyboardActive ? ` · ${String(index + 1)}` : ""}
+          {delays[rating] && <span className="text-xs font-normal">{delays[rating]}</span>}
+        </Button>
+      ))}
+    </div>
+  );
+}
+
+function renderReviewMediaPreview(preview: { readonly mimeType: string; readonly url: string }) {
+  return preview.mimeType.startsWith("image/") ? (
+    <InlineImage
+      key={preview.url}
+      src={preview.url}
+      alt="Study card attachment"
+      width={640}
+      height={400}
+      className="max-h-[300px] max-w-[min(100%,420px)] rounded-[10px] object-contain"
+    />
+  ) : (
+    <audio
+      key={preview.url}
+      controls
+      src={preview.url}
+      aria-label="Study card audio"
+      className="w-[min(100%,420px)]"
+    />
   );
 }

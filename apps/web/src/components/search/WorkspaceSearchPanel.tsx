@@ -90,6 +90,7 @@ export function WorkspaceSearchPanel({
   const epoch = useRef(0);
   const profile = useRef<string | null>(null);
   const owner = useRef(ownershipKey);
+  const searchDisabled = demoNotebooks === undefined && (loading || indexedOwner !== ownershipKey);
 
   useEffect(() => {
     owner.current = ownershipKey;
@@ -140,7 +141,9 @@ export function WorkspaceSearchPanel({
       ++epoch.current;
     };
     const unsubscribe = subscribeLocalWrites(invalidate);
-    const refresh = () => setRevision((value) => value + 1);
+    const refresh = () => {
+      setRevision((value) => value + 1);
+    };
     window.addEventListener("focus", refresh);
     window.addEventListener("storage", refresh);
     return () => {
@@ -221,38 +224,10 @@ export function WorkspaceSearchPanel({
               <CommandEmpty className="px-6 py-12">
                 No matching results. Try a different title or topic.
               </CommandEmpty>
-              <CommandGroup heading="Results">
-                {results.map((result) => (
-                  <CommandItem
-                    key={result.id}
-                    value={result.id}
-                    disabled={
-                      demoNotebooks === undefined && (loading || indexedOwner !== ownershipKey)
-                    }
-                    onSelect={() => open(result)}
-                    className="items-start gap-1 whitespace-normal rounded-lg px-3 py-3"
-                  >
-                    <span className="flex flex-wrap items-center gap-2">
-                      <Badge variant="secondary">{result.areaTitle}</Badge>
-                      <Badge variant="outline">{labels[result.kind]}</Badge>
-                    </span>
-                    <strong>{result.title}</strong>
-                    <span className="font-normal">{result.snippet}</span>
-                  </CommandItem>
-                ))}
-              </CommandGroup>
+              <WorkspaceSearchResults results={results} disabled={searchDisabled} onOpen={open} />
             </>
           ) : (
-            <CommandEmpty>
-              <span className="mx-auto flex max-w-sm flex-col items-center gap-2 px-4 py-10 text-center">
-                <span className="text-sm font-medium text-foreground">
-                  Find anything in your workspace
-                </span>
-                <span className="font-normal leading-relaxed">
-                  Search cards, study materials, source passages, and saved tutor discussions.
-                </span>
-              </span>
-            </CommandEmpty>
+            <WorkspaceSearchEmptyState />
           )}
         </CommandList>
       </Command>
@@ -301,7 +276,9 @@ export function WorkspaceSearchPanel({
               size="small"
               type="button"
               className="h-auto p-0 align-baseline"
-              onClick={() => setRevision((value) => value + 1)}
+              onClick={() => {
+                setRevision((value) => value + 1);
+              }}
             >
               Retry
             </Button>
@@ -316,5 +293,69 @@ export function WorkspaceSearchPanel({
         </Alert>
       )}
     </section>
+  );
+}
+
+function WorkspaceSearchEmptyState() {
+  return (
+    <CommandEmpty>
+      <span className="mx-auto flex max-w-sm flex-col items-center gap-2 px-4 py-10 text-center">
+        <span className="text-sm font-medium text-foreground">Find anything in your workspace</span>
+        <span className="font-normal leading-relaxed">
+          Search cards, study materials, source passages, and saved tutor discussions.
+        </span>
+      </span>
+    </CommandEmpty>
+  );
+}
+
+function WorkspaceSearchResultItem({
+  result,
+  disabled,
+  onSelect,
+}: {
+  readonly result: WorkspaceSearchResult;
+  readonly disabled: boolean;
+  readonly onSelect: () => void;
+}) {
+  return (
+    <CommandItem
+      value={result.id}
+      disabled={disabled}
+      onSelect={onSelect}
+      className="items-start gap-1 whitespace-normal rounded-lg px-3 py-3"
+    >
+      <span className="flex flex-wrap items-center gap-2">
+        <Badge variant="secondary">{result.areaTitle}</Badge>
+        <Badge variant="outline">{labels[result.kind]}</Badge>
+      </span>
+      <strong>{result.title}</strong>
+      <span className="font-normal">{result.snippet}</span>
+    </CommandItem>
+  );
+}
+
+function WorkspaceSearchResults({
+  results,
+  disabled,
+  onOpen,
+}: {
+  readonly results: readonly WorkspaceSearchResult[];
+  readonly disabled: boolean;
+  readonly onOpen: (result: WorkspaceSearchResult) => void;
+}) {
+  return (
+    <CommandGroup heading="Results">
+      {results.map((result) => (
+        <WorkspaceSearchResultItem
+          key={result.id}
+          result={result}
+          disabled={disabled}
+          onSelect={() => {
+            onOpen(result);
+          }}
+        />
+      ))}
+    </CommandGroup>
   );
 }

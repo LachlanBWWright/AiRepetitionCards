@@ -1,0 +1,583 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "ownerId",
+    "areas",
+    "deletedAreaIds"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "type": "number",
+      "enum": [
+        1
+      ]
+    },
+    "ownerId": {
+      "type": "string",
+      "description": "a string matching the pattern ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+      "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
+    },
+    "areas": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "document",
+          "color",
+          "contentHash"
+        ],
+        "properties": {
+          "document": {
+            "type": "object",
+            "required": [
+              "schemaVersion",
+              "id",
+              "title",
+              "description",
+              "language",
+              "objectives",
+              "ai",
+              "cards",
+              "tags",
+              "licence"
+            ],
+            "properties": {
+              "schemaVersion": {
+                "type": "string",
+                "enum": [
+                  "1.0.0"
+                ]
+              },
+              "id": {
+                "type": "string",
+                "description": "a string at least 1 character(s) long",
+                "title": "minLength(1)",
+                "minLength": 1
+              },
+              "sourceId": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string",
+                "description": "a string at most 80 character(s) long",
+                "title": "maxLength(80)",
+                "minLength": 1,
+                "maxLength": 80
+              },
+              "description": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "language": {
+                "type": "string",
+                "description": "a string at least 1 character(s) long",
+                "title": "minLength(1)",
+                "minLength": 1
+              },
+              "difficulty": {
+                "type": "string",
+                "enum": [
+                  "beginner",
+                  "intermediate",
+                  "advanced"
+                ]
+              },
+              "objectives": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "title",
+                    "description",
+                    "prerequisiteIds"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "description": "a string at least 1 character(s) long",
+                      "title": "minLength(1)",
+                      "minLength": 1
+                    },
+                    "title": {
+                      "type": "string",
+                      "description": "a string at least 1 character(s) long",
+                      "title": "minLength(1)",
+                      "minLength": 1
+                    },
+                    "description": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "prerequisiteIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "description": "a string at least 1 character(s) long",
+                        "title": "minLength(1)",
+                        "minLength": 1
+                      }
+                    },
+                    "sourceId": {
+                      "type": "string"
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                "description": "an array of at most 200 item(s)",
+                "title": "maxItems(200)",
+                "maxItems": 200
+              },
+              "ai": {
+                "type": "object",
+                "required": [
+                  "tutorInstructions",
+                  "quizInstructions",
+                  "cardGenerationInstructions"
+                ],
+                "properties": {
+                  "tutorInstructions": {
+                    "type": "string",
+                    "description": "a string at most 2000 character(s) long",
+                    "title": "maxLength(2000)",
+                    "maxLength": 2000
+                  },
+                  "quizInstructions": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "description": "a string at most 2000 character(s) long",
+                        "title": "maxLength(2000)",
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "cardGenerationInstructions": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "description": "a string at most 2000 character(s) long",
+                        "title": "maxLength(2000)",
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "additionalProperties": false
+              },
+              "cards": {
+                "type": "array",
+                "items": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "required": [
+                        "kind",
+                        "id",
+                        "front",
+                        "back",
+                        "objectiveIds",
+                        "tags",
+                        "origin"
+                      ],
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "basic"
+                          ]
+                        },
+                        "id": {
+                          "type": "string",
+                          "description": "a string at least 1 character(s) long",
+                          "title": "minLength(1)",
+                          "minLength": 1
+                        },
+                        "front": {
+                          "type": "string",
+                          "description": "a string at least 1 character(s) long",
+                          "title": "minLength(1)",
+                          "minLength": 1
+                        },
+                        "back": {
+                          "type": "string",
+                          "description": "a string at least 1 character(s) long",
+                          "title": "minLength(1)",
+                          "minLength": 1
+                        },
+                        "objectiveIds": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "description": "a string at least 1 character(s) long",
+                            "title": "minLength(1)",
+                            "minLength": 1
+                          }
+                        },
+                        "media": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "required": [
+                              "id",
+                              "mimeType",
+                              "byteLength"
+                            ],
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "description": "a string matching the pattern ^[a-f0-9]{64}$",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "mimeType": {
+                                "type": "string",
+                                "enum": [
+                                  "image/jpeg",
+                                  "image/png",
+                                  "image/gif",
+                                  "image/webp",
+                                  "audio/mpeg",
+                                  "audio/ogg",
+                                  "audio/wav"
+                                ]
+                              },
+                              "byteLength": {
+                                "type": "integer",
+                                "description": "a number less than or equal to 20000000",
+                                "title": "lessThanOrEqualTo(20000000)",
+                                "exclusiveMinimum": 0,
+                                "maximum": 20000000
+                              }
+                            },
+                            "additionalProperties": false
+                          },
+                          "description": "an array of at most 20 item(s)",
+                          "title": "maxItems(20)",
+                          "maxItems": 20
+                        },
+                        "tags": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "origin": {
+                          "type": "string",
+                          "enum": [
+                            "authored",
+                            "imported",
+                            "ai-generated"
+                          ]
+                        },
+                        "sourceId": {
+                          "type": "string"
+                        }
+                      },
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "required": [
+                        "kind",
+                        "id",
+                        "text",
+                        "objectiveIds",
+                        "tags",
+                        "origin"
+                      ],
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "cloze"
+                          ]
+                        },
+                        "id": {
+                          "type": "string",
+                          "description": "a string at least 1 character(s) long",
+                          "title": "minLength(1)",
+                          "minLength": 1
+                        },
+                        "text": {
+                          "type": "string",
+                          "description": "a string at most 20000 character(s) long",
+                          "title": "maxLength(20000)",
+                          "minLength": 1,
+                          "maxLength": 20000
+                        },
+                        "deletionIndex": {
+                          "type": "integer",
+                          "description": "a number between 1 and 20",
+                          "title": "between(1, 20)",
+                          "minimum": 1,
+                          "maximum": 20
+                        },
+                        "objectiveIds": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "description": "a string at least 1 character(s) long",
+                            "title": "minLength(1)",
+                            "minLength": 1
+                          }
+                        },
+                        "media": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "required": [
+                              "id",
+                              "mimeType",
+                              "byteLength"
+                            ],
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "description": "a string matching the pattern ^[a-f0-9]{64}$",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "mimeType": {
+                                "type": "string",
+                                "enum": [
+                                  "image/jpeg",
+                                  "image/png",
+                                  "image/gif",
+                                  "image/webp",
+                                  "audio/mpeg",
+                                  "audio/ogg",
+                                  "audio/wav"
+                                ]
+                              },
+                              "byteLength": {
+                                "type": "integer",
+                                "description": "a number less than or equal to 20000000",
+                                "title": "lessThanOrEqualTo(20000000)",
+                                "exclusiveMinimum": 0,
+                                "maximum": 20000000
+                              }
+                            },
+                            "additionalProperties": false
+                          },
+                          "description": "an array of at most 20 item(s)",
+                          "title": "maxItems(20)",
+                          "maxItems": 20
+                        },
+                        "tags": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "origin": {
+                          "type": "string",
+                          "enum": [
+                            "authored",
+                            "imported",
+                            "ai-generated"
+                          ]
+                        },
+                        "sourceId": {
+                          "type": "string"
+                        }
+                      },
+                      "additionalProperties": false
+                    }
+                  ]
+                },
+                "description": "an array of at most 500 item(s)",
+                "title": "maxItems(500)",
+                "maxItems": 500
+              },
+              "tags": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "licence": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "attribution": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "description": "a string at most 500 character(s) long",
+                    "title": "maxLength(500)",
+                    "maxLength": 500
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "forkedFromVersionId": {
+                "type": "string",
+                "description": "a string at most 80 character(s) long",
+                "title": "maxLength(80)",
+                "maxLength": 80
+              },
+              "activities": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "areaId",
+                    "title",
+                    "pluginId",
+                    "pluginVersion",
+                    "revision",
+                    "objectiveIds",
+                    "fallback",
+                    "payload"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "description": "a string at most 200 character(s) long",
+                      "title": "maxLength(200)",
+                      "minLength": 1,
+                      "maxLength": 200
+                    },
+                    "sourceId": {
+                      "type": "string",
+                      "description": "a string at most 200 character(s) long",
+                      "title": "maxLength(200)",
+                      "minLength": 1,
+                      "maxLength": 200
+                    },
+                    "areaId": {
+                      "type": "string",
+                      "description": "a string at most 200 character(s) long",
+                      "title": "maxLength(200)",
+                      "minLength": 1,
+                      "maxLength": 200
+                    },
+                    "title": {
+                      "type": "string",
+                      "description": "a string at most 300 character(s) long",
+                      "title": "maxLength(300)",
+                      "minLength": 1,
+                      "maxLength": 300
+                    },
+                    "pluginId": {
+                      "type": "string",
+                      "description": "a string at most 200 character(s) long",
+                      "title": "maxLength(200)",
+                      "minLength": 1,
+                      "maxLength": 200
+                    },
+                    "pluginVersion": {
+                      "type": "integer",
+                      "description": "a positive number",
+                      "title": "positive",
+                      "exclusiveMinimum": 0
+                    },
+                    "revision": {
+                      "type": "integer",
+                      "description": "a positive number",
+                      "title": "positive",
+                      "exclusiveMinimum": 0
+                    },
+                    "objectiveIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "description": "a string at most 200 character(s) long",
+                        "title": "maxLength(200)",
+                        "minLength": 1,
+                        "maxLength": 200
+                      },
+                      "description": "an array of at most 20 item(s)",
+                      "title": "maxItems(20)",
+                      "minItems": 1,
+                      "maxItems": 20
+                    },
+                    "fallback": {
+                      "type": "string",
+                      "description": "a string at most 40000 character(s) long",
+                      "title": "maxLength(40000)",
+                      "maxLength": 40000
+                    },
+                    "payload": {
+                      "type": "object",
+                      "required": [],
+                      "properties": {},
+                      "additionalProperties": {
+                        "type": [
+                          "null",
+                          "string",
+                          "number",
+                          "boolean",
+                          "array",
+                          "object"
+                        ],
+                        "description": "JSON value; runtime validation additionally enforces depth <= 32, <= 50000 visited values, and finite numbers."
+                      }
+                    },
+                    "archived": {
+                      "type": "boolean"
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                "description": "an array of at most 500 item(s)",
+                "title": "maxItems(500)",
+                "maxItems": 500
+              }
+            },
+            "additionalProperties": false
+          },
+          "color": {
+            "type": "string",
+            "description": "a string matching the pattern ^#[0-9a-fA-F]{6}$",
+            "pattern": "^#[0-9a-fA-F]{6}$"
+          },
+          "contentHash": {
+            "type": "string",
+            "description": "a string matching the pattern ^[a-fA-F0-9]{64}$",
+            "pattern": "^[a-fA-F0-9]{64}$"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "deletedAreaIds": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "description": "a string at least 1 character(s) long",
+        "title": "minLength(1)",
+        "minLength": 1
+      }
+    }
+  },
+  "additionalProperties": false
+}

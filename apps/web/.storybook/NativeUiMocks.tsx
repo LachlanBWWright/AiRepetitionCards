@@ -23,7 +23,9 @@ export function NativeSelect({
         aria-label={label}
         value={value}
         disabled={disabled}
-        onChange={(event) => onValueChange(event.target.value)}
+        onChange={(event) => {
+          onValueChange(event.target.value);
+        }}
       >
         {options.map((option) => (
           <option key={option.value} value={option.value}>

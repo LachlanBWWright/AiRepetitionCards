@@ -14,14 +14,21 @@ export const browserForkOperationStore: PublicationForkOperationStore = {
   write: (versionId, operationId) =>
     coordinateLocalWrite(
       Effect.try({
-        try: () => volatileStorage.setItem(key(versionId), operationId.toLowerCase()),
+        try: () => {
+          volatileStorage.setItem(key(versionId), operationId.toLowerCase());
+        },
         catch: failure,
       }),
       failure,
     ),
   clear: (versionId) =>
     coordinateLocalWrite(
-      Effect.try({ try: () => volatileStorage.removeItem(key(versionId)), catch: failure }),
+      Effect.try({
+        try: () => {
+          volatileStorage.removeItem(key(versionId));
+        },
+        catch: failure,
+      }),
       failure,
     ),
 };

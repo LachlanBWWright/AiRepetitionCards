@@ -6,27 +6,36 @@ import {
   app,
   BrowserWindow,
   dialog,
-  ipcMain,
+  Menu,
   session,
   shell,
   type IpcMainInvokeEvent,
   type WebContents,
 } from "electron";
 import { Effect, Either, Schema } from "effect";
-import { parseWorkspaceJson } from "@recall/domain";
-import type { Workspace } from "@recall/domain";
-import { registerDesktopServices } from "./desktop-services";
-import { registerDesktopMediaIpc } from "./desktop-media-ipc";
-import { registerDesktopAnkiIpc } from "./anki-ipc";
-import { registerBackupIpc } from "./backup-ipc";
-import { registerChatGptLocal } from "./chatgpt-local";
+import { desktopSecretStoreOverride } from "./security/desktop-secure-storage";
+import { isRendererDocument } from "./renderer-document";
+import { registerDesktopServices } from "./services/desktop-services";
+import { registerDesktopMediaIpc } from "./ipc/desktop-media-ipc";
+import { registerDesktopAnkiIpc } from "./ipc/anki-ipc";
+import { registerBackupIpc } from "./ipc/backup-ipc";
+import { registerChatGptLocal } from "./chatgpt/chatgpt-local";
 import { registerDailyReminders } from "./daily-reminders";
+import { registerWorkspaceIpc } from "./ipc/index-workspace-ipc";
+
+// Choose the OS keyring before Electron initializes Chromium's encryption backend.
+const secretStore = desktopSecretStoreOverride(
+  process.platform,
+  app.commandLine.hasSwitch("password-store"),
+  process.env.XDG_CURRENT_DESKTOP,
+  process.env.DESKTOP_SESSION,
+);
+if (secretStore) app.commandLine.appendSwitch("password-store", secretStore);
 
 // One process owns rotating credentials and SQLite for this user-data directory.
 const ownsInstanceLock = app.requestSingleInstanceLock();
 if (!ownsInstanceLock) app.quit();
 
-const WorkspaceWriteLimit = 5_000_000;
 const rendererUrl = process.env.ELECTRON_RENDERER_URL;
 let mainWindow: BrowserWindow | null = null;
 const mainDirectory = fileURLToPath(new URL(".", import.meta.url));
@@ -67,8 +76,8 @@ function trustedClipboardFrame(
     !contents ||
     contents !== mainWindow.webContents ||
     !isMainFrame ||
-    requestingUrl !== expectedUrl ||
-    contents.mainFrame.url !== expectedUrl
+    !isRendererDocument(requestingUrl, expectedUrl) ||
+    !isRendererDocument(contents.mainFrame.url, expectedUrl)
   )
     return false;
   const parsed = Effect.runSync(
@@ -100,18 +109,11 @@ function configureSessionPermissions(): void {
   );
 }
 
-type DesktopReply<T> =
-  { readonly _tag: "Success"; readonly value: T } | { readonly _tag: "Failure" };
-
-function failure<T>(): DesktopReply<T> {
-  return { _tag: "Failure" };
-}
-
 function trustedSender(event: IpcMainInvokeEvent): boolean {
   const frame = event.senderFrame;
   if (!frame || !mainWindow || frame !== mainWindow.webContents.mainFrame) return false;
-  const frameUrl = frame.url;
-  return rendererUrl ? frameUrl === rendererUrl : frameUrl === mainWindow.webContents.getURL();
+  const expectedUrl = rendererUrl ?? pathToFileURL(join(rendererDirectory, "index.html")).href;
+  return isRendererDocument(frame.url, expectedUrl);
 }
 
 function openDatabase(): Effect.Effect<DatabaseSync, { readonly _tag: "DatabaseOpenFailure" }> {
@@ -144,83 +146,6 @@ function openDatabase(): Effect.Effect<DatabaseSync, { readonly _tag: "DatabaseO
       return database;
     },
     catch: () => ({ _tag: "DatabaseOpenFailure" }) as const,
-  });
-}
-
-function registerWorkspaceIpc(
-  database: DatabaseSync,
-  clearReminders: () => Promise<boolean>,
-): void {
-  ipcMain.handle("workspace:read", (event): DesktopReply<string | null> => {
-    if (!trustedSender(event)) return failure();
-    const result = Effect.runSync(
-      Effect.either(
-        Effect.try({
-          try: () => {
-            const row: unknown = database
-              .prepare("SELECT serialized_workspace FROM local_workspace WHERE id = 1")
-              .get();
-            if (
-              typeof row === "object" &&
-              row !== null &&
-              "serialized_workspace" in row &&
-              typeof row.serialized_workspace === "string"
-            ) {
-              return row.serialized_workspace;
-            }
-            return null;
-          },
-          catch: () => ({ _tag: "WorkspaceReadFailure" }) as const,
-        }),
-      ),
-    );
-    return Either.isRight(result) ? { _tag: "Success", value: result.right } : failure();
-  });
-
-  ipcMain.handle("workspace:write", async (event, input: unknown): Promise<DesktopReply<void>> => {
-    if (!trustedSender(event)) return failure();
-    const serialized = Schema.decodeUnknownEither(Schema.String)(input);
-    if (
-      Either.isLeft(serialized) ||
-      Buffer.byteLength(serialized.right, "utf8") > WorkspaceWriteLimit
-    ) {
-      return failure();
-    }
-    const decoded = await Effect.runPromise(Effect.either(parseWorkspaceJson(serialized.right)));
-    if (Either.isLeft(decoded)) return failure();
-    const write = Effect.try({
-      try: () => {
-        database
-          .prepare(
-            `INSERT INTO local_workspace (id, serialized_workspace, updated_at)
-               VALUES (1, ?, ?)
-               ON CONFLICT(id) DO UPDATE SET
-                 serialized_workspace = excluded.serialized_workspace,
-                 updated_at = excluded.updated_at`,
-          )
-          .run(JSON.stringify(decoded.right satisfies Workspace), new Date().toISOString());
-      },
-      catch: () => ({ _tag: "WorkspaceWriteFailure" }) as const,
-    });
-    return Either.isRight(Effect.runSync(Effect.either(write)))
-      ? { _tag: "Success", value: undefined }
-      : failure();
-  });
-
-  ipcMain.handle("workspace:clear", async (event): Promise<DesktopReply<void>> => {
-    if (!trustedSender(event)) return failure();
-    if (!(await clearReminders())) return failure();
-    const result = Effect.runSync(
-      Effect.either(
-        Effect.try({
-          try: () => {
-            database.prepare("DELETE FROM local_workspace WHERE id = 1").run();
-          },
-          catch: () => ({ _tag: "WorkspaceClearFailure" }) as const,
-        }),
-      ),
-    );
-    return Either.isRight(result) ? { _tag: "Success", value: undefined } : failure();
   });
 }
 
@@ -324,8 +249,10 @@ function createWindow(): BrowserWindow {
   });
   window.webContents.on("will-navigate", (event, url) => {
     if (
-      (rendererUrl && url !== rendererUrl) ||
-      (!rendererUrl && url !== window.webContents.getURL())
+      !isRendererDocument(
+        url,
+        rendererUrl ?? pathToFileURL(join(rendererDirectory, "index.html")).href,
+      )
     ) {
       event.preventDefault();
       openApprovedExternalLink(url);
@@ -369,7 +296,10 @@ const ready = Effect.tryPromise({
 }).pipe(
   Effect.flatMap(() => openDatabase()),
   Effect.matchEffect({
-    onFailure: () => Effect.sync(() => app.quit()),
+    onFailure: () =>
+      Effect.sync(() => {
+        app.quit();
+      }),
     onSuccess: (database) =>
       Effect.sync(() => {
         registerChatGptLocal(trustedSender);
@@ -384,6 +314,7 @@ const ready = Effect.tryPromise({
         );
         configureSessionPermissions();
         configureContentSecurityPolicy();
+        if (process.platform !== "darwin") Menu.setApplicationMenu(null);
         mainWindow = createWindow();
         const reminders = registerDailyReminders(trustedSender, () => {
           if (!mainWindow || mainWindow.isDestroyed()) mainWindow = createWindow();
@@ -391,11 +322,13 @@ const ready = Effect.tryPromise({
           mainWindow.show();
           mainWindow.focus();
           const contents = mainWindow.webContents;
-          const notify = () => contents.send("reminders:open");
+          const notify = () => {
+            contents.send("reminders:open");
+          };
           if (contents.isLoadingMainFrame()) contents.once("did-finish-load", notify);
           else notify();
         });
-        registerWorkspaceIpc(database, reminders.clear);
+        registerWorkspaceIpc(database, trustedSender, reminders.clear);
         if (pendingAuthUrl) {
           const authUrl = pendingAuthUrl;
           pendingAuthUrl = null;

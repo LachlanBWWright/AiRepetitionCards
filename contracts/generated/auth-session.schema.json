@@ -1,0 +1,71 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "anyOf": [
+    {
+      "type": "object",
+      "required": [
+        "schemaVersion",
+        "authenticated",
+        "displayLabel",
+        "ownerId"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "type": "number",
+          "enum": [
+            1
+          ]
+        },
+        "authenticated": {
+          "type": "boolean",
+          "enum": [
+            false
+          ]
+        },
+        "displayLabel": {
+          "type": "null"
+        },
+        "ownerId": {
+          "type": "null"
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "schemaVersion",
+        "authenticated",
+        "displayLabel",
+        "ownerId"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "type": "number",
+          "enum": [
+            1
+          ]
+        },
+        "authenticated": {
+          "type": "boolean",
+          "enum": [
+            true
+          ]
+        },
+        "displayLabel": {
+          "type": "string",
+          "description": "a string at most 320 character(s) long",
+          "title": "maxLength(320)",
+          "minLength": 1,
+          "maxLength": 320
+        },
+        "ownerId": {
+          "type": "string",
+          "description": "a string matching the pattern ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$",
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
+        }
+      },
+      "additionalProperties": false
+    }
+  ]
+}

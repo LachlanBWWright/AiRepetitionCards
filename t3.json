@@ -49,6 +49,21 @@
       "icon": "build"
     },
     {
+      "name": "Lint (strict TypeScript and neverthrow)",
+      "command": "pnpm lint",
+      "icon": "test"
+    },
+    {
+      "name": "Typecheck",
+      "command": "pnpm typecheck",
+      "icon": "test"
+    },
+    {
+      "name": "Check file size and indentation",
+      "command": "pnpm check:source-limits",
+      "icon": "test"
+    },
+    {
       "name": "Run checks",
       "command": "pnpm check",
       "icon": "test"

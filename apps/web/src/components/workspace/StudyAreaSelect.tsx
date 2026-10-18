@@ -23,7 +23,7 @@ export function StudyAreaSelect({
   value,
   onValueChange,
   disabled = false,
-  ariaLabel = "Deck",
+  ariaLabel = "Subject",
   placeholder = "Choose an area",
   renderDetail,
 }: StudyAreaSelectProps) {

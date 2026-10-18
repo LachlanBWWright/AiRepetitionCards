@@ -72,7 +72,8 @@ public sealed class TutorPrivacyOperations(HttpClient httpClient, IConfiguration
         var url = configuration["SUPABASE_URL"] ?? configuration["NEXT_PUBLIC_SUPABASE_URL"];
         key = configuration["SUPABASE_SERVICE_ROLE_KEY"]?.Trim() ?? string.Empty;
         if (!Uri.TryCreate(url, UriKind.Absolute, out var projectUri) ||
-            (projectUri.Scheme != Uri.UriSchemeHttps && projectUri.Host != "localhost") ||
+            (projectUri.Scheme != Uri.UriSchemeHttps &&
+             !(projectUri.Scheme == Uri.UriSchemeHttp && projectUri.IsLoopback)) ||
             key.Length == 0)
         {
             baseUri = new Uri("https://invalid.invalid/");

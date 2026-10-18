@@ -24,7 +24,7 @@ export function authenticatedOpenAiUser(configuration: OpenAiWebConfiguration) {
         configuration.supabase.publishableKey,
       );
       const { data, error } = await client.auth.getUser();
-      return error ? null : (data.user?.id ?? null);
+      return error ? null : data.user.id;
     },
     catch: () => failure("unavailable"),
   });
@@ -62,7 +62,7 @@ export function establishOpenAiSession(
           user_metadata: identity.name ? { name: identity.name } : {},
         }),
       );
-      if (!created.error && created.data.user) userId = created.data.user.id;
+      if (!created.error) userId = created.data.user.id;
       else {
         // A concurrent callback can have created the same internal alias. Only verified metadata permits recovery.
         const recovered = yield* request(() =>
@@ -70,7 +70,6 @@ export function establishOpenAiSession(
         );
         if (
           recovered.error ||
-          !recovered.data.user ||
           recovered.data.user.app_metadata.openai_identity_key !== key ||
           recovered.data.user.email !== email
         )
@@ -80,7 +79,7 @@ export function establishOpenAiSession(
     }
     const canonicalUserId = userId;
     const account = yield* request(() => admin.auth.admin.getUserById(canonicalUserId));
-    if (account.error || !account.data.user?.email || account.data.user.id !== canonicalUserId)
+    if (account.error || !account.data.user.email || account.data.user.id !== canonicalUserId)
       return yield* Effect.fail(failure("unavailable"));
     yield* store
       .bindIdentity(identity, canonicalUserId)
@@ -93,7 +92,7 @@ export function establishOpenAiSession(
     const link = yield* request(() =>
       admin.auth.admin.generateLink({ type: "magiclink", email: account.data.user.email ?? "" }),
     );
-    if (link.error || link.data.user?.id !== canonicalUserId || !link.data.properties?.hashed_token)
+    if (link.error || link.data.user.id !== canonicalUserId || !link.data.properties.hashed_token)
       return yield* Effect.fail(failure("unavailable"));
     const session = yield* request(async () => {
       const client = await createSupabaseServerClient(

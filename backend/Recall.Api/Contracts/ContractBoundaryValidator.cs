@@ -27,6 +27,8 @@ public static partial class ContractBoundaryValidator
     {
         if (!IsObject(value) || !HasOnly(value, "schemaVersion", "authenticated", "displayLabel", "ownerId") ||
             !IsSchemaVersionOne(value) ||
+            !Has(value, "displayLabel", JsonValueKind.String, JsonValueKind.Null) ||
+            !Has(value, "ownerId", JsonValueKind.String, JsonValueKind.Null) ||
             !Has(value, "authenticated", JsonValueKind.True, JsonValueKind.False))
         {
             return ContractValidationResult.Invalid("invalid-auth-session-shape");
@@ -91,6 +93,7 @@ public static partial class ContractBoundaryValidator
             !Has(document, "title", JsonValueKind.String) || document.GetProperty("title").GetString() is not { Length: > 0 and <= 80 } ||
             !Has(document, "description", JsonValueKind.Null, JsonValueKind.String) ||
             !Has(document, "language", JsonValueKind.String) || string.IsNullOrEmpty(document.GetProperty("language").GetString()) ||
+            !OptionalDifficulty(document) ||
             !Has(document, "objectives", JsonValueKind.Array) ||
             !Has(document, "ai", JsonValueKind.Object) ||
             !Has(document, "cards", JsonValueKind.Array) || document.GetProperty("cards").GetArrayLength() > 500 ||
@@ -202,6 +205,9 @@ public static partial class ContractBoundaryValidator
     private static bool OptionalString(JsonElement parent, string name, int? maxLength = null) =>
         !parent.TryGetProperty(name, out var value) || (value.ValueKind == JsonValueKind.String &&
             (maxLength is null || (value.GetString()?.Length ?? 0) <= maxLength));
+    private static bool OptionalDifficulty(JsonElement document) =>
+        !document.TryGetProperty("difficulty", out var value) ||
+        (value.ValueKind == JsonValueKind.String && value.GetString() is "beginner" or "intermediate" or "advanced");
     private static bool OptionalNullableString(JsonElement parent, string name, int? maxLength = null) =>
         !parent.TryGetProperty(name, out var value) || value.ValueKind == JsonValueKind.Null ||
         (value.ValueKind == JsonValueKind.String && (maxLength is null || (value.GetString()?.Length ?? 0) <= maxLength));

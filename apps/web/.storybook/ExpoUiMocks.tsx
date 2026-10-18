@@ -20,7 +20,9 @@ function Picker({
     <select
       value={selectedValue}
       disabled={!enabled}
-      onChange={(event) => onValueChange(event.currentTarget.value)}
+      onChange={(event) => {
+        onValueChange(event.currentTarget.value);
+      }}
     >
       {children}
     </select>
@@ -63,35 +65,37 @@ export default function DateTimePicker({
   );
 }
 
-export class EventEmitter {}
-export class SharedObject {}
-export class SharedRef {}
-export class NativeModule {}
+export class EventEmitter {
+  readonly kind = "EventEmitter";
+}
+export class SharedObject {
+  readonly kind = "SharedObject";
+}
+export class SharedRef {
+  readonly kind = "SharedRef";
+}
+export class NativeModule {
+  readonly kind = "NativeModule";
+}
 export class CodedError extends Error {}
 export const Platform = { OS: "web" } as const;
-export const requireOptionalNativeModule = (name: string) => {
-  void name;
+export const requireOptionalNativeModule = () => {
   return null;
 };
-export const requireNativeModule = (name: string) => {
-  void name;
+export const requireNativeModule = () => {
   return {} as never;
 };
-export const requireNativeViewManager = (name: string) => {
-  void name;
+export const requireNativeViewManager = () => {
   return "div";
 };
-export const registerWebModule = (module: unknown, name?: string) => {
-  void name;
+export const registerWebModule = (module: unknown) => {
   return module;
 };
-export const registerNativeModule = (module: unknown, name?: string) => {
-  void name;
+export const registerNativeModule = (module: unknown) => {
   return module;
 };
-export const reloadAppAsync = async () => undefined;
-export const registerRootComponent = (component: unknown) => {
-  void component;
+export const reloadAppAsync = () => Promise.resolve(undefined);
+export const registerRootComponent = () => {
   return undefined;
 };
 export const TextNode = Text;

@@ -42,6 +42,14 @@ for (path, method), operation in operations.items():
                 assert schema.get("required") == ["error"] and schema.get("properties", {}).get("error", {}).get("type") == "string", (path, method, code, schema)
 
 assert "cursor" in {parameter["name"] for parameter in operations[("/api/v1/sync", "get")].get("parameters", [])}
+deck_parameters = {
+    parameter["name"]: parameter
+    for parameter in operations[("/api/v1/decks", "get")].get("parameters", [])
+}
+assert {"q", "language", "tag", "difficulty", "activityType", "minMinutes", "maxMinutes", "limit", "cursor"} <= deck_parameters.keys(), deck_parameters
+for name in ("minMinutes", "maxMinutes"):
+    assert deck_parameters[name]["schema"].get("type") == "integer", deck_parameters[name]
+    assert deck_parameters[name]["schema"].get("minimum") == 1 and deck_parameters[name]["schema"].get("maximum") == 1000, deck_parameters[name]
 media = operations[("/api/v1/workspace/media/{mediaId}", "get")]["responses"]["200"]["content"]
 assert media.get("image/png", {}).get("schema", {}).get("format") == "binary", media
 upload = operations[("/api/v1/workspace/media/{mediaId}", "post")]

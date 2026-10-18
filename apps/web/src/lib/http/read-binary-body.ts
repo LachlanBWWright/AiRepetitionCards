@@ -25,7 +25,7 @@ export function readBinaryBody(
 
       const chunks: Uint8Array[] = [];
       let byteLength = 0;
-      while (true) {
+      for (;;) {
         const chunk = await reader.read();
         if (chunk.done) break;
         byteLength += chunk.value.byteLength;

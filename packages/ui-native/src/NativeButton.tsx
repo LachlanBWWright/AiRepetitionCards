@@ -2,6 +2,7 @@ import { Pressable, Text } from "react-native";
 
 export type NativeButtonProps = {
   readonly label: string;
+  readonly accessibilityLabel?: string;
   readonly onPress: () => void;
   readonly tone?: "dark" | "soft";
   readonly disabled?: boolean;
@@ -11,6 +12,7 @@ export type NativeButtonProps = {
 
 export function NativeButton({
   label,
+  accessibilityLabel,
   onPress,
   tone = "dark",
   disabled = false,
@@ -20,6 +22,7 @@ export function NativeButton({
   return (
     <Pressable
       accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel ?? label}
       accessibilityState={{ disabled }}
       disabled={disabled}
       onPress={onPress}

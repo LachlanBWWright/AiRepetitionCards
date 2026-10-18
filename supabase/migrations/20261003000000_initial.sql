@@ -1,163 +1,164 @@
-create table public.profiles (
-  user_id uuid primary key references auth.users (id) on delete cascade,
-  handle text check (handle is null or char_length(handle) <= 40),
-  display_name text check (display_name is null or char_length(display_name) <= 80),
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
+-- Initial application schema for a fresh Supabase project.
+-- Includes learning activities, public/link sharing, updates, and moderation.
+-- No historical upgrade or data-backfill migrations are required.
+
+SET statement_timeout = 0;
+SET lock_timeout = 0;
+SET idle_in_transaction_session_timeout = 0;
+SET transaction_timeout = 0;
+SET client_encoding = 'UTF8';
+SET standard_conforming_strings = on;
+SELECT pg_catalog.set_config('search_path', '', false);
+SET check_function_bodies = false;
+SET xmloption = content;
+SET client_min_messages = warning;
+SET row_security = off;
+
+CREATE SCHEMA IF NOT EXISTS public;
+
+CREATE FUNCTION public.acknowledge_deck_subscription_update(p_user_id uuid, p_area_id uuid, p_version_id uuid) RETURNS TABLE(deck_id uuid, area_id uuid, known_version_id uuid, latest_version_id uuid, latest_version integer, title text, release_notes text, created_at timestamp with time zone, seen boolean)
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path = 'pg_catalog', 'public'
+    AS $$
+declare current_update record;
+begin
+ if auth.uid() is null or auth.uid()<>p_user_id then
+  raise insufficient_privilege using message='subscription-owner-required';
+ end if;
+ select * into current_update
+ from public.list_deck_subscription_updates(p_user_id) u
+ where u.area_id=p_area_id and u.latest_version_id=p_version_id;
+ if not found then raise no_data_found using message='subscription-update-not-found'; end if;
+ insert into public.deck_update_reads(user_id,area_id,version_id,read_at)
+ values(p_user_id,p_area_id,p_version_id,now())
+ on conflict on constraint deck_update_reads_pkey
+ do update set version_id=excluded.version_id,read_at=excluded.read_at;
+ return query select * from public.list_deck_subscription_updates(p_user_id);
+end $$;
+
+CREATE FUNCTION public.can_access_active_deck(p_deck_id uuid, p_user_id uuid DEFAULT auth.uid()) RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path = 'pg_catalog', 'public'
+    AS $$
+ select p_user_id is not null and p_user_id=auth.uid() and exists(
+  select 1 from public.shared_decks d where d.deck_id=p_deck_id and d.status='active' and d.moderation_status='visible'
+   and (d.visibility='public' or public.is_deck_viewer(d.deck_id,p_user_id)))
+$$;
+
+CREATE FUNCTION public.can_follow_deck_snapshot(p_user_id uuid, p_area_id uuid, p_deck_id uuid, p_version_id uuid) RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path = 'pg_catalog', 'public'
+    AS $$
+ select p_user_id is not null and p_user_id=auth.uid()
+  and exists(select 1 from public.knowledge_areas a where a.id=p_area_id and a.owner_id=p_user_id)
+  and exists(select 1 from public.shared_decks d join public.published_knowledge_area_versions v on v.source_area_id=d.deck_id
+   where d.deck_id=p_deck_id and d.status='active' and d.moderation_status='visible'
+    and v.id=p_version_id and v.source_area_id=p_deck_id and v.visibility in ('public','unlisted'))
+  and exists(select 1 from public.knowledge_area_versions initial_snapshot
+   join public.published_knowledge_area_versions original_source on lower(initial_snapshot.content->>'forkedFromVersionId')=lower(original_source.id::text)
+   where initial_snapshot.knowledge_area_id=p_area_id and initial_snapshot.version=1 and initial_snapshot.created_by=p_user_id
+    and original_source.source_area_id=p_deck_id)
+$$;
+
+SET default_tablespace = '';
+
+SET default_table_access_method = heap;
+
+CREATE TABLE public.published_knowledge_area_versions (
+    id uuid NOT NULL,
+    source_area_id uuid,
+    owner_id uuid,
+    version integer NOT NULL,
+    content jsonb NOT NULL,
+    content_hash text NOT NULL,
+    visibility text NOT NULL,
+    attribution text,
+    license text,
+    forked_from_version_id uuid,
+    share_token_hash text,
+    created_by uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    release_notes text DEFAULT ''::text NOT NULL,
+    CONSTRAINT published_knowledge_area_share_token_visibility_check CHECK (((share_token_hash IS NULL) OR (visibility = 'unlisted'::text))),
+    CONSTRAINT published_knowledge_area_versions_attribution_check CHECK (((attribution IS NULL) OR (char_length(attribution) <= 500))),
+    CONSTRAINT published_knowledge_area_versions_content_check CHECK ((jsonb_typeof(content) = 'object'::text)),
+    CONSTRAINT published_knowledge_area_versions_content_hash_check CHECK ((content_hash ~ '^[a-f0-9]{64}$'::text)),
+    CONSTRAINT published_knowledge_area_versions_license_check CHECK (((license IS NULL) OR (char_length(license) <= 120))),
+    CONSTRAINT published_knowledge_area_versions_release_notes_check CHECK ((char_length(release_notes) <= 4000)),
+    CONSTRAINT published_knowledge_area_versions_share_token_hash_check CHECK (((share_token_hash IS NULL) OR (share_token_hash ~ '^[a-f0-9]{64}$'::text))),
+    CONSTRAINT published_knowledge_area_versions_version_check CHECK ((version > 0)),
+    CONSTRAINT published_knowledge_area_versions_visibility_check CHECK ((visibility = ANY (ARRAY['private'::text, 'unlisted'::text, 'public'::text])))
 );
 
-create table public.knowledge_areas (
-  id uuid primary key,
-  owner_id uuid not null references auth.users (id) on delete cascade,
-  title text not null check (char_length(title) between 1 and 80),
-  description text,
-  language text not null default 'en',
-  color text not null check (color ~ '^#[0-9A-Fa-f]{6}$'),
-  tags text[] not null default '{}',
-  visibility text not null default 'private' check (visibility in ('private', 'public')),
-  revision integer not null default 1 check (revision > 0),
-  deleted_at timestamptz,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
-);
+CREATE FUNCTION public.create_deck_publication(p_version_id uuid, p_source_area_id uuid, p_owner_id uuid, p_operation_id uuid, p_content jsonb, p_content_hash text, p_visibility text, p_attribution text, p_license text, p_forked_from_version_id uuid, p_share_token_hash text, p_release_notes text DEFAULT ''::text) RETURNS SETOF public.published_knowledge_area_versions
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path = 'pg_catalog', 'public'
+    AS $$
+declare existing public.published_knowledge_area_versions%rowtype; next_version integer; new_row public.published_knowledge_area_versions%rowtype;
+begin
+ if coalesce(auth.role(),'')<>'service_role' or p_owner_id is null then raise insufficient_privilege using message='service-role-required'; end if;
+ if p_source_area_id is null or p_version_id is null or p_operation_id is null or char_length(coalesce(p_release_notes,''))>4000 then raise invalid_parameter_value using message='invalid-publication'; end if;
+ if p_visibility not in ('public','unlisted') then raise check_violation using message='invalid-publication-visibility'; end if;
+ perform pg_advisory_xact_lock(hashtextextended(p_source_area_id::text,0));
+ if not exists(select 1 from public.knowledge_areas a where a.id=p_source_area_id and a.owner_id=p_owner_id and a.deleted_at is null) then raise foreign_key_violation using message='area-not-found'; end if;
+ select * into existing from public.published_knowledge_area_versions v where v.id=p_version_id and v.owner_id=p_owner_id;
+ if found then
+  if existing.source_area_id<>p_source_area_id or existing.content_hash<>p_content_hash or existing.visibility<>p_visibility or existing.release_notes<>coalesce(p_release_notes,'')
+   or existing.attribution is distinct from p_attribution or existing.license is distinct from p_license or existing.forked_from_version_id is distinct from p_forked_from_version_id then raise unique_violation using message='publication-operation-conflict'; end if;
+  return next existing; return;
+ end if;
+ select coalesce(max(v.version),0)+1 into next_version from public.published_knowledge_area_versions v where v.source_area_id=p_source_area_id;
+ insert into public.published_knowledge_area_versions(id,source_area_id,owner_id,version,content,content_hash,visibility,attribution,license,forked_from_version_id,share_token_hash,created_by,release_notes)
+ values(p_version_id,p_source_area_id,p_owner_id,next_version,p_content,p_content_hash,p_visibility,p_attribution,p_license,p_forked_from_version_id,p_share_token_hash,p_owner_id,coalesce(p_release_notes,'')) returning * into new_row;
+ insert into public.shared_decks(deck_id,owner_id,title,description,language,tags,author_name,visibility,status,latest_version_id,version,card_count,license,attribution)
+ values(p_source_area_id,p_owner_id,coalesce(nullif(left(coalesce(p_content->>'title',p_content->>'name'),300),''),'Untitled deck'),coalesce(left(p_content->>'description',4000),''),coalesce(left(p_content->>'language',40),''),
+  case when jsonb_typeof(p_content->'tags')='array' then array(select left(value,80) from jsonb_array_elements_text(p_content->'tags') with ordinality as t(value,n) where char_length(value)<=80 order by n limit 30) else '{}'::text[] end,
+  coalesce(left(p_content->>'authorName',120),''),p_visibility,'active',p_version_id,next_version,case when jsonb_typeof(p_content->'cards')='array' then jsonb_array_length(p_content->'cards') else 0 end,p_license,p_attribution)
+ on conflict(deck_id) do update set visibility=excluded.visibility,status='active',latest_version_id=excluded.latest_version_id,version=excluded.version,card_count=excluded.card_count,license=excluded.license,attribution=excluded.attribution,updated_at=now();
+ return next new_row;
+end $$;
 
-create table public.knowledge_area_versions (
-  id uuid primary key,
-  knowledge_area_id uuid not null references public.knowledge_areas (id) on delete cascade,
-  version integer not null check (version > 0),
-  parent_version_id uuid,
-  content jsonb not null,
-  content_hash text not null check (content_hash ~ '^[a-f0-9]{64}$'),
-  created_by uuid not null references auth.users (id),
-  published_at timestamptz,
-  created_at timestamptz not null default now(),
-  unique (knowledge_area_id, version),
-  unique (knowledge_area_id, content_hash),
-  unique (knowledge_area_id, id),
-  foreign key (knowledge_area_id, parent_version_id)
-    references public.knowledge_area_versions (knowledge_area_id, id)
-);
+CREATE FUNCTION public.create_deck_report(p_id uuid, p_user_id uuid, p_deck_id uuid, p_version_id uuid, p_reason text, p_message text, p_share_token_hash text DEFAULT NULL::text) RETURNS TABLE(id uuid, status text)
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path = 'pg_catalog', 'public'
+    AS $_$
+declare
+ version_row public.published_knowledge_area_versions%rowtype;
+ deck_row public.shared_decks%rowtype;
+ saved public.deck_reports%rowtype;
+begin
+ if auth.uid() is null or auth.uid()<>p_user_id then
+  raise insufficient_privilege using message='report-owner-required';
+ end if;
+ if p_reason not in ('spam','harmful','copyright','broken') or char_length(p_message) not between 1 and 2000 then
+  raise check_violation using message='report-invalid';
+ end if;
+ select * into version_row
+ from public.published_knowledge_area_versions v
+ where v.id=p_version_id and v.source_area_id=p_deck_id;
+ select * into deck_row from public.shared_decks d where d.deck_id=p_deck_id;
+ if version_row.id is null or deck_row.deck_id is null or not (
+  auth.uid()=version_row.owner_id or
+  deck_row.status='active' and deck_row.moderation_status='visible' and version_row.visibility='public' or
+  deck_row.status='active' and deck_row.moderation_status='visible' and version_row.visibility='unlisted'
+   and version_row.share_token_hash=p_share_token_hash and p_share_token_hash ~ '^[a-f0-9]{64}$'
+ ) then
+  raise no_data_found using message='publication-not-found';
+ end if;
+ insert into public.deck_reports(id,user_id,deck_id,version_id,reason,message)
+ values(p_id,p_user_id,p_deck_id,p_version_id,p_reason,p_message)
+ on conflict on constraint deck_reports_pkey do nothing;
+ select * into saved from public.deck_reports r where r.id=p_id and r.user_id=p_user_id;
+ if saved.id is null or saved.deck_id<>p_deck_id or saved.version_id<>p_version_id or saved.reason<>p_reason or saved.message<>p_message then
+  raise unique_violation using message='report-operation-conflict';
+ end if;
+ return query select saved.id,saved.status;
+end $_$;
 
-create table public.learning_objectives (
-  id uuid primary key,
-  knowledge_area_id uuid not null references public.knowledge_areas (id) on delete cascade,
-  title text not null check (char_length(title) between 1 and 160),
-  description text,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now(),
-  unique (knowledge_area_id, id)
-);
-
-create table public.objective_prerequisites (
-  knowledge_area_id uuid not null,
-  objective_id uuid not null,
-  prerequisite_id uuid not null,
-  primary key (objective_id, prerequisite_id),
-  check (objective_id <> prerequisite_id),
-  foreign key (knowledge_area_id, objective_id)
-    references public.learning_objectives (knowledge_area_id, id) on delete cascade,
-  foreign key (knowledge_area_id, prerequisite_id)
-    references public.learning_objectives (knowledge_area_id, id) on delete cascade
-);
-
-create table public.cards (
-  id uuid primary key,
-  knowledge_area_id uuid not null references public.knowledge_areas (id) on delete cascade,
-  current_revision integer not null default 1 check (current_revision > 0),
-  deleted_at timestamptz,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now(),
-  unique (knowledge_area_id, id)
-);
-
-create table public.card_revisions (
-  id uuid primary key,
-  card_id uuid not null references public.cards (id) on delete cascade,
-  revision integer not null check (revision > 0),
-  base_revision_id uuid,
-  content jsonb not null,
-  provenance text not null check (char_length(provenance) between 1 and 120),
-  creator_type text not null check (creator_type in ('learner', 'import', 'ai')),
-  created_by uuid not null references auth.users (id),
-  created_at timestamptz not null default now(),
-  unique (card_id, revision),
-  unique (card_id, id),
-  foreign key (card_id, base_revision_id)
-    references public.card_revisions (card_id, id)
-);
-
-alter table public.cards
-  add constraint cards_current_revision_fk
-  foreign key (id, current_revision)
-  references public.card_revisions (card_id, revision)
-  deferrable initially deferred;
-
-create table public.card_objectives (
-  knowledge_area_id uuid not null,
-  card_id uuid not null,
-  objective_id uuid not null,
-  primary key (card_id, objective_id),
-  foreign key (knowledge_area_id, card_id)
-    references public.cards (knowledge_area_id, id) on delete cascade,
-  foreign key (knowledge_area_id, objective_id)
-    references public.learning_objectives (knowledge_area_id, id) on delete cascade
-);
-
-create table public.review_events (
-  id uuid primary key,
-  user_id uuid not null references auth.users (id) on delete cascade,
-  card_id uuid not null references public.cards (id) on delete restrict,
-  device_id uuid not null,
-  device_sequence bigint not null check (device_sequence > 0),
-  base_review_event_id uuid references public.review_events (id),
-  reviewed_at_device timestamptz not null,
-  effective_reviewed_at timestamptz not null,
-  received_at_server timestamptz not null default now(),
-  rating text not null check (rating in ('again', 'hard', 'good', 'easy')),
-  elapsed_ms integer check (elapsed_ms is null or elapsed_ms >= 0),
-  scheduler_family text not null check (scheduler_family = 'fsrs'),
-  scheduler_version text not null,
-  scheduler_parameter_set_id text,
-  previous_state_hash text,
-  created_at timestamptz not null default now(),
-  unique (user_id, device_id, device_sequence),
-  unique (user_id, card_id, id),
-  foreign key (user_id, card_id, base_review_event_id)
-    references public.review_events (user_id, card_id, id)
-);
-
-create table public.scheduling_state (
-  user_id uuid not null references auth.users (id) on delete cascade,
-  card_id uuid not null references public.cards (id) on delete cascade,
-  scheduler_family text not null check (scheduler_family = 'fsrs'),
-  scheduler_version text not null,
-  last_review_event_id uuid,
-  state jsonb not null,
-  updated_at timestamptz not null default now(),
-  primary key (user_id, card_id),
-  foreign key (user_id, card_id, last_review_event_id)
-    references public.review_events (user_id, card_id, id)
-    deferrable initially deferred
-);
-
-create table public.sync_changes (
-  sequence bigint generated always as identity primary key,
-  user_id uuid not null references auth.users (id) on delete cascade,
-  operation_id uuid not null,
-  entity_type text not null check (char_length(entity_type) between 1 and 40),
-  entity_id uuid not null,
-  operation text not null check (operation in ('upsert', 'tombstone')),
-  payload jsonb not null,
-  created_at timestamptz not null default now(),
-  unique (user_id, operation_id)
-);
-
-create function public.enqueue_review_sync_change()
-returns trigger
-language plpgsql
-security definer
-set search_path = pg_catalog, public
-as $$
+CREATE FUNCTION public.enqueue_review_sync_change() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path = 'pg_catalog', 'public'
+    AS $$
 begin
   insert into public.sync_changes (
     user_id, operation_id, entity_type, entity_id, operation, payload
@@ -168,144 +169,228 @@ begin
 end;
 $$;
 
-revoke all on function public.enqueue_review_sync_change() from public, anon, authenticated;
-create trigger review_events_enqueue_sync_change
-  after insert on public.review_events
-  for each row execute function public.enqueue_review_sync_change();
+CREATE FUNCTION public.erase_account_data(p_user_id uuid) RETURNS boolean
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path = 'pg_catalog', 'public', 'auth'
+    AS $$
+begin
+  if p_user_id is null or (select auth.role()) <> 'service_role' then
+    return false;
+  end if;
 
-create index knowledge_areas_owner_updated_idx
-  on public.knowledge_areas (owner_id, updated_at desc);
-create index cards_area_idx on public.cards (knowledge_area_id) where deleted_at is null;
-create index review_events_user_time_idx
-  on public.review_events (user_id, effective_reviewed_at desc);
-create index review_events_card_time_idx
-  on public.review_events (card_id, effective_reviewed_at);
-create index sync_changes_user_sequence_idx on public.sync_changes (user_id, sequence);
+  update public.review_events
+  set base_review_event_id = null
+  where user_id = p_user_id and base_review_event_id is not null;
+  delete from public.scheduling_state where user_id = p_user_id;
+  delete from public.review_events where user_id = p_user_id;
+  delete from public.tutor_sessions where user_id = p_user_id;
+  delete from public.tutor_ai_usage_events where user_id = p_user_id;
+  delete from public.sync_changes where user_id = p_user_id;
+  delete from public.knowledge_areas where owner_id = p_user_id;
+  delete from public.learning_activity_libraries where user_id = p_user_id;
+  delete from public.profiles where user_id = p_user_id;
+  return true;
+end;
+$$;
 
-alter table public.profiles enable row level security;
-alter table public.knowledge_areas enable row level security;
-alter table public.knowledge_area_versions enable row level security;
-alter table public.learning_objectives enable row level security;
-alter table public.objective_prerequisites enable row level security;
-alter table public.cards enable row level security;
-alter table public.card_revisions enable row level security;
-alter table public.card_objectives enable row level security;
-alter table public.review_events enable row level security;
-alter table public.scheduling_state enable row level security;
-alter table public.sync_changes enable row level security;
+CREATE FUNCTION public.is_active_deck_viewer(p_deck_id uuid, p_user_id uuid DEFAULT auth.uid()) RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path = 'pg_catalog', 'public'
+    AS $$
+  select p_user_id is not null and p_user_id=auth.uid() and exists (
+    select 1 from public.shared_decks d where d.deck_id=p_deck_id and d.status='active'
+      and public.is_deck_viewer(d.deck_id,p_user_id)
+  )
+$$;
 
-revoke all on public.profiles, public.knowledge_areas, public.knowledge_area_versions,
-  public.learning_objectives, public.objective_prerequisites, public.cards,
-  public.card_revisions, public.card_objectives, public.review_events,
-  public.scheduling_state, public.sync_changes from anon, authenticated;
+CREATE FUNCTION public.is_active_public_deck(p_deck_id uuid) RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path = 'pg_catalog', 'public'
+    AS $$
+ select exists(select 1 from public.shared_decks d where d.deck_id=p_deck_id and d.status='active' and d.moderation_status='visible' and d.visibility='public')
+$$;
 
-grant select, insert, update on public.profiles to authenticated;
-grant select, insert, update on public.knowledge_areas to authenticated;
-grant select, insert on public.knowledge_area_versions to authenticated;
-grant select, insert, update, delete on public.learning_objectives to authenticated;
-grant select, insert, delete on public.objective_prerequisites to authenticated;
-grant select, insert, update on public.cards to authenticated;
-grant select, insert on public.card_revisions to authenticated;
-grant select, insert, delete on public.card_objectives to authenticated;
-grant select, insert on public.review_events to authenticated;
-grant select, insert, update, delete on public.scheduling_state to authenticated;
-grant select on public.sync_changes to authenticated;
+CREATE FUNCTION public.is_deck_owner(p_deck_id uuid, p_user_id uuid DEFAULT auth.uid()) RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path = 'pg_catalog', 'public'
+    AS $$
+  select p_user_id is not null and p_user_id=auth.uid() and exists (
+    select 1 from public.shared_decks d where d.deck_id=p_deck_id and d.owner_id=p_user_id
+  )
+$$;
 
-create policy profiles_read_own on public.profiles
-  for select to authenticated using (user_id = (select auth.uid()));
-create policy profiles_create_own on public.profiles
-  for insert to authenticated with check (user_id = (select auth.uid()));
-create policy profiles_update_own on public.profiles
-  for update to authenticated using (user_id = (select auth.uid()))
-  with check (user_id = (select auth.uid()));
+CREATE FUNCTION public.is_deck_viewer(p_deck_id uuid, p_user_id uuid DEFAULT auth.uid()) RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path = 'pg_catalog', 'public'
+    AS $$ select false $$;
 
-create policy knowledge_areas_read_owner on public.knowledge_areas
-  for select to authenticated using (owner_id = (select auth.uid()));
-create policy knowledge_areas_create_owner on public.knowledge_areas
-  for insert to authenticated with check (owner_id = (select auth.uid()));
-create policy knowledge_areas_update_owner on public.knowledge_areas
-  for update to authenticated using (owner_id = (select auth.uid()))
-  with check (owner_id = (select auth.uid()));
-create policy area_versions_read_owner on public.knowledge_area_versions
-  for select to authenticated using (
-    exists (select 1 from public.knowledge_areas area
-      where area.id = knowledge_area_id and area.owner_id = (select auth.uid()))
-  );
-create policy area_versions_create_owner on public.knowledge_area_versions
-  for insert to authenticated with check (
-    created_by = (select auth.uid()) and exists (
-      select 1 from public.knowledge_areas area
-      where area.id = knowledge_area_id and area.owner_id = (select auth.uid())
-    )
-  );
+CREATE FUNCTION public.link_approved_proposal_revision() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path = 'pg_catalog', 'public'
+    AS $$
+begin
+  update public.generated_card_proposals
+  set approved_revision_id = new.id
+  where approved_card_id = new.card_id
+    and state = 'approved'
+    and approved_revision_id is null;
+  return new;
+end;
+$$;
 
-create policy objectives_owner_all on public.learning_objectives
-  for all to authenticated
-  using (exists (select 1 from public.knowledge_areas area
-    where area.id = knowledge_area_id and area.owner_id = (select auth.uid())))
-  with check (exists (select 1 from public.knowledge_areas area
-    where area.id = knowledge_area_id and area.owner_id = (select auth.uid())));
-create policy prerequisites_owner_all on public.objective_prerequisites
-  for all to authenticated
-  using (exists (select 1 from public.knowledge_areas area
-    where area.id = knowledge_area_id and area.owner_id = (select auth.uid())))
-  with check (exists (select 1 from public.knowledge_areas area
-    where area.id = knowledge_area_id and area.owner_id = (select auth.uid())));
+CREATE FUNCTION public.list_deck_subscription_updates(p_user_id uuid) RETURNS TABLE(deck_id uuid, area_id uuid, known_version_id uuid, latest_version_id uuid, latest_version integer, title text, release_notes text, created_at timestamp with time zone, seen boolean)
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path = 'pg_catalog', 'public'
+    AS $$
+ select d.deck_id,s.area_id,s.version_id,latest_public.id,latest_public.version,
+        coalesce(nullif(latest_public.content->>'title',''),nullif(latest_public.content->>'name',''),'Untitled deck'),
+        latest_public.release_notes,latest_public.created_at,coalesce(r.version_id=latest_public.id,false)
+ from public.deck_subscriptions s
+ join public.knowledge_areas a on a.id=s.area_id and a.owner_id=p_user_id
+ join public.shared_decks d on d.deck_id=s.deck_id and d.status='active' and d.moderation_status='visible'
+ join public.knowledge_areas source_area on source_area.id=d.deck_id and source_area.owner_id=d.owner_id
+ join public.published_knowledge_area_versions known on known.id=s.version_id and known.source_area_id=s.deck_id
+ join lateral (
+  select candidate.id,candidate.version,candidate.release_notes,candidate.created_at,candidate.content
+  from public.published_knowledge_area_versions candidate
+  where candidate.source_area_id=d.deck_id
+    and candidate.visibility='public'
+    and candidate.version>known.version
+  order by candidate.version desc
+  limit 1
+ ) latest_public on true
+ left join public.deck_update_reads r on r.user_id=p_user_id and r.area_id=s.area_id
+ where auth.uid()=p_user_id
+   and s.user_id=p_user_id
+   and s.following
+   and not exists (
+    select 1 from public.deck_publisher_blocks b
+    where b.user_id=p_user_id and b.publisher_id=d.owner_id
+   )
+ order by latest_public.created_at desc,s.area_id
+$$;
 
-create policy cards_owner_all on public.cards
-  for all to authenticated
-  using (exists (select 1 from public.knowledge_areas area
-    where area.id = knowledge_area_id and area.owner_id = (select auth.uid())))
-  with check (exists (select 1 from public.knowledge_areas area
-    where area.id = knowledge_area_id and area.owner_id = (select auth.uid())));
-create policy card_revisions_owner_read on public.card_revisions
-  for select to authenticated using (
-    exists (select 1 from public.cards card
-      join public.knowledge_areas area on area.id = card.knowledge_area_id
-      where card.id = card_revisions.card_id and area.owner_id = (select auth.uid()))
-  );
-create policy card_revisions_owner_create on public.card_revisions
-  for insert to authenticated with check (
-    created_by = (select auth.uid()) and exists (
-      select 1 from public.cards card
-      join public.knowledge_areas area on area.id = card.knowledge_area_id
-      where card.id = card_revisions.card_id and area.owner_id = (select auth.uid())
-    )
-  );
-create policy card_objectives_owner_all on public.card_objectives
-  for all to authenticated
-  using (exists (select 1 from public.knowledge_areas area
-    where area.id = knowledge_area_id and area.owner_id = (select auth.uid())))
-  with check (exists (select 1 from public.knowledge_areas area
-    where area.id = knowledge_area_id and area.owner_id = (select auth.uid())));
+CREATE FUNCTION public.list_deck_versions(p_deck_id uuid, p_requester_id uuid, p_share_token_hash text) RETURNS TABLE(id uuid, version integer, created_at timestamp with time zone, visibility text)
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path = 'pg_catalog', 'public'
+    AS $_$
+ select v.id,v.version,v.created_at,v.visibility from public.published_knowledge_area_versions v join public.shared_decks d on d.deck_id=v.source_area_id
+ where d.deck_id=p_deck_id and (
+  (auth.uid() is not null and auth.uid()=d.owner_id and p_requester_id=auth.uid()) or
+  (d.status='active' and d.moderation_status='visible' and v.visibility='public') or
+  (d.status='active' and d.moderation_status='visible' and v.visibility='unlisted' and p_share_token_hash is not null and v.share_token_hash=p_share_token_hash and p_share_token_hash ~ '^[a-f0-9]{64}$')
+ ) order by v.version desc
+$_$;
 
-create policy review_events_read_own on public.review_events
-  for select to authenticated using (user_id = (select auth.uid()));
-create policy review_events_create_own on public.review_events
-  for insert to authenticated with check (
-    user_id = (select auth.uid()) and exists (
-      select 1 from public.cards card
-      join public.knowledge_areas area on area.id = card.knowledge_area_id
-      where card.id = card_id and card.deleted_at is null and area.deleted_at is null
-        and area.owner_id = (select auth.uid())
-    )
-  );
+CREATE TABLE public.shared_decks (
+    deck_id uuid NOT NULL,
+    owner_id uuid NOT NULL,
+    title text DEFAULT 'Untitled deck'::text NOT NULL,
+    description text DEFAULT ''::text NOT NULL,
+    language text DEFAULT ''::text NOT NULL,
+    tags text[] DEFAULT '{}'::text[] NOT NULL,
+    author_name text DEFAULT ''::text NOT NULL,
+    visibility text NOT NULL,
+    status text DEFAULT 'active'::text NOT NULL,
+    latest_version_id uuid NOT NULL,
+    version integer NOT NULL,
+    card_count integer DEFAULT 0 NOT NULL,
+    license text,
+    attribution text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    moderation_status text DEFAULT 'visible'::text NOT NULL,
+    CONSTRAINT shared_decks_attribution_check CHECK (((attribution IS NULL) OR (char_length(attribution) <= 500))),
+    CONSTRAINT shared_decks_author_name_check CHECK ((char_length(author_name) <= 120)),
+    CONSTRAINT shared_decks_card_count_check CHECK ((card_count >= 0)),
+    CONSTRAINT shared_decks_description_check CHECK ((char_length(description) <= 4000)),
+    CONSTRAINT shared_decks_language_check CHECK ((char_length(language) <= 40)),
+    CONSTRAINT shared_decks_license_check CHECK (((license IS NULL) OR (char_length(license) <= 120))),
+    CONSTRAINT shared_decks_moderation_status_check CHECK ((moderation_status = ANY (ARRAY['visible'::text, 'hidden'::text]))),
+    CONSTRAINT shared_decks_status_check CHECK ((status = ANY (ARRAY['active'::text, 'withdrawn'::text]))),
+    CONSTRAINT shared_decks_tags_check CHECK ((cardinality(tags) <= 30)),
+    CONSTRAINT shared_decks_title_check CHECK (((char_length(title) >= 1) AND (char_length(title) <= 300))),
+    CONSTRAINT shared_decks_version_check CHECK ((version > 0)),
+    CONSTRAINT shared_decks_visibility_check CHECK ((visibility = ANY (ARRAY['private'::text, 'unlisted'::text, 'public'::text])))
+);
 
-create policy scheduling_state_own_all on public.scheduling_state
-  for all to authenticated
-  using (user_id = (select auth.uid()) and exists (
-    select 1 from public.cards card
-    join public.knowledge_areas area on area.id = card.knowledge_area_id
-    where card.id = card_id and area.owner_id = (select auth.uid())
-  ))
-  with check (user_id = (select auth.uid()) and exists (
-    select 1 from public.cards card
-    join public.knowledge_areas area on area.id = card.knowledge_area_id
-    where card.id = card_id and area.owner_id = (select auth.uid())
-  ));
-create policy sync_changes_read_own on public.sync_changes
-  for select to authenticated using (user_id = (select auth.uid()));
+CREATE FUNCTION public.list_owned_shared_decks(p_owner_id uuid, p_limit integer DEFAULT 20, p_cursor uuid DEFAULT NULL::uuid) RETURNS SETOF public.shared_decks
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path = 'pg_catalog', 'public'
+    AS $$
+ select d.* from public.shared_decks d where d.owner_id=p_owner_id and auth.uid()=p_owner_id
+ and (p_cursor is null or d.deck_id>p_cursor) order by d.deck_id asc limit greatest(1,least(coalesce(p_limit,20),51))
+$$;
 
-comment on table public.review_events is 'Append-only personal review history; never included in published Knowledge Area content.';
-comment on table public.scheduling_state is 'Rebuildable per-user cache derived from review_events.';
-comment on table public.knowledge_area_versions is 'Immutable portable snapshots; publication and public-read policies are added with sharing.';
+CREATE FUNCTION public.list_public_shared_decks(p_q text DEFAULT NULL::text, p_language text DEFAULT NULL::text, p_tag text DEFAULT NULL::text, p_difficulty text DEFAULT NULL::text, p_activity_type text DEFAULT NULL::text, p_min_minutes integer DEFAULT NULL::integer, p_max_minutes integer DEFAULT NULL::integer, p_limit integer DEFAULT 20, p_cursor uuid DEFAULT NULL::uuid) RETURNS TABLE(deck_id uuid, title text, description text, language text, tags text[], author_name text, visibility text, status text, latest_version_id uuid, version integer, card_count integer, updated_at timestamp with time zone, license text, attribution text, difficulty text, card_types text[], activity_types text[], estimated_minutes integer, preview jsonb)
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path = 'pg_catalog', 'public'
+    AS $$
+ select d.deck_id,d.title,d.description,d.language,d.tags,d.author_name,d.visibility,d.status,d.latest_version_id,d.version,d.card_count,d.updated_at,d.license,d.attribution,
+  case when v.content->>'difficulty' in ('beginner','intermediate','advanced') then v.content->>'difficulty' else null end,
+  coalesce((select array_agg(distinct c.value->>'kind' order by c.value->>'kind') from jsonb_array_elements(case when jsonb_typeof(v.content->'cards')='array' then v.content->'cards' else '[]'::jsonb end) c(value) where c.value->>'kind' in ('basic','cloze')), '{}'::text[]),
+  coalesce((select array_agg(distinct a.value->>'pluginId' order by a.value->>'pluginId') from jsonb_array_elements(case when jsonb_typeof(v.content->'activities')='array' then v.content->'activities' else '[]'::jsonb end) a(value) where a.value->>'archived' is distinct from 'true' and length(a.value->>'pluginId') between 1 and 200), '{}'::text[]),
+  least(1000, greatest(1, ceil(coalesce(jsonb_array_length(v.content->'cards'),0) * 0.5 + (select count(*) from jsonb_array_elements(case when jsonb_typeof(v.content->'activities')='array' then v.content->'activities' else '[]'::jsonb end) a(value) where a.value->>'archived' is distinct from 'true') * 3)::integer)),
+  coalesce((select jsonb_agg(p.sample order by p.sort_order,p.ordinality) from (
+    (select jsonb_build_object('kind', c.value->>'kind', 'prompt', left(case when c.value->>'kind'='basic' then coalesce(c.value->>'front','') else 'Cloze deletion' end, 240), 'answer', case when c.value->>'kind'='basic' then left(coalesce(c.value->>'back',''), 240) else null end) as sample, 1 as sort_order, c.ordinality
+     from jsonb_array_elements(case when jsonb_typeof(v.content->'cards')='array' then v.content->'cards' else '[]'::jsonb end) with ordinality c(value, ordinality))
+    union all
+    (select jsonb_build_object('kind', 'activity', 'prompt', left(coalesce(nullif(a.value->>'title',''),a.value->>'fallback',''),240), 'answer', null) as sample, 2 as sort_order, a.ordinality
+     from jsonb_array_elements(case when jsonb_typeof(v.content->'activities')='array' then v.content->'activities' else '[]'::jsonb end) with ordinality a(value, ordinality) where a.value->>'archived' is distinct from 'true')
+    order by sort_order,ordinality limit 3
+  ) p), '[]'::jsonb)
+ from public.shared_decks d join public.published_knowledge_area_versions v on v.id=d.latest_version_id and v.source_area_id=d.deck_id
+ where d.visibility='public' and d.status='active' and d.moderation_status='visible'
+ and (auth.uid() is null or not exists(select 1 from public.deck_publisher_blocks b where b.user_id=auth.uid() and b.publisher_id=d.owner_id))
+ and (p_q is null or d.title ilike '%'||p_q||'%' or d.description ilike '%'||p_q||'%')
+ and (p_language is null or lower(d.language)=lower(p_language)) and (p_tag is null or exists(select 1 from unnest(d.tags) t(value) where lower(t.value)=lower(p_tag)))
+ and (p_difficulty is null or lower(v.content->>'difficulty')=lower(p_difficulty))
+ and (p_activity_type is null or exists(select 1 from jsonb_array_elements(case when jsonb_typeof(v.content->'cards')='array' then v.content->'cards' else '[]'::jsonb end) c(value) where lower(c.value->>'kind')=lower(p_activity_type)) or exists(select 1 from jsonb_array_elements(case when jsonb_typeof(v.content->'activities')='array' then v.content->'activities' else '[]'::jsonb end) a(value) where a.value->>'archived' is distinct from 'true' and lower(a.value->>'pluginId')=lower(p_activity_type)))
+ and (p_min_minutes is null or least(1000, greatest(1, ceil(coalesce(jsonb_array_length(v.content->'cards'),0) * 0.5 + (select count(*) from jsonb_array_elements(case when jsonb_typeof(v.content->'activities')='array' then v.content->'activities' else '[]'::jsonb end) a(value) where a.value->>'archived' is distinct from 'true') * 3)::integer))>=p_min_minutes)
+ and (p_max_minutes is null or least(1000, greatest(1, ceil(coalesce(jsonb_array_length(v.content->'cards'),0) * 0.5 + (select count(*) from jsonb_array_elements(case when jsonb_typeof(v.content->'activities')='array' then v.content->'activities' else '[]'::jsonb end) a(value) where a.value->>'archived' is distinct from 'true') * 3)::integer))<=p_max_minutes)
+ and (p_cursor is null or d.deck_id>p_cursor) order by d.deck_id limit greatest(1,least(p_limit,51))
+$$;
+
+CREATE FUNCTION public.manage_unlisted_knowledge_area_share_token(p_version_id uuid, p_action text, p_share_token_hash text DEFAULT NULL::text) RETURNS boolean
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path = 'pg_catalog', 'public'
+    AS $_$
+begin
+  if auth.uid() is null or p_action is null or p_action not in ('rotate', 'revoke') then
+    return false;
+  end if;
+
+  if p_action = 'rotate' then
+    if p_share_token_hash is null or p_share_token_hash !~ '^[a-f0-9]{64}$' then
+      return false;
+    end if;
+
+    update public.published_knowledge_area_versions
+       set share_token_hash = p_share_token_hash
+     where id = p_version_id
+       and owner_id = auth.uid()
+       and visibility = 'unlisted';
+  else
+    if p_share_token_hash is not null then
+      return false;
+    end if;
+
+    update public.published_knowledge_area_versions
+       set share_token_hash = null
+     where id = p_version_id
+       and owner_id = auth.uid()
+       and visibility = 'unlisted';
+  end if;
+
+  return found;
+end;
+$_$;
+
+CREATE FUNCTION public.moderator_list_deck_reports(p_actor_id uuid) RETURNS TABLE(id uuid, deck_id uuid, version_id uuid, title text, reason text, message text, status text, created_at timestamp with time zone)
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path = 'pg_catalog', 'public'
+    AS $$
+begin
+ if coalesce(auth.role(),'')<>'service_role' or p_actor_id is null then raise insufficient_privilege using message='moderator-service-required'; end if;
+ return query select r.id,r.deck_id,r.version_id,d.title,r.reason,r.message,r.status,r.created_at from public.deck_reports r join public.shared_decks d on d.deck_id=r.deck_id order by (r.status='open') desc,r.created_at;
+end $$;

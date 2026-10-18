@@ -11,7 +11,9 @@ import { createObjectiveId } from "@recall/domain";
 import { mockWorkspace } from "@/features/workspace/mock-data";
 import { WorkspaceSearchPanel } from "./WorkspaceSearchPanel";
 
-const area = Effect.runSync(toKnowledgeArea(mockWorkspace.areas[0]!, true, true));
+const area = Effect.runSync(
+  toKnowledgeArea(Effect.runSync(Effect.fromNullable(mockWorkspace.areas[0])), true, true),
+);
 const seed = Effect.runSync(seedKnowledgeNotebook(area, "Understand cell membrane transport."));
 const conceptId = createObjectiveId("membrane-transport");
 const materialId = "00000000-0000-4000-8000-000000000010";

@@ -2,11 +2,10 @@ import prettier from "eslint-config-prettier";
 import typedStrict from "../../eslint.typed.mjs";
 import { defineConfig, globalIgnores } from "eslint/config";
 import nextVitals from "eslint-config-next/core-web-vitals";
-import nextTs from "eslint-config-next/typescript";
 
 export default defineConfig([
-  ...nextVitals,
-  ...nextTs,
+  // The shared strict config owns the TypeScript parser and plugin.
+  ...nextVitals.filter((config) => config.name !== "next/typescript"),
   globalIgnores(["dist/**", ".expo/**", "out/**", "build/**", "android/**", "ios/**"]),
   { rules: { "@next/next/no-html-link-for-pages": "off" } },
   ...typedStrict,

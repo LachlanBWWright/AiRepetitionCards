@@ -2,15 +2,13 @@
 import storybook from "eslint-plugin-storybook";
 import prettier from "eslint-config-prettier";
 import typedStrict from "../../eslint.typed.mjs";
-import tseslint from "typescript-eslint";
 
 import { defineConfig, globalIgnores } from "eslint/config";
 import nextVitals from "eslint-config-next/core-web-vitals";
-import nextTs from "eslint-config-next/typescript";
 
 const eslintConfig = defineConfig([
-  ...nextVitals,
-  ...nextTs,
+  // The shared strict config owns the TypeScript parser and plugin.
+  ...nextVitals.filter((config) => config.name !== "next/typescript"),
   // Override default ignores of eslint-config-next.
   globalIgnores([
     // Default ignores of eslint-config-next:
@@ -25,16 +23,6 @@ const eslintConfig = defineConfig([
   ]),
   ...storybook.configs["flat/recommended"],
   ...typedStrict,
-  ...tseslint.configs.strictTypeChecked.map((config) => ({
-    ...config,
-    files: ["pwa/**/*.{ts,tsx}"],
-  })),
-  {
-    files: ["pwa/**/*.{ts,tsx}"],
-    languageOptions: {
-      parserOptions: { projectService: true, tsconfigRootDir: import.meta.dirname },
-    },
-  },
   {
     files: ["pwa/image.tsx", "src/components/ui/InlineImage.tsx"],
     // Cached and user-provided images are local data and have no image optimization server.

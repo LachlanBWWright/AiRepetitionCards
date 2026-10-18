@@ -1,0 +1,43 @@
+name: Backend contracts
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backend-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  contracts:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.26.2
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+      - run: pnpm install --frozen-lockfile
+      - name: Check generated schemas and TypeScript fixtures
+        run: |
+          pnpm contracts:check
+          pnpm --filter @recall/verification test dotnet-contract-parity.test.ts
+      - run: dotnet build backend/Recall.sln --configuration Release
+      - name: Verify generated schemas and C# boundary fixtures
+        run: dotnet run --project backend/Recall.ContractChecks --configuration Release --no-build -- .
+      - name: Start Development API and verify HTTP contract
+        run: python3 backend/scripts/verify-api.py

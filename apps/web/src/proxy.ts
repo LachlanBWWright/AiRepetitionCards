@@ -85,9 +85,18 @@ export async function proxy(request: NextRequest) {
           : { body: request.body, duplex: "half" as const }),
         cache: "no-store",
         redirect: "manual",
+        signal: request.signal,
       });
-    } catch (error) {
-      if (request.signal.aborted) throw error;
+    } catch {
+      if (request.signal.aborted)
+        return new Response(null, {
+          status: 499,
+          headers: {
+            "Cache-Control": "private, no-store, max-age=0",
+            Vary: "Authorization, Cookie",
+            "Content-Security-Policy": policy.header,
+          },
+        });
       return Response.json(
         { error: "api-unavailable" },
         {

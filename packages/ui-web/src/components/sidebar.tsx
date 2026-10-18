@@ -47,7 +47,9 @@ function SidebarProvider({
       }
     };
     window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+    };
   }, []);
   return (
     <SidebarContext.Provider value={value}>
@@ -348,7 +350,9 @@ function SidebarRail({ className, ...props }: React.ComponentProps<"button">) {
       aria-label="Toggle sidebar"
       title="Toggle sidebar"
       type="button"
-      onClick={() => setOpen((value) => !value)}
+      onClick={() => {
+        setOpen((value) => !value);
+      }}
       className={cn(
         "group/rail absolute inset-y-0 z-20 hidden w-4 -translate-x-1/2 cursor-ew-resize transition-all after:absolute after:inset-y-0 after:left-1/2 after:w-[2px] hover:after:bg-sidebar-border md:flex",
         "group-data-[side=left]/sidebar-wrapper:cursor-w-resize group-data-[side=right]/sidebar-wrapper:cursor-e-resize",

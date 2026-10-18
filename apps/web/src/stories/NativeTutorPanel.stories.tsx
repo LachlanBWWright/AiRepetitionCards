@@ -10,7 +10,8 @@ import {
 import type { TutorSessionState } from "@recall/ai-core";
 import { createAssessmentId, createObjectiveId } from "@recall/domain";
 import { mockWorkspace } from "../features/workspace/mock-data";
-import { NativeTutorPanel } from "../../../mobile/src/components/NativeTutorPanel";
+import { NativeTutorPanel } from "../../../mobile/src/components/tutor/practice/NativeTutorPanel";
+import { targetedQuizQuestions } from "./NativeTutorPanel.quiz-fixtures";
 
 const storyUuid = (value: number) => `00000000-0000-4000-8000-${String(value).padStart(12, "0")}`;
 const learningArea = mockWorkspace.areas.find((area) => area.id === "area-biology");
@@ -74,7 +75,7 @@ function storyTransport(request: TutorHttpRequest, state: TutorSessionState = se
       ? Effect.succeed({ status: 200, body: decoded.right })
       : Effect.fail({ _tag: "TutorTransportError" } as const);
   }
-  if (request.method === "PATCH") {
+  {
     const decoded = Schema.decodeUnknownEither(ResolveTutorProposalRequestSchema)(request.body);
     return Either.isRight(decoded)
       ? Effect.succeed({
@@ -87,7 +88,6 @@ function storyTransport(request: TutorHttpRequest, state: TutorSessionState = se
         })
       : Effect.succeed({ status: 400, body: { error: "invalid-request" } });
   }
-  return Effect.fail({ _tag: "TutorTransportError" } as const);
 }
 
 const api = createTutorApi(storyTransport);
@@ -117,10 +117,11 @@ export const ProposalApproval: Story = {
     createId: () => storyUuid(703),
     initialSessionId: sessionId,
     onSessionIdChange: () => undefined,
-    onApproveProposal: async (content) => ({
-      cardId: "bda35d66-909f-4e86-99c4-c46f2b074325",
-      content,
-    }),
+    onApproveProposal: (content) =>
+      Promise.resolve({
+        cardId: "bda35d66-909f-4e86-99c4-c46f2b074325",
+        content,
+      }),
   },
   globals: { viewport: { value: "recallMobile", isRotated: false } },
   render: (args) => (
@@ -252,16 +253,7 @@ export const WeakSecondObjective: Story = {
             result: {
               objectiveId: target,
               objectiveTitle: target === secondObjectiveId ? "Gene expression" : "Cell structures",
-              questions: [
-                {
-                  prompt: "What does translation produce?",
-                  expectedAnswer: "A protein made using the RNA sequence.",
-                },
-                {
-                  prompt: "How does transcription support translation?",
-                  expectedAnswer: "It produces the RNA sequence that translation reads.",
-                },
-              ],
+              questions: targetedQuizQuestions,
             },
           },
         },
@@ -312,7 +304,7 @@ export const ProposalSaveFailure: Story = {
   name: "Tutor · edited proposal save failure (native)",
   args: {
     ...EditedProposal.args,
-    onApproveProposal: async () => null,
+    onApproveProposal: () => Promise.resolve(null),
     initialNotice:
       "The card could not be saved locally, so approval was not sent. Your edits remain available to retry.",
   },

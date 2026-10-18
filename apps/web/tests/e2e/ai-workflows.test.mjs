@@ -7,7 +7,6 @@ test("refinement requires duplicate consent before applying", async (t) => {
     const apply = page.getByRole("button", { name: "Apply proposed changes", exact: true });
     await expectVisible(apply);
     assert.equal(await apply.isDisabled(), true);
-    await page.getByText("Compare answer", { exact: true }).click();
     await expectVisible(
       page.getByText("It passes values between goroutines.", { exact: true }).last(),
     );
@@ -61,7 +60,6 @@ test("offline card improvements keep local checks but disable AI requests", asyn
     const quality = page.getByRole("button", { name: "Check quality", exact: true });
     await expectVisible(quality);
     assert.equal(await quality.isDisabled(), true);
-    await page.getByText("Custom instructions", { exact: true }).click();
     assert.equal(
       await page.getByRole("textbox", { name: "Instructions", exact: true }).isDisabled(),
       true,
@@ -112,15 +110,15 @@ test("failed budget save keeps all edited request caps", async (t) => {
 test("material draft survives switching activities before import", async (t) => {
   await withBrowser(t, async ({ page }) => {
     await page.goto(storyUrl("screens-study-materials--ready"));
-    await page.getByRole("button", { name: "Study materials", exact: true }).click();
+    await page.getByRole("tab", { name: "Materials", exact: true }).click();
     const text = page.getByRole("textbox", { name: "Paste study text", exact: true });
     await expectVisible(text);
     await page
       .getByRole("textbox", { name: "Material name", exact: true })
       .fill("Unfinished Go notes");
     await text.fill("A slice describes a segment of an underlying array.");
-    await page.getByRole("button", { name: "Practice", exact: true }).click();
-    await page.getByRole("button", { name: "Study materials", exact: true }).click();
+    await page.getByRole("tab", { name: "Practice", exact: true }).click();
+    await page.getByRole("tab", { name: "Materials", exact: true }).click();
     assert.equal(await text.inputValue(), "A slice describes a segment of an underlying array.");
     assert.equal(
       await page.getByRole("textbox", { name: "Material name", exact: true }).inputValue(),
@@ -135,17 +133,14 @@ test("answer drafts survive activity switches", async (t) => {
     const answer = page.getByRole("textbox", { name: "Your answer", exact: true });
     await expectVisible(answer);
     await answer.fill("The two slice descriptors share their backing array.");
-    await page
-      .getByRole("combobox", { name: "How confident are you?", exact: true })
-      .selectOption("confident");
-    await page.getByRole("button", { name: "Study materials", exact: true }).click();
-    await page.getByRole("button", { name: "Practice", exact: true }).click();
+    await page.getByRole("combobox", { name: "How confident are you?", exact: true }).click();
+    await page.getByRole("option", { name: "Confident", exact: true }).click();
+    await page.getByRole("tab", { name: "Materials", exact: true }).click();
+    await page.getByRole("tab", { name: "Practice", exact: true }).click();
     assert.equal(await answer.inputValue(), "The two slice descriptors share their backing array.");
     assert.equal(
-      await page
-        .getByRole("combobox", { name: "How confident are you?", exact: true })
-        .inputValue(),
-      "confident",
+      await page.getByRole("combobox", { name: "How confident are you?", exact: true }).innerText(),
+      "Confident",
     );
   });
 });
@@ -153,16 +148,15 @@ test("answer drafts survive activity switches", async (t) => {
 test("source proposals expose exact quote and preserve edited questions across activities", async (t) => {
   await withBrowser(t, async ({ page }) => {
     await page.goto(storyUrl("screens-study-materials--proposals"));
-    await page.getByRole("button", { name: "Review suggestions", exact: true }).click();
+    await page.getByRole("tab", { name: /Suggestions/ }).click();
     const question = page.getByRole("textbox", { name: "Question", exact: true });
     await expectVisible(question);
     await question.fill("Does copying a slice create separate element storage?");
-    await page.getByText("Source: Go workshop — slices.pdf · page 7", { exact: true }).click();
     await expectVisible(
       page.getByText("Copying a slice does not copy its backing array.", { exact: true }),
     );
-    await page.getByRole("button", { name: "Practice", exact: true }).click();
-    await page.getByRole("button", { name: "Review suggestions", exact: true }).click();
+    await page.getByRole("tab", { name: "Practice", exact: true }).click();
+    await page.getByRole("tab", { name: /Suggestions/ }).click();
     assert.equal(
       await question.inputValue(),
       "Does copying a slice create separate element storage?",
@@ -197,28 +191,27 @@ test("local card quality feedback is available before any AI action", async (t) 
 test("coverage topics retain selection and priority across activities", async (t) => {
   await withBrowser(t, async ({ page }) => {
     await page.goto(storyUrl("screens-study-materials--coverage-plan"));
-    await page.getByRole("button", { name: "Study materials", exact: true }).click();
+    await page.getByRole("tab", { name: "Materials", exact: true }).click();
     const claim = page.locator(
       "article[data-search-target='claim:00000000-0000-4000-8000-000000000032']",
     );
     await expectVisible(claim);
-    await claim
-      .getByRole("combobox", { name: "Include topic", exact: true })
-      .selectOption("selected");
-    await claim.getByRole("combobox", { name: "Priority", exact: true }).selectOption("high");
-    await claim.getByText("Source passages", { exact: true }).click();
+    await claim.getByRole("combobox", { name: "Include topic", exact: true }).click();
+    await page.getByRole("option", { name: "Include", exact: true }).click();
+    await claim.getByRole("combobox", { name: "Priority", exact: true }).click();
+    await page.getByRole("option", { name: "High", exact: true }).click();
     await expectVisible(
       claim.getByText("An append may reuse capacity or allocate a new array.", { exact: true }),
     );
-    await page.getByRole("button", { name: "Practice", exact: true }).click();
-    await page.getByRole("button", { name: "Study materials", exact: true }).click();
+    await page.getByRole("tab", { name: "Practice", exact: true }).click();
+    await page.getByRole("tab", { name: "Materials", exact: true }).click();
     assert.equal(
-      await claim.getByRole("combobox", { name: "Include topic", exact: true }).inputValue(),
-      "selected",
+      await claim.getByRole("combobox", { name: "Include topic", exact: true }).innerText(),
+      "Include",
     );
     assert.equal(
-      await claim.getByRole("combobox", { name: "Priority", exact: true }).inputValue(),
-      "high",
+      await claim.getByRole("combobox", { name: "Priority", exact: true }).innerText(),
+      "High",
     );
   });
 });

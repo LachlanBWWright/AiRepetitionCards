@@ -8,41 +8,17 @@ import { Effect, Either, Fiber, Schema } from "effect";
 import type { SyncPushResponse } from "@recall/contracts";
 import { AccountIdSchema, type AreaId, type AssessmentId } from "@recall/domain";
 import {
-  syncWorkspace,
   workspaceAccountFailureMessage,
-  type WorkspaceSyncTransport,
   type WorkspaceSyncCheckpointFailure,
+  type WorkspaceSyncTransport,
 } from "@recall/application";
 import { browserMediaStore } from "@/features/workspace/browser-media-store";
 import { createOwnerBoundWorkspaceMediaGateway } from "@/features/workspace/workspace-media-api";
 import type { LearningArea, ReviewEvent, Workspace } from "@/features/workspace/types";
+import { readWorkspaceSyncOwner, runWorkspaceSyncAction } from "./workspace-sync-action-workflow";
 import { readBrowserSession } from "@/lib/auth/browser-session";
 import { readSupabaseConfig } from "@/lib/supabase/config";
 import { apiFetch } from "@/lib/desktop-api";
-
-function readSyncOwner(): Effect.Effect<string | null, { readonly _tag: "SyncAuthLookupError" }> {
-  const desktop = window.recallDesktop;
-  if (!desktop)
-    return readBrowserSession().pipe(
-      Effect.map((session) => session.ownerId),
-      Effect.mapError(() => ({ _tag: "SyncAuthLookupError" }) as const),
-    );
-  return Effect.tryPromise({
-    try: () => desktop.auth.getStatus(),
-    catch: () => ({ _tag: "SyncAuthLookupError" }) as const,
-  }).pipe(
-    Effect.flatMap((input) =>
-      Schema.decodeUnknown(
-        Schema.Struct({
-          _tag: Schema.Literal("Success"),
-          value: Schema.Struct({ ownerId: Schema.NullOr(AccountIdSchema) }),
-        }),
-      )(input),
-    ),
-    Effect.map((status) => status.value.ownerId),
-    Effect.mapError(() => ({ _tag: "SyncAuthLookupError" }) as const),
-  );
-}
 
 export function WorkspaceSyncAction({
   workspace,
@@ -173,6 +149,7 @@ export function WorkspaceSyncAction({
       };
     }
     let mounted = true;
+    const isMounted = () => mounted;
     let lookupGeneration = 0;
     const refresh = () => {
       const generation = ++lookupGeneration;
@@ -180,7 +157,7 @@ export function WorkspaceSyncAction({
         readBrowserSession().pipe(
           Effect.tap((session) =>
             Effect.sync(() => {
-              if (mounted && generation === lookupGeneration) publishOwner(session.ownerId);
+              if (isMounted() && generation === lookupGeneration) publishOwner(session.ownerId);
             }),
           ),
           Effect.ignore,
@@ -199,20 +176,6 @@ export function WorkspaceSyncAction({
   }, [demo, publishOwner]);
 
   function sync(adoptLegacyOwner = false) {
-    if (demoMissingReviewContent) {
-      setMessage(missingReviewContentMessage);
-      return;
-    }
-    if (demoAccountState) {
-      setMessage("Mock account ownership controls are ready for review.");
-      return;
-    }
-    if (busy) return;
-    const expectedOwner = ownerRef.current;
-    if (!expectedOwner) return;
-    const startedEpoch = accountEpoch.current;
-    setBusy(true);
-    setMessage(null);
     const transport: WorkspaceSyncTransport = (request) =>
       Effect.tryPromise({
         try: async () => {
@@ -222,205 +185,120 @@ export function WorkspaceSyncAction({
               ...request.headers,
               ...(request.body === undefined ? {} : { "content-type": "application/json" }),
             },
-            ...(request.body === undefined
-              ? {}
-              : {
-                  body: JSON.stringify(request.body),
-                }),
+            ...(request.body === undefined ? {} : { body: JSON.stringify(request.body) }),
           });
           return { status: response.status, body: (await response.json()) as unknown };
         },
         catch: () => ({ _tag: "WorkspaceSyncTransportFailure" }) as const,
       });
-    const authenticatedRequest = readSyncOwner().pipe(
-      Effect.tap((verifiedOwner) => Effect.sync(() => publishOwner(verifiedOwner))),
-    );
-    const now = new Date();
-    const program = authenticatedRequest.pipe(
-      Effect.flatMap((verifiedOwner) =>
-        verifiedOwner === expectedOwner && startedEpoch === accountEpoch.current
-          ? syncWorkspace({
-              workspace,
-              now,
-              createId: () => crypto.randomUUID(),
-              transport,
-              mediaStore: browserMediaStore,
-              mediaGatewayForOwner: createOwnerBoundWorkspaceMediaGateway,
-              checkpoint,
-              adoptLegacyOwner,
-              expectedOwnerId: expectedOwner,
-            })
-          : Effect.fail({ _tag: "WorkspaceSyncFailure", reason: "account-changed" } as const),
-      ),
-      Effect.flatMap((result) =>
-        readSyncOwner().pipe(
-          Effect.tap((verifiedOwner) => Effect.sync(() => publishOwner(verifiedOwner))),
-          Effect.flatMap((verifiedOwner) =>
-            verifiedOwner === expectedOwner && startedEpoch === accountEpoch.current
-              ? Effect.succeed(result)
-              : Effect.fail({ _tag: "WorkspaceSyncFailure", reason: "account-changed" } as const),
-          ),
-        ),
-      ),
-      Effect.match({
-        onFailure: (error) => {
-          if (
-            error._tag === "WorkspaceSyncFailure" &&
-            error.reason === "deleted-review-content-missing"
-          )
-            onMissingReviewContent?.();
-          if (
-            error._tag === "WorkspaceSyncFailure" &&
-            error.reason === "deleted-review-provision-capacity"
-          )
-            onReviewProvisionCapacity?.();
-          if (
-            error._tag === "WorkspaceSyncFailure" &&
-            (error.reason === "account-mismatch" ||
-              error.reason === "owner-adoption-required" ||
-              error.reason === "ownership-checkpoint")
-          )
-            setAccountFailure(error.reason);
-          if (
-            error._tag === "WorkspaceSyncFailure" &&
-            (error.reason === "account-mismatch" ||
-              error.reason === "owner-adoption-required" ||
-              error.reason === "ownership-checkpoint" ||
-              error.reason === "account-changed")
-          ) {
-            setMessage(workspaceAccountFailureMessage(error));
-            return;
-          }
-          setMessage(
-            error._tag === "WorkspaceSyncFailure" &&
-              error.reason === "deleted-review-content-missing"
-              ? missingReviewContentMessage
-              : error._tag === "WorkspaceSyncFailure" &&
-                  error.reason === "deleted-review-provision-capacity"
-                ? provisionCapacityMessage
-                : error._tag === "WorkspaceSyncFailure" &&
-                    (error.reason === "content" || error.reason === "media")
-                  ? "Decks could not sync. Changes remain only in this tab until the server confirms them."
-                  : "Sync failed. Changes exist only in this tab until the server confirms them; retry before leaving.",
-          );
-        },
-        onSuccess: (result) => {
-          setAccountFailure(undefined);
-          if (result._tag === "ContentConflict") {
-            setConflictData({
-              ownerId: result.ownerId,
-              epoch: startedEpoch,
-              areas: result.areas,
-              hashes: result.hashes,
-              deletedAreaIds: result.deletedAreaIds,
-            });
-            setMessage(
-              "A deck changed on another device. Review the server version before continuing.",
-            );
-            return;
-          }
-          const applied = onSynced(
-            result.acceptedIds,
-            result.cursor,
-            result.pulledEvents,
-            result.pulledAreas,
-            result.deletedCardIds,
-            result.syncedAreaTombstoneIds,
-            result.pulledDeletedAreaIds,
-            result.contentHashes,
-            result.conflicts,
-            result.hasMore,
-            result.uploadDeferred,
-            result.baseline,
-          );
-          if (!applied) {
-            setMessage("Review history could not be replayed. Changes remain only in this tab.");
-            return;
-          }
-          lastSyncedWorkspace.current = JSON.stringify(applied);
-          setConflictData(null);
-          if ((applied.syncContentConflictAreaIds ?? []).length > 0) {
-            setMessage(
-              "Your newer local edits were preserved. Sync again to review conflicting server content.",
-            );
-            return;
-          }
-          if (
-            (applied.syncPendingContentAreaIds ?? []).length > 0 &&
-            !result.hasMore &&
-            !result.uploadDeferred
-          ) {
-            lastSyncedWorkspace.current = null;
-            setMessage("Your newer local edits were preserved. Sync again to upload them.");
-            return;
-          }
-          if (result.hasMore) {
-            lastSyncedWorkspace.current = null;
-            setMessage("Sync progress saved. More remote changes remain; sync again to continue.");
-            return;
-          }
-          if (result.uploadDeferred) {
-            lastSyncedWorkspace.current = null;
-            setMessage(
-              retainedCards > 0
-                ? "Reviews and deletion acknowledgements are still syncing. Deleted content stays hidden; sync again to finish."
-                : "Sync progress received. Sync again to finish content and local uploads.",
-            );
-            return;
-          }
-          if (result.remainingPendingReviews > 0 && result.conflicts.length === 0) {
-            lastSyncedWorkspace.current = null;
-            setMessage(
-              `Sync progress saved. ${result.remainingPendingReviews} pending review${result.remainingPendingReviews === 1 ? " remains" : "s remain"}; sync again to continue.`,
-            );
-            return;
-          }
-          const { acceptedIds, conflicts } = result;
-          setMessage(
-            conflicts.length > 0
-              ? `${conflicts.length} review conflict${conflicts.length === 1 ? " was" : "s were"} rebased. Sync again to finish.`
-              : acceptedIds.length === 0
-                ? result.pulledEvents.length === 0
-                  ? "Everything is up to date."
-                  : `${result.pulledEvents.length} review${result.pulledEvents.length === 1 ? "" : "s"} received.`
-                : `${acceptedIds.length} review${acceptedIds.length === 1 ? "" : "s"} synced${result.pulledEvents.length ? ` · ${result.pulledEvents.length} received` : ""}.`,
-          );
-        },
-      }),
-      Effect.ensuring(
-        Effect.sync(() => {
-          setBusy(false);
-          if (autoSync) window.setTimeout(() => setRetrySignal((value) => value + 1), 3_000);
-        }),
-      ),
-    );
-    Effect.runFork(program);
+    runWorkspaceSyncAction({
+      adoptLegacyOwner,
+      demoMissingReviewContent,
+      demoAccountState,
+      busy,
+      expectedOwner: ownerRef.current,
+      startedEpoch: accountEpoch.current,
+      currentEpoch: () => accountEpoch.current,
+      publishOwner,
+      setBusy,
+      setMessage,
+      setAccountFailure,
+      setConflictData,
+      lastSyncedWorkspace,
+      autoSync,
+      setRetrySignal,
+      workspace,
+      checkpoint,
+      mediaStore: browserMediaStore,
+      mediaGatewayForOwner: createOwnerBoundWorkspaceMediaGateway,
+      transport,
+      readSyncOwner: readWorkspaceSyncOwner,
+      onSynced,
+      onMissingReviewContent,
+      onReviewProvisionCapacity,
+      retainedCards,
+      missingReviewContentMessage,
+      provisionCapacityMessage,
+    });
   }
 
   useEffect(() => {
-    syncRef.current = () => sync();
+    syncRef.current = () => {
+      sync();
+    };
   });
 
   useEffect(() => {
     if (!autoSync || !ownerId || demo || demoAccountState || demoMissingReviewContent) return;
     if (lastSyncedWorkspace.current === JSON.stringify(workspace)) return;
-    const timer = window.setTimeout(() => syncRef.current(), 400);
-    return () => window.clearTimeout(timer);
+    const timer = window.setTimeout(() => {
+      syncRef.current();
+    }, 400);
+    return () => {
+      window.clearTimeout(timer);
+    };
   }, [autoSync, demo, demoAccountState, demoMissingReviewContent, ownerId, retrySignal, workspace]);
 
   if ((demo && !demoAccountState && !demoMissingReviewContent) || !enabled || !ownerId) return null;
   const messageIsError =
-    visibleAccountFailure !== null ||
+    visibleAccountFailure !== undefined ||
     (message !== null &&
       /could not|couldn't|failed|failure|unavailable|not applied|mismatch|cannot/i.test(message));
+  const handleAdoptionConfirmation = (checked: boolean | "indeterminate") => {
+    setAdoptionConfirmed(checked === true);
+  };
+  const handleClearConfirmation = (checked: boolean | "indeterminate") => {
+    setClearConfirmed(checked === true);
+  };
+  const accountChangedMessage = workspaceAccountFailureMessage({
+    _tag: "WorkspaceSyncFailure",
+    reason: "account-changed",
+  });
+  const resolveContentConflict = () => {
+    const preview = conflictData;
+    if (!preview) return;
+    Effect.runFork(
+      readWorkspaceSyncOwner().pipe(
+        Effect.match({
+          onFailure: () => {
+            setMessage("Account status could not be verified. The server preview was not applied.");
+          },
+          onSuccess: (verifiedOwner) => {
+            publishOwner(verifiedOwner);
+            if (verifiedOwner !== preview.ownerId || accountEpoch.current !== preview.epoch) {
+              setConflictData(null);
+              setMessage(accountChangedMessage);
+              return;
+            }
+            const applied = onContentConflict(
+              preview.ownerId,
+              preview.areas,
+              preview.hashes,
+              preview.deletedAreaIds,
+            );
+            if (!applied) {
+              setMessage(
+                "Server history could not be replayed. The current tab's workspace was preserved.",
+              );
+              return;
+            }
+            setConflictData(null);
+            setMessage("Server content loaded. Sync again to upload pending reviews.");
+          },
+        }),
+      ),
+    );
+  };
   return (
     <div className="relative">
       <Button
         type="button"
-        onClick={() => sync()}
+        onClick={() => {
+          sync();
+        }}
         disabled={busy || visibleAccountFailure === "account-mismatch"}
       >
-        {busy ? "Syncing…" : `Sync${pendingIds.length ? ` · ${pendingIds.length}` : ""}`}
+        {busy ? "Syncing…" : `Sync${pendingIds.length ? ` · ${String(pendingIds.length)}` : ""}`}
       </Button>
       <div
         className={
@@ -457,11 +335,17 @@ export function WorkspaceSyncAction({
               <Checkbox
                 id="workspace-adoption-confirmed"
                 checked={adoptionConfirmed}
-                onCheckedChange={(checked) => setAdoptionConfirmed(checked === true)}
+                onCheckedChange={handleAdoptionConfirmation}
               />{" "}
               I confirm this older workspace belongs to the signed-in account.
             </label>
-            <Button type="button" disabled={busy || !adoptionConfirmed} onClick={() => sync(true)}>
+            <Button
+              type="button"
+              disabled={busy || !adoptionConfirmed}
+              onClick={() => {
+                sync(true);
+              }}
+            >
               Confirm ownership and sync
             </Button>
           </div>
@@ -475,7 +359,7 @@ export function WorkspaceSyncAction({
               <Checkbox
                 id="workspace-clear-confirmed"
                 checked={clearConfirmed}
-                onCheckedChange={(checked) => setClearConfirmed(checked === true)}
+                onCheckedChange={handleClearConfirmation}
               />{" "}
               Clear this tab’s working copy and attachments to continue with this account.
             </label>
@@ -486,52 +370,7 @@ export function WorkspaceSyncAction({
         )}
       </div>
       {conflictData && (
-        <Button
-          type="button"
-          onClick={() => {
-            const preview = conflictData;
-            Effect.runFork(
-              readSyncOwner().pipe(
-                Effect.match({
-                  onFailure: () =>
-                    setMessage(
-                      "Account status could not be verified. The server preview was not applied.",
-                    ),
-                  onSuccess: (verifiedOwner) => {
-                    publishOwner(verifiedOwner);
-                    if (
-                      verifiedOwner !== preview.ownerId ||
-                      accountEpoch.current !== preview.epoch
-                    ) {
-                      setConflictData(null);
-                      setMessage(
-                        workspaceAccountFailureMessage({
-                          _tag: "WorkspaceSyncFailure",
-                          reason: "account-changed",
-                        }),
-                      );
-                      return;
-                    }
-                    const applied = onContentConflict(
-                      preview.ownerId,
-                      preview.areas,
-                      preview.hashes,
-                      preview.deletedAreaIds,
-                    );
-                    if (!applied) {
-                      setMessage(
-                        "Server history could not be replayed. The current tab's workspace was preserved.",
-                      );
-                      return;
-                    }
-                    setConflictData(null);
-                    setMessage("Server content loaded. Sync again to upload pending reviews.");
-                  },
-                }),
-              ),
-            );
-          }}
-        >
+        <Button type="button" onClick={resolveContentConflict}>
           Use server version
         </Button>
       )}

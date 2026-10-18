@@ -1,6 +1,6 @@
 import type { ComponentProps } from "react";
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
-import { NativeAccountPanel } from "../../../mobile/src/components/NativeAccountPanel";
+import { NativeAccountPanel } from "../../../mobile/src/components/account/NativeAccountPanel";
 
 const meta = {
   title: "Screens/Native Account",
@@ -29,18 +29,19 @@ const renderAccount = (args: ComponentProps<typeof NativeAccountPanel>) => (
 export const DeleteConfirmation: Story = {
   name: "Account · deletion confirmation (native)",
   args: {
-    onSync: async () => "Sync complete.",
+    onSync: () => Promise.resolve("Sync complete."),
     conflictAreas: null,
-    onUseServerVersion: async () => "Server version loaded.",
-    onImport: async () => "Import ready.",
-    onExport: async () => "Package ready.",
-    onBackupRestore: async () => "Backup restored.",
-    onBackupExport: async () => "Backup ready.",
-    onExportAccount: async () => "Account export ready.",
-    onDeleteAccount: async () => "Mock account deleted.",
+    onUseServerVersion: () => Promise.resolve("Server version loaded."),
+    onImport: () => Promise.resolve("Import ready."),
+    onExport: () => Promise.resolve("Package ready."),
+    onBackupRestore: () => Promise.resolve("Backup restored."),
+    onBackupExport: () => Promise.resolve("Backup ready."),
+    onExportAccount: () => Promise.resolve("Account export ready."),
+    onDeleteAccount: () => Promise.resolve("Mock account deleted."),
     account: "learner@example.com",
-    onSignOut: async () => "Signed out. This device’s local study data remains available.",
-    onRequestSignIn: async () => "Check your email for a sign-in link.",
+    onSignOut: () =>
+      Promise.resolve("Signed out. This device’s local study data remains available."),
+    onRequestSignIn: () => Promise.resolve("Check your email for a sign-in link."),
     initialDeleteConfirmationOpen: true,
   },
   globals: { viewport: { value: "recallMobile", isRotated: false } },
@@ -64,9 +65,24 @@ export const LegacyWorkspaceOwner: Story = {
     ...DeleteConfirmation.args,
     initialDeleteConfirmationOpen: false,
     ownershipIssue: "owner-adoption-required",
-    onAdoptLegacyOwner: async () => "Workspace ownership saved before sync.",
+    onAdoptLegacyOwner: () => Promise.resolve("Workspace ownership saved before sync."),
     onResetForAccount: () => undefined,
   },
   globals: { viewport: { value: "recallMobile", isRotated: false } },
+  render: renderAccount,
+};
+
+export const SignedOut: Story = {
+  name: "Account · AI connection separate from Recall (native)",
+  args: {
+    ...DeleteConfirmation.args,
+    account: null,
+    initialDeleteConfirmationOpen: false,
+  },
+  render: renderAccount,
+};
+export const LocalOnly: Story = {
+  name: "Account · local only (native)",
+  args: { ...SignedOut.args, cloudAvailable: false },
   render: renderAccount,
 };

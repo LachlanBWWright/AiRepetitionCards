@@ -49,11 +49,15 @@ export const FullScreenStates: Story = {
   name: "Full-screen · action states",
   render: () => (
     <>
-      <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">RECALL · SHARED UI</p>
+      <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+        RECALL · SHARED UI
+      </p>
       <h1>
         Actions for <em>focused practice.</em>
       </h1>
-      <p className="text-sm text-muted-foreground">Study actions, alternate choices, and saving feedback.</p>
+      <p className="text-sm text-muted-foreground">
+        Study actions, alternate choices, and saving feedback.
+      </p>
       <div className="mt-8 grid grid-cols-1 gap-3 sm:grid-cols-2 [&>section]:min-h-[150px] [&>section]:rounded-xl [&>section]:border [&>section]:bg-card [&>section]:p-5 [&>section>h2]:m-0 [&>section>h2]:text-sm [&>section>p]:my-2 [&>section>p]:text-xs [&>section>p]:text-muted-foreground">
         <section>
           <h2>Study actions</h2>
@@ -96,9 +100,13 @@ export const CompositionAndVariants: Story = {
   name: "Full-screen · composition and variants",
   render: () => (
     <>
-      <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">RECALL · SHARED UI</p>
+      <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+        RECALL · SHARED UI
+      </p>
       <h1>Actions and navigation</h1>
-      <p className="text-sm text-muted-foreground">Buttons keep action semantics; composed links retain navigation.</p>
+      <p className="text-sm text-muted-foreground">
+        Buttons keep action semantics; composed links retain navigation.
+      </p>
       <div className="mt-8 grid grid-cols-1 gap-3 sm:grid-cols-2 [&>section]:min-h-[150px] [&>section]:rounded-xl [&>section]:border [&>section]:bg-card [&>section]:p-5 [&>section>h2]:m-0 [&>section>h2]:text-sm [&>section>p]:my-2 [&>section>p]:text-xs [&>section>p]:text-muted-foreground">
         <section>
           <h2>Navigation</h2>

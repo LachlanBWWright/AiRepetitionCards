@@ -16,6 +16,9 @@ export function useLibraryNotes(store: LibraryNotesStore) {
   });
   const stateRef = useRef(state);
   const [error, setError] = useState<string | null>(null);
+  const [persistenceStatus, setPersistenceStatus] = useState<
+    "saved-locally" | "synchronized" | "awaiting-sync" | "conflicted"
+  >(store.persistenceStatus?.() ?? "saved-locally");
   const [revision, setRevision] = useState(0);
   const changeVersion = useRef(0);
   const lane = useRef<Promise<boolean>>(Promise.resolve(true));
@@ -35,6 +38,7 @@ export function useLibraryNotes(store: LibraryNotesStore) {
           stateRef.current = next;
           setState(next);
           setError(result.left.message);
+          setPersistenceStatus("conflicted");
           return;
         }
         if (
@@ -51,6 +55,7 @@ export function useLibraryNotes(store: LibraryNotesStore) {
         stateRef.current = next;
         setState(next);
         setError(null);
+        setPersistenceStatus(store.persistenceStatus?.() ?? "saved-locally");
       });
     return () => {
       active = false;
@@ -70,6 +75,7 @@ export function useLibraryNotes(store: LibraryNotesStore) {
       if (lifetime !== lifecycle.current || stateRef.current.scope !== store.scope) return false;
       if (Either.isLeft(saved)) {
         setError(saved.left.message);
+        setPersistenceStatus(saved.left.recovery ?? "conflicted");
         return false;
       }
       for (const asset of staged) {
@@ -88,6 +94,7 @@ export function useLibraryNotes(store: LibraryNotesStore) {
       stateRef.current = next;
       setState(next);
       setError(null);
+      setPersistenceStatus(store.persistenceStatus?.() ?? "saved-locally");
       return true;
     });
   }, [store]);
@@ -138,6 +145,8 @@ export function useLibraryNotes(store: LibraryNotesStore) {
     loaded: state.scope === store.scope && state.loaded,
     update,
     error,
+    persistenceStatus,
+    persistenceLocation: store.persistenceLocation?.() ?? "tab",
     retry,
   };
 }

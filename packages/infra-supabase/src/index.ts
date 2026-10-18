@@ -171,14 +171,7 @@ export async function authenticateSupabaseApiRequest(
       Effect.tryPromise({
         try: async () => {
           const client = bearer
-            ? createClient<Database>(configuration.url, configuration.publishableKey, {
-                auth: {
-                  autoRefreshToken: false,
-                  detectSessionInUrl: false,
-                  persistSession: false,
-                },
-                global: { headers: { Authorization: `Bearer ${bearer}` } },
-              })
+            ? createBearerClient(configuration, bearer)
             : await createCookieClient(configuration);
           const claims = await client.auth.getClaims(bearer);
           const subject = claims.data === null ? null : claims.data.claims.sub;
@@ -198,4 +191,11 @@ export async function authenticateSupabaseApiRequest(
 export {
   readTutorObservationHistory,
   type TutorObservationHistoryReadError,
-} from "./tutor-repository";
+} from "./tutor/tutor-repository";
+
+function createBearerClient(configuration: SupabaseApiConfiguration, bearer: string) {
+  return createClient<Database>(configuration.url, configuration.publishableKey, {
+    auth: { autoRefreshToken: false, detectSessionInUrl: false, persistSession: false },
+    global: { headers: { Authorization: `Bearer ${bearer}` } },
+  });
+}

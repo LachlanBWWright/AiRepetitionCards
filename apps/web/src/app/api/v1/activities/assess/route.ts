@@ -31,7 +31,7 @@ export async function POST(request: NextRequest) {
     return assessedReply({
       evaluatorId: "recall.coding:javascript-tests",
       evaluatorVersion: "docker-vm-1",
-      feedback: `${result.passed}/${result.total} tests passed. ${result.failures.join(" ")} Tests establish correctness against these examples, not algorithmic complexity.`,
+      feedback: `${String(result.passed)}/${String(result.total)} tests passed. ${result.failures.join(" ")} Tests establish correctness against these examples, not algorithmic complexity.`,
       evidence: activity.objectiveIds.map((objectiveId) => ({
         objectiveId,
         dimension: "application",

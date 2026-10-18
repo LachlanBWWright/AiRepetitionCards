@@ -2,13 +2,16 @@
   "extends": "../tsconfig.json",
   "compilerOptions": {
     "types": ["node"],
-    "paths": { "@/*": ["../../apps/web/src/*"] }
+    "paths": {
+      "@/*": ["../../apps/web/src/*"]
+    }
   },
   "include": [
     "tests/**/*.ts",
     "integration/**/*.ts",
     "local-integration/**/*.ts",
     "code-runner/**/*.ts",
-    "../../apps/web/src/lib/desktop-api.ts"
+    "../../apps/web/src/lib/desktop-api.ts",
+    "scripts/**/*.ts"
   ]
 }

@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { Either, Schema } from "effect";
 import { WorkspaceSchema } from "@recall/domain";
-import { NativeTodayScreen } from "../../../mobile/src/components/NativeTodayScreen";
+import { NativeTodayScreen } from "../../../mobile/src/components/review/NativeTodayScreen";
 import { NativePreviewProvider } from "../../../mobile/src/storybook/NativePreviewProvider";
 import { mockWorkspace, caughtUpWorkspace } from "../features/workspace/mock-data";
 import {

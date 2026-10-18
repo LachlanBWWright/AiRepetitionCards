@@ -29,3 +29,6 @@ next-env.d.ts
 apps/web/public/vendor/ocr/
 apps/desktop/public/vendor/ocr/
 artifacts/storybook-screenshots/
+
+# Generated browser test reports, screenshots, and traces.
+artifacts/e2e/

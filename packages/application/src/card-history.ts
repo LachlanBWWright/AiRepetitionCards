@@ -11,7 +11,7 @@ import {
 } from "@recall/domain";
 import { stableSyncId } from "@recall/sync-core";
 import { newSchedule } from "@recall/scheduler";
-import { workspaceHasRemoteSyncMetadata } from "./workspace-account";
+import { workspaceHasRemoteSyncMetadata } from "./account/workspace-account";
 import { Effect, Schema } from "effect";
 
 export const RestoreCardVersionSchema = Schema.Struct({

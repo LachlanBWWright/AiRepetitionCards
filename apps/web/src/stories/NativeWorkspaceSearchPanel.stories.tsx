@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
-import { NativeWorkspaceSearchPanel } from "../../../mobile/src/components/NativeWorkspaceSearchPanel";
+import { NativeWorkspaceSearchPanel } from "../../../mobile/src/components/library/NativeWorkspaceSearchPanel";
 import { mockWorkspace } from "../features/workspace/mock-data";
 
 const meta = {

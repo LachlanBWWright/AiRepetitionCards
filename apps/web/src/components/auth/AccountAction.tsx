@@ -1,28 +1,25 @@
 "use client";
 
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useId, useState, useSyncExternalStore } from "react";
+import { Download, LogOut, Trash2 } from "lucide-react";
 import { Effect, Fiber, Either, Schema } from "effect";
 import type { Workspace } from "@/features/workspace/types";
-import { Dialog } from "@/components/ui/Dialog";
 import { Button } from "@/components/ui/Button";
-import { Alert, Input, toast } from "@recall/ui-web";
-import {
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@recall/ui-web/components/dialog";
+import { Alert, toast } from "@recall/ui-web";
 import { readBrowserSession } from "@/lib/auth/browser-session";
 import { readSupabaseConfig } from "@/lib/supabase/config";
+import { TutorPrivacyControls } from "@/components/tutor/connection/TutorPrivacyControls";
+import { DesktopAISettings } from "@/components/tutor/connection/LocalChatGPTTutor";
 import { DesktopAccountAction } from "@/components/auth/DesktopAccountAction";
 import { isDesktopRuntime } from "@/lib/desktop-api";
 import { browserAccountApi } from "@/lib/account-api";
 import { exportAccountData, deleteAccountData } from "@recall/application";
 import { eraseLocalData } from "@/features/workspace/erase-local-data";
 import { sharedPublicationReturnPath } from "@/lib/auth/return-path";
-import { BudgetSettingsPanel } from "./BudgetSettingsPanel";
 import { browserLocalBudget } from "@/lib/local-ai-budget";
 import { ChatGPTAccountConnection } from "./ChatGPTAccountConnection";
+import { AccountActionDeleteConfirmation } from "./AccountActionDeleteConfirmation";
+import { AccountActionBudgetSettings } from "./AccountActionBudgetSettings";
 
 export function AccountAction({
   demo = false,
@@ -37,6 +34,7 @@ export function AccountAction({
 }) {
   const [ownerId, setOwnerId] = useState<string | null>(null);
   const [showBudget, setShowBudget] = useState(false);
+  const budgetPanelId = useId();
   const [email, setEmail] = useState<string | null | undefined>(undefined);
   const signInHref = useSyncExternalStore(
     () => () => undefined,
@@ -49,6 +47,9 @@ export function AccountAction({
     () => "/sign-in",
   );
   const [busy, setBusy] = useState(false);
+  const handleCleared = () => {
+    window.dispatchEvent(new CustomEvent("recall-tutor-history-cleared", { detail: "hosted" }));
+  };
   const [message, setMessage] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(demoDeleteConfirm);
   const [confirmation, setConfirmation] = useState("");
@@ -64,11 +65,12 @@ export function AccountAction({
     const desktop = window.recallDesktop;
     if (desktop) {
       let active = true;
+      const isActive = () => active;
       const publishEmail = (input: unknown) => {
         const decoded = Schema.decodeUnknownEither(
           Schema.Struct({ email: Schema.NullOr(Schema.String) }),
         )(input);
-        if (active && Either.isRight(decoded)) setEmail(decoded.right.email);
+        if (isActive() && Either.isRight(decoded)) setEmail(decoded.right.email);
       };
       const unsubscribe = desktop.auth.onStateChanged(publishEmail);
       void Effect.runPromise(
@@ -93,15 +95,15 @@ export function AccountAction({
       };
     }
     let mounted = true;
+    const isMounted = () => mounted;
     const lookup = readBrowserSession().pipe(
       Effect.match({
         onFailure: () => null,
-        onSuccess: (session) =>
-          session.authenticated ? (session.displayLabel ?? "Recall account") : null,
+        onSuccess: (session) => (session.authenticated ? session.displayLabel : null),
       }),
       Effect.tap((accountLabel) =>
         Effect.sync(() => {
-          if (mounted) setEmail(accountLabel);
+          if (isMounted()) setEmail(accountLabel);
         }),
       ),
     );
@@ -112,10 +114,10 @@ export function AccountAction({
     };
   }, [demo]);
 
-  async function exportAccount() {
+  function exportAccount() {
     if (demo) {
       toast.success("Mock account export is ready.");
-      return;
+      return Promise.resolve(undefined);
     }
     setBusy(true);
     setMessage(null);
@@ -141,27 +143,39 @@ export function AccountAction({
         }),
       ),
       Effect.match({
-        onFailure: () => setMessage("Your account export could not be downloaded. Try again."),
+        onFailure: () => {
+          setMessage("Your account export could not be downloaded. Try again.");
+        },
         onSuccess: () => toast.success("Your account data has been downloaded."),
       }),
-      Effect.ensuring(Effect.sync(() => setBusy(false))),
+      Effect.ensuring(
+        Effect.sync(() => {
+          setBusy(false);
+        }),
+      ),
     );
     Effect.runFork(exportProgram);
+
+    return Promise.resolve(undefined);
   }
 
-  async function deleteAccount() {
+  function deleteAccount() {
     if (demo) {
       toast.success("Mock account deletion confirmed.");
       setShowDeleteConfirm(false);
-      return;
+      return Promise.resolve(undefined);
     }
-    if (!accountDeleted && confirmation !== "DELETE") return;
+    if (!accountDeleted && confirmation !== "DELETE") return Promise.resolve(undefined);
     setDeleting(true);
     setMessage(null);
     const deletionProgram = (
       accountDeleted ? Effect.void : deleteAccountData(browserAccountApi, confirmation)
     ).pipe(
-      Effect.tap(() => Effect.sync(() => setAccountDeleted(true))),
+      Effect.tap(() =>
+        Effect.sync(() => {
+          setAccountDeleted(true);
+        }),
+      ),
       Effect.flatMap(() =>
         Effect.gen(function* () {
           const cleared = yield* eraseLocalData();
@@ -181,7 +195,9 @@ export function AccountAction({
         }),
       ),
       Effect.match({
-        onFailure: () => setMessage("Account deletion failed. Try again or contact support."),
+        onFailure: () => {
+          setMessage("Account deletion failed. Try again or contact support.");
+        },
         onSuccess: (localDataCleared) => {
           if (localDataCleared) {
             if (isDesktopRuntime()) window.location.reload();
@@ -193,87 +209,58 @@ export function AccountAction({
           }
         },
       }),
-      Effect.ensuring(Effect.sync(() => setDeleting(false))),
+      Effect.ensuring(
+        Effect.sync(() => {
+          setDeleting(false);
+        }),
+      ),
     );
     Effect.runFork(deletionProgram);
+
+    return Promise.resolve(undefined);
   }
 
-  function deleteConfirmationDialog() {
-    if (!showDeleteConfirm) return null;
-    return (
-      <Dialog
-        labelledBy="delete-account-title"
-        onClose={() => {
-          if (deleting) return;
-          setShowDeleteConfirm(false);
-          setConfirmation("");
-        }}
-      >
-        <form
-          className="grid gap-4"
-          onSubmit={(event) => {
-            event.preventDefault();
-            void deleteAccount();
-          }}
-        >
-          <DialogHeader>
-            <p className="mb-1 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-              ACCOUNT SETTINGS
-            </p>
-            <DialogTitle id="delete-account-title">Delete your account?</DialogTitle>
-          </DialogHeader>
-          <DialogDescription>
-            This permanently deletes your account and synced learning data. Download an account
-            export first if you want a copy.
-          </DialogDescription>
-          <label htmlFor="delete-account-confirmation">Type DELETE to confirm</label>
-          <Input
-            id="delete-account-confirmation"
-            autoComplete="off"
-            value={confirmation}
-            onChange={(event) => setConfirmation(event.target.value)}
-            disabled={deleting}
-            required
-          />
-          {message && <Alert variant="destructive">{message}</Alert>}
-          <DialogFooter className="gap-2 sm:justify-end">
-            <Button
-              variant="secondary"
-              type="button"
-              disabled={deleting}
-              onClick={() => {
-                setShowDeleteConfirm(false);
-                setConfirmation("");
-              }}
-            >
-              Cancel
-            </Button>
-            <Button
-              variant="danger"
-              type="submit"
-              disabled={deleting || (!accountDeleted && confirmation !== "DELETE")}
-            >
-              {deleting
-                ? "Deleting…"
-                : accountDeleted
-                  ? "Retry clearing this tab"
-                  : "Delete account and data"}
-            </Button>
-          </DialogFooter>
-        </form>
-      </Dialog>
-    );
-  }
+  const resetDeleteConfirmation = () => {
+    setShowDeleteConfirm(false);
+    setConfirmation("");
+  };
+  const closeDeleteConfirmation = () => {
+    if (deleting) return;
+    resetDeleteConfirmation();
+  };
+  const confirmDelete = () => {
+    void deleteAccount();
+  };
+  const deleteConfirmationProps = {
+    accountDeleted,
+    confirmation,
+    deleting,
+    message,
+    onCancel: resetDeleteConfirmation,
+    onChange: setConfirmation,
+    onClose: closeDeleteConfirmation,
+    onConfirm: confirmDelete,
+    open: showDeleteConfirm,
+  };
 
   if (demo && demoEmail) {
     return (
       <>
-        <div data-slot="account-action" className="flex flex-wrap items-center gap-2">
-          <span className="mr-auto text-sm text-muted-foreground">{demoEmail}</span>
+        <div data-slot="account-action" className="grid gap-3">
+          <p className="break-all text-sm text-muted-foreground">{demoEmail}</p>
           <Button variant="secondary" type="button" onClick={() => void exportAccount()}>
+            <Download aria-hidden="true" className="size-4" />
             Export account data
           </Button>
-          <Button variant="secondary" type="button" onClick={() => setShowDeleteConfirm(true)}>
+          <Button
+            variant="secondary"
+            className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+            type="button"
+            onClick={() => {
+              setShowDeleteConfirm(true);
+            }}
+          >
+            <Trash2 aria-hidden="true" className="size-4" />
             Delete account
           </Button>
           <Button variant="secondary" type="button" disabled>
@@ -281,12 +268,18 @@ export function AccountAction({
           </Button>
           {message && <Alert role="status">{message}</Alert>}
         </div>
-        {deleteConfirmationDialog()}
+        <AccountActionDeleteConfirmation {...deleteConfirmationProps} />
       </>
     );
   }
   const desktop = !demo && isDesktopRuntime();
-  if (desktop && !email && !accountDeleted) return <DesktopAccountAction />;
+  if (desktop && !email && !accountDeleted)
+    return (
+      <div className="grid gap-4">
+        <DesktopAISettings />
+        <DesktopAccountAction />
+      </div>
+    );
   if (demo || (!isConfigured && !desktop)) {
     return (
       <div data-slot="account-action" className="flex flex-wrap items-center gap-2">
@@ -328,49 +321,75 @@ export function AccountAction({
 
   return (
     <>
-      <form
-        action="/auth/sign-out"
-        method="post"
-        data-slot="account-action"
-        className="flex flex-wrap items-center gap-2"
-      >
-        <span className="mr-auto text-sm text-muted-foreground">
-          {email && /^chatgpt\+[a-f0-9]{48}@identity\.recall\.invalid$/.test(email)
-            ? "ChatGPT account"
-            : email}
-        </span>
-        {desktop ? <DesktopAccountAction /> : <ChatGPTAccountConnection compact />}
-        <Button
-          variant="secondary"
-          type="button"
-          disabled={busy}
-          onClick={() => void exportAccount()}
-        >
-          {busy ? "Preparing export…" : "Export account data"}
-        </Button>
-        <Button variant="secondary" type="button" onClick={() => setShowDeleteConfirm(true)}>
-          Delete account
-        </Button>
-        {!desktop && (
-          <Button variant="secondary" type="submit">
-            Sign out
+      <div data-slot="account-action" className="grid gap-4">
+        <div className="min-w-0 space-y-1">
+          <p className="text-xs text-muted-foreground">Signed in as</p>
+          <p className="break-all text-sm font-medium">
+            {email && /^chatgpt\+[a-f0-9]{48}@identity\.recall\.invalid$/.test(email)
+              ? "ChatGPT account"
+              : email}
+          </p>
+        </div>
+        {desktop ? (
+          <>
+            <DesktopAISettings />
+            <DesktopAccountAction />
+          </>
+        ) : (
+          <>
+            <ChatGPTAccountConnection compact />
+            <TutorPrivacyControls
+              demo={demo}
+              disabled={busy}
+              onBusyChange={setBusy}
+              onCleared={handleCleared}
+            />
+          </>
+        )}
+        <div className="grid gap-2 sm:grid-cols-2">
+          <Button
+            variant="secondary"
+            type="button"
+            disabled={busy}
+            onClick={() => void exportAccount()}
+          >
+            <Download aria-hidden="true" className="size-4" />
+            {busy ? "Preparing export…" : "Export account data"}
           </Button>
+          <Button
+            variant="secondary"
+            className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+            type="button"
+            onClick={() => {
+              setShowDeleteConfirm(true);
+            }}
+          >
+            <Trash2 aria-hidden="true" className="size-4" />
+            Delete account
+          </Button>
+        </div>
+        {!desktop && (
+          <form action="/auth/sign-out" method="post">
+            <Button variant="secondary" type="submit" className="w-full">
+              <LogOut aria-hidden="true" className="size-4" />
+              Sign out
+            </Button>
+          </form>
         )}
         {message && <Alert variant="destructive">{message}</Alert>}
-      </form>
+      </div>
       {ownerId && (
-        <Button variant="secondary" type="button" onClick={() => setShowBudget(!showBudget)}>
-          AI budget settings
-        </Button>
-      )}
-      {ownerId && showBudget && (
-        <BudgetSettingsPanel
-          key={ownerId}
-          api={browserLocalBudget}
+        <AccountActionBudgetSettings
           accountId={`hosted:${ownerId}`}
+          api={browserLocalBudget}
+          open={showBudget}
+          panelId={budgetPanelId}
+          onToggle={() => {
+            setShowBudget(!showBudget);
+          }}
         />
       )}
-      {deleteConfirmationDialog()}
+      <AccountActionDeleteConfirmation {...deleteConfirmationProps} />
     </>
   );
 }

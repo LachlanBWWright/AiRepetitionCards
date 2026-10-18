@@ -68,7 +68,7 @@ export function DesktopAccountAction() {
     };
   }, []);
 
-  async function requestMagicLink(event: React.FormEvent<HTMLFormElement>) {
+  async function requestMagicLink(event: React.SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
     const desktop = window.recallDesktop;
     if (!desktop) return;
@@ -113,15 +113,24 @@ export function DesktopAccountAction() {
     if (decoded && Either.isRight(decoded) && decoded.right.value) {
       setEmail(null);
       setNotice(null);
-      toast.success("Signed out on this device.");
+      toast.success("Signed out of Recall on this device. Your ChatGPT connection is unchanged.");
     } else {
       setNotice("Sign-out failed. The encrypted session may still be stored on this device.");
     }
     setBusy(false);
   }
 
+  if (!configured && !email) return null;
   return (
-    <div data-slot="account-action" className="flex flex-wrap items-center gap-2">
+    <section data-slot="account-action" className="flex flex-wrap items-center gap-3 border-t pt-5">
+      <div className="w-full space-y-1">
+        <h2 className="text-sm font-semibold">
+          Recall sync <span className="font-normal text-muted-foreground">(optional)</span>
+        </h2>
+        <p className="text-xs leading-5 text-muted-foreground">
+          Sign in to sync your library across devices.
+        </p>
+      </div>
       {email ? (
         <>
           <span className="mr-auto text-sm text-muted-foreground">{email}</span>
@@ -142,7 +151,9 @@ export function DesktopAccountAction() {
             type="email"
             autoComplete="email"
             value={address}
-            onChange={(event) => setAddress(event.target.value)}
+            onChange={(event) => {
+              setAddress(event.target.value);
+            }}
             placeholder="you@example.com"
             required
           />
@@ -158,6 +169,6 @@ export function DesktopAccountAction() {
         </p>
       )}
       {notice ? <Alert variant="destructive">{notice}</Alert> : null}
-    </div>
+    </section>
   );
 }

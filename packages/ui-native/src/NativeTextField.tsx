@@ -3,6 +3,7 @@ import type { TextInputProps } from "react-native";
 
 export type NativeTextFieldProps = {
   readonly label: string;
+  readonly hideLabel?: boolean;
   readonly value: string;
   readonly onChangeText: (value: string) => void;
   readonly error?: string;
@@ -23,6 +24,7 @@ export type NativeTextFieldProps = {
 
 export function NativeTextField({
   label,
+  hideLabel = false,
   value,
   onChangeText,
   error,
@@ -32,7 +34,7 @@ export function NativeTextField({
 }: NativeTextFieldProps) {
   return (
     <View className={`gap-[6px] ${className ?? ""}`}>
-      <Text className="text-recall-ink text-[14px] font-semibold">{label}</Text>
+      {!hideLabel && <Text className="text-recall-ink text-[14px] font-semibold">{label}</Text>}
       <TextInput
         {...inputProps}
         accessibilityLabel={label}

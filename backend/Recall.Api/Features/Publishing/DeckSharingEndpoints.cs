@@ -8,10 +8,6 @@ namespace Recall.Api.Features.Publishing;
 /// <summary>Stable shared-deck discovery, access, subscription, and feedback routes.</summary>
 public static partial class PublishingEndpoints
 {
-    private sealed record DeckSummary(string Id, string Title, string Description, string Language,
-        string[] Tags, string AuthorName, string Visibility, string Status, string LatestVersionId,
-        int Version, int CardCount, string UpdatedAt, string? License, string? Attribution);
-
     private static void MapDeckSharingEndpoints(IEndpointRouteBuilder endpoints)
     {
         endpoints.MapGet("/api/v1/decks", ListDecksAsync).AllowAnonymous().WithDeckRateLimit();
@@ -36,7 +32,7 @@ public static partial class PublishingEndpoints
     private static async Task<IResult> ListDecksAsync(HttpContext context, IHttpClientFactory clients, IConfiguration configuration, CancellationToken cancellationToken)
     {
         var query = context.Request.Query;
-        if (query.Keys.Any(key => key is not ("q" or "language" or "tag" or "limit" or "cursor")) || query.Any(pair => pair.Value.Count != 1)) return Error("invalid-request", 400);
+        if (query.Keys.Any(key => key is not ("q" or "language" or "tag" or "difficulty" or "activityType" or "minMinutes" or "maxMinutes" or "limit" or "cursor")) || query.Any(pair => pair.Value.Count != 1)) return Error("invalid-request", 400);
         var limit = 20;
         if (query.TryGetValue("limit", out var limitValue) && (!int.TryParse(limitValue, out limit) || limit is < 1 or > 50)) return Error("invalid-request", 400);
         Guid? cursor = null;
@@ -44,13 +40,22 @@ public static partial class PublishingEndpoints
         var search = query.TryGetValue("q", out var searchText) ? searchText.ToString().Trim() : "";
         var language = query.TryGetValue("language", out var languageText) ? languageText.ToString().Trim() : "";
         var tag = query.TryGetValue("tag", out var tagText) ? tagText.ToString().Trim() : "";
-        if (search.Length > 120 || language.Length > 40 || tag.Length > 80) return Error("invalid-request", 400);
+        var difficulty = query.TryGetValue("difficulty", out var difficultyText) ? difficultyText.ToString().Trim().ToLowerInvariant() : "";
+        var activityType = query.TryGetValue("activityType", out var activityText) ? activityText.ToString().Trim().ToLowerInvariant() : "";
+        int? minMinutes = null;
+        int? maxMinutes = null;
+        if (query.TryGetValue("minMinutes", out var minText)) { if (!int.TryParse(minText, out var parsed) || parsed is < 1 or > 1000) return Error("invalid-request", 400); minMinutes = parsed; }
+        if (query.TryGetValue("maxMinutes", out var maxText)) { if (!int.TryParse(maxText, out var parsed) || parsed is < 1 or > 1000) return Error("invalid-request", 400); maxMinutes = parsed; }
+        if (search.Length > 120 || language.Length > 40 || tag.Length > 80 ||
+            (difficulty.Length > 0 && difficulty is not ("beginner" or "intermediate" or "advanced")) ||
+            activityType.Length > 200 || (activityType.Length == 0 && query.ContainsKey("activityType")) ||
+            (minMinutes.HasValue && maxMinutes.HasValue && minMinutes.Value > maxMinutes.Value)) return Error("invalid-request", 400);
         var auth = await DeckIdentityAsync(context);
         if (!DeckOwnerHeaderMatches(context, auth?.UserId)) return Error("unauthenticated", 401);
         if (!TryConfiguration(configuration, out var url, out var key)) return Error("publication-unavailable", 503);
         using var client = clients.CreateClient();
         using var response = await PostRpcAsync(client, url, key, "list_public_shared_decks",
-            new { p_q = search.Length == 0 ? null : search, p_language = language.Length == 0 ? null : language, p_tag = tag.Length == 0 ? null : tag, p_limit = limit + 1, p_cursor = cursor }, cancellationToken, auth?.Token);
+            new { p_q = search.Length == 0 ? null : search, p_language = language.Length == 0 ? null : language, p_tag = tag.Length == 0 ? null : tag, p_difficulty = difficulty.Length == 0 ? null : difficulty, p_activity_type = activityType.Length == 0 ? null : activityType, p_min_minutes = minMinutes, p_max_minutes = maxMinutes, p_limit = limit + 1, p_cursor = cursor }, cancellationToken, auth?.Token);
         if (!response.IsSuccessStatusCode) return Error("publication-unavailable", 503);
         using var json = await ParseJsonAsync(response, cancellationToken);
         if (json is null || !TryDeckRows(json.RootElement, out var rows, allowMissingOwner: true)) return Error("publication-response-invalid", 502);
@@ -298,68 +303,6 @@ public static partial class PublishingEndpoints
         }
         catch (JsonException) { return new DeckBody(null, "invalid-request", 400); }
         catch (IOException) { return new DeckBody(null, "invalid-request", 400); }
-    }
-
-    private static bool TryDeckRows(JsonElement value, out DeckData[] rows, bool allowMissingOwner = false)
-    {
-        rows = [];
-        if (value.ValueKind != JsonValueKind.Array) return false;
-        var result = new List<DeckData>();
-        foreach (var item in value.EnumerateArray()) { if (!TryDeckRow(item, out var row, allowMissingOwner)) return false; result.Add(row); }
-        rows = result.ToArray(); return true;
-    }
-
-    private sealed record DeckData(Guid Id, Guid OwnerId, string Title, string Description, string Language, string[] Tags,
-        string AuthorName, string Visibility, string Status, Guid LatestVersionId, int Version, int CardCount,
-        string UpdatedAt, string? License, string? Attribution);
-
-    private static bool TryDeckRow(JsonElement row, out DeckData deck, bool allowMissingOwner = false)
-    {
-        deck = null!;
-        var hasOwner = TryGuid(row, "owner_id", out var owner);
-        if (!TryGuid(row, "deck_id", out var id) || (!hasOwner && !allowMissingOwner) ||
-            !TryString(row, "title", out var title) || title.Length is < 1 or > 300 ||
-            !TryStringAllowEmpty(row, "description", out var description) || description.Length > 4000 ||
-            !TryStringAllowEmpty(row, "language", out var language) || language.Length > 40 ||
-            !row.TryGetProperty("tags", out var tagValue) || tagValue.ValueKind != JsonValueKind.Array || tagValue.GetArrayLength() > 30 ||
-            !TryStringAllowEmpty(row, "author_name", out var author) || author.Length > 120 ||
-            !TryString(row, "visibility", out var visibility) || visibility is not ("private" or "unlisted" or "public") ||
-            !TryString(row, "status", out var status) || status is not ("active" or "withdrawn" or "hidden") ||
-            !TryGuid(row, "latest_version_id", out var latest) ||
-            !row.TryGetProperty("version", out var ver) || !ver.TryGetInt32(out var version) || version <= 0 ||
-            !row.TryGetProperty("card_count", out var count) || !count.TryGetInt32(out var cardCount) || cardCount < 0 ||
-            !TryString(row, "updated_at", out var updated) || !DateTimeOffset.TryParse(updated, out _) ||
-            !TryNullableString(row, "license", 120, out var license) || !TryNullableString(row, "attribution", 500, out var attribution)) return false;
-        var tags = new List<string>();
-        foreach (var item in tagValue.EnumerateArray())
-        {
-            if (item.ValueKind != JsonValueKind.String || item.GetString() is not { Length: <= 80 } text) return false;
-            tags.Add(text);
-        }
-        deck = new DeckData(id, hasOwner ? owner : Guid.Empty, title, description, language, tags.ToArray(), author, visibility, status, latest, version, cardCount, updated, license, attribution);
-        return true;
-    }
-
-    private static bool TryVersionRows(JsonElement value, out object[] rows)
-    {
-        rows = [];
-        if (value.ValueKind != JsonValueKind.Array) return false;
-        var result = new List<object>();
-        foreach (var row in value.EnumerateArray())
-        {
-            if (!TryGuid(row, "id", out var id) || !row.TryGetProperty("version", out var versionNode) || !versionNode.TryGetInt32(out var version) || version <= 0 || !TryString(row, "created_at", out var created) || !DateTimeOffset.TryParse(created, out _)) return false;
-            result.Add(new { id = id.ToString("D").ToLowerInvariant(), version, createdAt = created });
-        }
-        rows = result.ToArray(); return true;
-    }
-
-    private static DeckSummary DeckToSummary(DeckData value) => new(value.Id.ToString("D").ToLowerInvariant(), value.Title, value.Description, value.Language, value.Tags, value.AuthorName, value.Visibility, value.Status, value.LatestVersionId.ToString("D").ToLowerInvariant(), value.Version, value.CardCount, value.UpdatedAt, value.License, value.Attribution);
-
-    private static bool TryStringAllowEmpty(JsonElement row, string name, out string value)
-    {
-        value = string.Empty;
-        if (row.ValueKind != JsonValueKind.Object || !row.TryGetProperty(name, out var property) || property.ValueKind != JsonValueKind.String) return false;
-        value = property.GetString() ?? string.Empty; return true;
     }
 
     private static bool ValidateDeckPatch(JsonElement root)

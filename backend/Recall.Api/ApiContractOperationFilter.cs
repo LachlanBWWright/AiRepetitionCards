@@ -128,6 +128,10 @@ public sealed class ApiContractOperationFilter : IOperationFilter
                 AddQuery(operation, "q", "Optional title or description search.");
                 AddQuery(operation, "language", "Optional language filter.");
                 AddQuery(operation, "tag", "Optional exact tag filter.");
+                AddQuery(operation, "difficulty", "Optional author-declared difficulty: beginner, intermediate, or advanced.");
+                AddQuery(operation, "activityType", "Optional exact activity plugin type filter (case-insensitive; max 200 characters).");
+                AddQuery(operation, "minMinutes", "Optional lower bound for estimated study time, from 1 to 1000 minutes. Must not exceed maxMinutes.", minimum: 1, maximum: 1000);
+                AddQuery(operation, "maxMinutes", "Optional upper bound for estimated study time, from 1 to 1000 minutes. Must not be below minMinutes.", minimum: 1, maximum: 1000);
                 AddQuery(operation, "limit", "Page size from 1 to 50; defaults to 20.");
                 AddQuery(operation, "cursor", "Last deck UUID from the prior page.");
             }
@@ -158,16 +162,19 @@ public sealed class ApiContractOperationFilter : IOperationFilter
             AddHeader(operation, "x-recall-owner", "Optional expected authenticated owner id; a mismatch returns 401.");
     }
 
-    private static void AddQuery(OpenApiOperation operation, string name, string description, bool required = false)
+    private static void AddQuery(OpenApiOperation operation, string name, string description, bool required = false, int? minimum = null, int? maximum = null)
     {
         operation.Parameters ??= [];
+        var schema = new OpenApiSchema { Type = minimum.HasValue || maximum.HasValue ? JsonSchemaType.Integer : JsonSchemaType.String };
+        if (minimum.HasValue) schema.Minimum = minimum.Value.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        if (maximum.HasValue) schema.Maximum = maximum.Value.ToString(System.Globalization.CultureInfo.InvariantCulture);
         operation.Parameters.Add(new OpenApiParameter
         {
             Name = name,
             In = ParameterLocation.Query,
             Required = required,
             Description = description,
-            Schema = new OpenApiSchema { Type = JsonSchemaType.String }
+            Schema = schema
         });
     }
 

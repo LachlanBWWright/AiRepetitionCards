@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
-import { NativePracticeInsights } from "../../../mobile/src/components/NativePracticeInsights";
+import { NativePracticeInsights } from "../../../mobile/src/components/review/NativePracticeInsights";
 import { mockWorkspace } from "../features/workspace/mock-data";
 import { deletedAreaPendingWorkspace } from "../features/workspace/deleted-review-mock-data";
 

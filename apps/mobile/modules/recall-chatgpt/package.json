@@ -1,0 +1,7 @@
+{
+  "name": "recall-chatgpt",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Device-local ChatGPT OAuth callback and signature verification",
+  "license": "MIT"
+}

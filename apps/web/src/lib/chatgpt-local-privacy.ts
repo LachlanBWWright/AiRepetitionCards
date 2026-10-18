@@ -59,18 +59,16 @@ export function createLocalTutorPrivacyApi(profile: string) {
         catch: unavailable,
       });
       yield* Effect.forEach(snapshot, ({ key }) =>
-        Effect.try({ try: () => volatileStorage.removeItem(key), catch: unavailable }),
+        Effect.try({
+          try: () => {
+            volatileStorage.removeItem(key);
+          },
+          catch: unavailable,
+        }),
       ).pipe(
         Effect.catchAll((error) =>
           Effect.forEach(snapshot, ({ key, value }) =>
-            Effect.suspend(() =>
-              localWritesBlocked()
-                ? Effect.fail(unavailable())
-                : Effect.try({
-                    try: () => volatileStorage.setItem(key, value),
-                    catch: unavailable,
-                  }),
-            ).pipe(Effect.ignore),
+            restoreTranscript(key, value).pipe(Effect.ignore),
           ).pipe(Effect.andThen(Effect.fail(error))),
         ),
       );
@@ -84,4 +82,16 @@ export function createLocalTutorPrivacyApi(profile: string) {
       };
     }),
   );
+}
+
+function restoreTranscript(key: string, value: string) {
+  return Effect.suspend(() => {
+    if (localWritesBlocked()) return Effect.fail(unavailable());
+    return Effect.try({
+      try: () => {
+        volatileStorage.setItem(key, value);
+      },
+      catch: unavailable,
+    });
+  });
 }

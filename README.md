@@ -2,6 +2,8 @@
 
 Recall is a spaced-repetition learning app with web, Expo mobile and Electron desktop clients. All three share learning areas, card authoring, FSRS reviews, sync, AI tutoring with approved proposals, interchange and publishing; mobile and Electron also support local-only offline study.
 
+The [source layout guide](docs/source-layout.md) maps the feature folders, package entry points, and nested test suites.
+
 ## Run locally
 
 Requirements: Node.js 22 and pnpm 10. Mobile and Electron local study do not require an account, environment file, Supabase service or OpenAI credential. The web app shell is available without an account; reading, creating, and studying cards requires configured account and API services.
@@ -13,7 +15,7 @@ pnpm dev:mobile
 pnpm dev:desktop
 ```
 
-Run each client command in its own terminal. The web app shell is available without an account; card and study features require sign-in and save data through the server. The browser keeps only a temporary working copy in tab memory. Mobile and Electron support local-only study with SQLite, with optional account sync.
+Run each client command in its own terminal. Both desktop development launchers ensure the Electron executable is installed before starting; the first launch may download it, and later launches reuse it. The web app shell is available without an account; card and study features require sign-in and save data through the server. The browser keeps only a temporary working copy in tab memory. Mobile and Electron support local-only study with SQLite, with optional account sync.
 
 To run a client together with the ASP.NET backend, use one of these combined launchers instead of starting the client separately:
 
@@ -35,27 +37,46 @@ Each launcher starts the .NET 10 API, waits for `/health`, and then starts its c
 | Mobile + API      | `pnpm dev:api:mobile`  | SQLite + API           |
 | Mock screens      | `pnpm storybook`       | Deterministic fixtures |
 
-The web workspace has separate Next.js routes at `/today`, `/library`, `/tutor` and
-`/insights`; `/` redirects to `/today`. Electron uses matching local hash routes
-(`#/today`, `#/library`, `#/tutor` and `#/insights`) because its packaged renderer loads
-from a local file rather than a web server.
+The web workspace opens at `/subjects`; `/` redirects there. Subject activities use
+`?area=<id>&mode=overview|review|tutor|improve`. Electron retains the same context in
+local hash routes (`#/subjects?...`). Browser back/forward navigation preserves the
+selected subject and activity. Existing `/today`, `/library`, `/tutor` and practice
+links remain supported.
 
 ## Offline use and optional services
 
-Today opens directly to your review queue. In Library, **New deck** creates a learning
-area (the subject containing your cards), then offers manual entry, generation from
-materials, or importing an existing deck. **Save and add another** keeps the editor
-open with the same card type and a fresh question; **Save and finish** returns to the
-library. Deck actions expose **Add card**, **Generate cards**, and **Review due cards**.
-Imports create separate decks and show their destination and card count before saving;
-Library offers separate **Import cards**, **Export deck**, and **Workspace backup** tools;
-Account also offers backup recovery.
-AI suggestions still require validation and individual approval. Studying approved
-cards opens the selected deck directly.
+Home combines the daily review queue and complete subject collection. **New subject**,
+**Import cards**, and **Browse shared decks** sit together at the top. **Review all due**
+works across subjects. The list can be filtered by name and sorted by daily priority,
+name, recently studied, or due count. Daily priority puts scheduled reviews first,
+ordered by overdue urgency, followed by suggested follow-up work and caught-up subjects.
+The sidebar contains Home, subject shortcuts, and Account. Its logo opens Home, and
+sidebar collapse has its own control.
+
+Each subject row offers **Review**, **Tutor**, and **Improve** directly. The subject name
+opens **Overview**, with cards, materials, and subject-specific progress. A top-right
+activity selector switches between Overview, Review, Tutor, and Improve. Tutor provides
+an open conversation. Tutor and Improve use a full-height chat room with a scrolling transcript
+and a message composer anchored at the bottom; Enter sends and Shift+Enter adds a line on web and desktop.
+Improve is a chat: describe what to work on, ask for cards directly, or say you do not know
+to get an explanation and a card proposal. The agent probes practical experience and deck coverage, and proactively suggests cards when
+uncertainty or gaps emerge. Proposed cards appear as compact previews with Add card, Edit,
+and Discard actions. Quiz answers and assessments are optional;
+chat requests are never graded automatically. Approve card proposals inline. Materials stay in Overview. Existing investigations resume in the
+conversation while that visit is open. Tutor and Improve start fresh each visit; chat
+transcripts and unapproved chat proposals stay in memory and are not restored. Approved
+cards remain in the deck. Materials and saved notebook investigations retain their storage behavior.
+
+Create an empty subject with just a name, then add cards or materials, or start with AI.
+Imported/shared card collections still use the term deck. AI proposals require explicit
+approval individually or as a selected batch. Batch approval saves sequentially and
+stops on failure, leaving remaining proposals pending. Duplicate consent remains required.
+Account contains workspace backups and workspace data/review settings. Mobile follows
+the same subject-first activity structure using native controls.
 
 Review screens show session counts, remaining new/learning/review cards, rating guidance,
 and deterministic next-review previews using the current retention setting. Session
-counts are temporary and reset when starting or switching decks; review history remains
+counts are temporary; returning to the same subject retains the current session. Review history remains
 append-only. Empty decks, decks already caught up, and completed sessions have separate
 messages. Completion shows this session’s recall results and the next scheduled review,
 with a shortcut to another due deck. Cards can become due again during a session.
@@ -80,9 +101,9 @@ activities preserve all earlier attempt snapshots. Activity drafts and unfinishe
 can be saved and resumed. Objective evidence shows dimensions, self reports, assistance,
 and observed independent scores; recommendations suggest the next activity and estimated
 effort. These estimates do not claim mastery or automatically change FSRS schedules.
-Today separates quick recall reviews from **Deeper practice**, which shows recommended
-activities, their reason, and an estimated duration. **Start activity** opens the selected
-activity in Library; unfinished attempts can be resumed there.
+Home prioritizes subjects with scheduled reviews, then subjects with recommended follow-up work.
+Learning activities remain available in each subject’s card workspace; unfinished attempts
+can be resumed there.
 
 Multiple choice uses exact-match grading. Rubric-based activities support self-assessment
 and hosted AI assessment using the existing provider, quota, and token-budget adapters.
@@ -114,20 +135,54 @@ a proposal until the learner accepts it.
 Private workspace backups and account exports include activity content, attempts, and
 drafts. Accepted attempts are append-only and idempotent; synchronization detects conflicting
 content revisions rather than silently replacing them. Preserve a private backup before
-resolving conflicting edits; retry synchronization after a transient failure. Apply both
-`20261013090000_learning_activities.sql` and
-`20261013100000_harden_learning_activity_writes.sql` with
-`pnpm exec supabase migration up --local` for development. The latter enforces bounded
+resolving conflicting edits; retry synchronization after a transient failure. The initial schema is split into six ordered files in `supabase/migrations/`, starting with
+`20261003000000_initial.sql`, and includes activity storage and hardening. Apply the chain with `pnpm exec supabase migration up --local` for a fresh
+local database. It enforces bounded
 libraries, account-owned deck references, immutable attempts, and monotonic content
 revisions at the database write boundary. Cloud writes pass through the fully validated
 API route using server-only `SUPABASE_SERVICE_ROLE_KEY`; direct authenticated RPC writes
-are disabled. Apply the hardening migration together with this app version before using cloud
-activity saves. Demo activities remain in tab
+are disabled. Initialize the database before using cloud activity saves. Demo activities remain in tab
 memory. Portable card-only formats still carry Basic/Cloze content; activity libraries are
 available in private workspace backups.
 
+Before publishing, **Deck quality** checks duplicate cards, objective coverage, media
+references, multiple-choice answers, and coding tests. Blocking findings must be fixed;
+warnings remain advisory. Release drafts retain publishing fields separately from an
+in-flight publication. Authors can compare the current deck with their last owned release,
+review changed cards, objectives, and activities, and declare an optional difficulty.
+Public discovery supports language, topic tags, declared difficulty, activity type, and
+estimated study time, with sample content before copying. Time estimates describe deck
+size rather than a promise about an individual learner's speed.
+
+**Objective evidence** separates independent, assisted, and self-reported performance.
+Diagnostics use the latest independent observation for each dimension and suggest targeted
+practice when evidence is weak, old, or missing; an earlier weak answer does not permanently
+mark an objective as weak after later improvement.
+
+Activity status distinguishes temporary tab storage, device saves, pending account sync,
+successful synchronization, and conflicts. Signed-in web users can explicitly enable
+**Keep drafts on this device** to retain bounded, account-scoped activity and publishing data
+across browser restarts. Demo data remains temporary. Disable retention to remove the
+device copy, or use local-data erasure to clear retained copies and preferences. Native
+activity drafts use the device database; unavailable synchronization leaves local work
+available for retry.
+
+**Portable deck packages** include cards, activity definitions, and verified attachments in
+a single ZIP. Export excludes learning history by default. An explicit private export adds
+the selected deck's current-card schedules and reviews, activity attempts, and drafts; private files are
+marked in their filename. Import shows a preview before adding content as a new copy.
+Restoring private history is a separate choice and rejects conflicting identities rather
+than overwriting an existing deck. Account credentials and synchronization bindings are
+never part of a deck package. Use a full workspace backup when deleted-card history is
+needed as well.
+
+Advanced **Plugin tools** validate JSON content against installed plugin implementations,
+show platform and assessment capabilities, and require approval before applying a version
+migration. Activities from unavailable plugins retain readable fallback content and can be
+exported without installing code.
+
 The plugin framework is in `packages/domain/src/learning-activities.ts` and
-`packages/application/src/learning-activities.ts`. Trusted composition registers namespaced,
+`packages/application/src/activities/learning-activities.ts`. Trusted composition registers namespaced,
 versioned `ActivityPlugin` implementations using `registerActivityPlugins`. Plugins declare
 capabilities, validate and present bounded JSON payloads, assess responses through Effect,
 and optionally migrate older versions. Shared validation checks evaluator results and
@@ -144,16 +199,18 @@ from independent evidence. Recommendations are deterministic heuristics over acc
 attempts, rather than a calibrated probability of mastery. Custom plugin installation,
 debugging, ordering/matching, and worked-problem editors are not bundled in this release.
 
-Library contains deck and card management;
-Tutor separates practice, study materials and suggestion review. AI editing tools
-open through **Improve**, while sources, history and advanced settings are expandable.
-Switching tutor activities preserves drafts and pending work.
+Subject Overview contains card management, materials, and progress. The card library keeps search
+and filters in one toolbar; **Learning activities** opens exercises in a separate dialog,
+with raw plugin authoring under **Advanced activity tools**. Exercise drafts remain available
+when that dialog closes. Improve keeps
+investigation and card proposals in its conversation. Sources, history, and advanced
+settings remain expandable in Overview. Switching activities preserves drafts and pending work.
 Card editors keep objectives, tags and attachments under **Card details**; area settings
 keep AI instructions and objective prerequisites expandable.
 
 **Search** finds local cards, areas, objectives, concepts, study materials and passages,
 study topics, saved tutor answers and pending suggestions. On mobile, open **Search everything**
-in Library. Remote conversations that have not been stored locally are not searchable offline.
+in subject Overview. Remote conversations that have not been stored locally are not searchable offline.
 
 Card editors and AI approvals flag exact matches, similar wording and conflicting answers;
 review the matches before choosing **Keep both**. Library also offers a duplicate scan.
@@ -171,11 +228,13 @@ The normal web build (`pnpm build`) includes its install manifest and cached app
 
 Desktop and mobile package their application code and SQLite storage, so local startup and learning operations need neither a Recall server nor a development server. Optional authentication and sync run independently from local startup. Being signed in does not make local study depend on the network.
 
-AI inference requires a network connection. Direct ChatGPT plan tutoring is implemented in the eligible desktop distribution: set `RECALL_CHATGPT_LOCAL_ENABLED=true` when building it. OpenAI's documented local authorization flow requires a loopback HTTP listener; this project does not invent a browser-only or mobile redirect flow. See [OpenAI's local sign-in flow](https://developers.openai.com/siwc/token-sharing-open-source/sign-in).
+Electron and React Native keep Recall account sign-in optional and separate from AI provider access. On Electron, open **Account settings → AI connection** to connect ChatGPT without creating or signing in to a Recall account, even with an empty library. Recall sign-out leaves that connection intact; use the ChatGPT controls to disconnect AI access. Web study still requires a Recall account. React Native also exposes a separate ChatGPT connection in Account on native builds, using a device-local callback listener and protected credentials. Expo Go does not include this module.
+
+AI inference requires a network connection. Direct ChatGPT plan tutoring is enabled in desktop builds by default; no build flag or Recall account is required. OpenAI's documented local authorization flow requires a loopback HTTP listener; native mobile sign-in implements that callback directly rather than using a custom app redirect. Mobile tutoring also supports direct ChatGPT plan requests with on-device credentials and SQLite sessions. Choose ChatGPT plan or Recall hosted in Account → ChatGPT connection; hosted tutoring remains a separate Recall service and is never selected automatically after a ChatGPT failure. See [OpenAI's local sign-in flow](https://developers.openai.com/siwc/token-sharing-open-source/sign-in).
 
 With a ChatGPT account and model selected and plan tutoring enabled, the desktop Tutor also offers **Research a topic**. Enter a question to request OpenAI web search using that account's ChatGPT plan, without a Recall server or API key. Completed answers include clickable provider citations. Search availability depends on the selected model and account/workspace policy; unsupported requests show an explanation instead of switching to hosted billing. Research results are separate from the deck and quiz context and do not automatically create cards or change your learning material. See [documented plan capabilities](https://developers.openai.com/siwc/token-sharing-open-source/preview-limitations).
 
-Local AI budget and usage foundations now enforce optional daily/weekly request caps and a separate daily research cap in the desktop ChatGPT adapter. Usage is saved locally before each request; failures and interrupted requests remain counted. Provider token counts are recorded when available, without storing prompts or answers. Budget settings are available in the desktop ChatGPT panel and signed-in account controls; browser settings last only for the open tab. Limits default to unlimited. This tracks this installation, not remaining ChatGPT allowance. See [local budget details](apps/desktop/README.md#local-budgets-and-usage-framework).
+Desktop ChatGPT calls have no local daily, weekly, research or session request caps. Provider token counts are recorded when available without storing prompts or answers. ChatGPT's usage settings show the provider's usage and limits. See [local usage details](apps/desktop/README.md#local-budgets-and-usage-framework).
 
 Storybook includes full-screen mock screens for all three clients. Screenshot targets are registered; running the screenshot command launches a browser, so it is separate from local development.
 
@@ -239,7 +298,7 @@ Web and desktop JSON/CSV/TSV imports retain the parsed content for retry when sa
 
 Hosted AI can enforce optional daily admission budgets through durable Redis, with atomic in-flight reservations and verified usage settlement. See [daily budget configuration](docs/task-model-routing.md#daily-hosted-budgets). These conservative admission units do not promise an exact provider billing cap.
 
-Website sign-in keeps first-party session credentials in HttpOnly, SameSite=Lax cookies, with Secure cookies in production. Account controls read verified status from the server; signing out closes web study access, while mobile and Electron preserve offline study data. [Sign in with ChatGPT setup](docs/sign-in-with-chatgpt.md) includes the OpenAI client request and activation steps; eligible desktop distributions also support local ChatGPT plan tutoring.
+Website sign-in keeps first-party session credentials in HttpOnly, SameSite=Lax cookies, with Secure cookies in production. The web and desktop Account menu opens separate Account settings and Device settings dialogs. Account settings contains data export, deletion, sign-out, and AI budget controls. Account controls read verified status from the server; signing out closes web study access, while mobile and Electron preserve offline study data. [Sign in with ChatGPT setup](docs/sign-in-with-chatgpt.md) includes the OpenAI client request and activation steps; eligible desktop distributions also support local ChatGPT plan tutoring.
 
 Set the issued token-endpoint authentication method explicitly; temporary sign-in outages offer retry or email recovery. Desktop ChatGPT credentials remain in the main process, and plan tutoring requires explicit consent.
 
@@ -259,7 +318,7 @@ Publishing preserves inherited attribution, license and fork lineage. Public/unl
 
 Forked areas can check for newer accessible public versions. Discovery excludes private and unlisted versions; an unavailable source needs an explicit author-provided share link. Review the structured differences before creating a separate copy; existing edits and review history remain intact.
 
-Shared decks have a public catalog, owner management, correction feedback, and per-copy follow subscriptions. Sharing is public publication or an unlisted exact-version link; there are no invitations or named viewer grants. Owners can withdraw remote access while retaining their history; downloaded copies remain personal content. Following a deck preserves its original fork lineage and never overwrites local edits. The updates inbox shows newer public releases and supports explicit read acknowledgment. Learners can review card, objective, and activity definition changes before applying them; review history and schedules are preserved. Learners can report releases or block publishers. Operators use the server-only comma-separated `RECALL_MODERATOR_USER_IDS` UUID allowlist to review reports and hide or restore decks; actions append to the moderation audit. Apply all pending Supabase migrations in order before enabling the API routes (`pnpm exec supabase migration up --local` for a local stack). The ASP.NET server needs `SUPABASE_SERVICE_ROLE_KEY` for immutable publication registration and moderation; keep it server-only. See the [sharing HTTP contract](docs/publishing-http.md) and [backend setup](backend/README.md#shared-deck-storage).
+Shared decks have a public catalog, owner management, correction feedback, and per-copy follow subscriptions. Sharing is public publication or an unlisted exact-version link; there are no invitations or named viewer grants. Owners can withdraw remote access while retaining their history; downloaded copies remain personal content. Following a deck preserves its original fork lineage and never overwrites local edits. The updates inbox shows newer public releases and supports explicit read acknowledgment. Learners can review card, objective, and activity definition changes before applying them; review history and schedules are preserved. Learners can report releases or block publishers. Operators use the server-only comma-separated `RECALL_MODERATOR_USER_IDS` UUID allowlist to review reports and hide or restore decks; actions append to the moderation audit. Initialize a fresh Supabase project with the single initial schema migration before enabling the API routes (`pnpm exec supabase migration up --local` for a local stack). The ASP.NET server needs `SUPABASE_SERVICE_ROLE_KEY` for immutable publication registration and moderation; keep it server-only. See the [sharing HTTP contract](docs/publishing-http.md) and [backend setup](backend/README.md#shared-deck-storage).
 
 ## Internal assessment model
 
@@ -282,8 +341,14 @@ summary of evidence about a concept, rather than a scheduled exercise.
 
 ## Adaptive assessment and the knowledge notebook
 
+Quick questions probe weak understanding shown in recent answers and relevant gaps
+between learning objectives and supplied card coverage. Prompts direct the tutor to
+avoid copied or lightly reworded card questions and use explanation, comparison,
+prediction and new applications. Without learner evidence, questions explore possible
+gaps rather than assume a weakness; missing cards alone do not show poor understanding.
+
 The Tutor includes a private, device-local knowledge notebook. Choose a learning goal
-and a question, request and time budget, then investigate the topic one question at a
+then investigate the topic one question at a
 time. Existing objectives seed its concept map; topics without objectives start with
 one broad concept. Add subtopics yourself or explicitly accept suggested subtopics.
 
@@ -305,7 +370,7 @@ Generate card proposals from recorded findings individually or as an incremental
 batch. Proposals retain their supporting evidence, check exact normalized question
 and answer duplicates, and remain editable until approved. Approved cards use the
 existing durable card-save and spaced repetition flow. There is no target deck size;
-session budgets limit investigation effort, not the accumulated deck.
+practice continues without local question, request-count or time caps.
 
 The notebook is stored separately from the portable learning-area document and
 workspace backup. Export its private JSON record separately. Clearing a notebook
@@ -363,7 +428,7 @@ and splits clear inherited claim links. Plans are stored locally with the notebo
 and included in notebook JSON exports.
 
 AI refinement, inspection, planning and generation use the configured hosted or
-eligible desktop ChatGPT provider and existing request budgets. Local quality
+eligible desktop ChatGPT provider. Local quality
 checks, saved plans, card editing and studying remain available offline. No Recall
 server is required for eligible desktop ChatGPT plan operations.
 
@@ -417,7 +482,7 @@ results and failure diagnostics. `pnpm --filter web test:e2e --check` only check
 without builds, servers or browsers. `pnpm test:integration` remains the separate Supabase suite
 requiring explicit disposable local credentials. See [verification setup and scope](docs/verification.md).
 
-`pnpm check:static` composes source policy, types, zero-warning lint, formatting, all application builds and the Storybook build. It does not run browsers, database commands or runtime tests. Full release acceptance still requires the report’s test and deployment gates.
+`pnpm check:static` composes source limits and their checker tests, source policy, types, zero-warning lint, formatting, all application builds and the Storybook build. CI also enforces the 400-line and eight-level indentation limits. It does not run browsers, database commands or application runtime tests. Full release acceptance still requires the report’s test and deployment gates.
 
 See the [implementation completion audit](docs/implementation-audit.md) for source evidence and the remaining verification, activation and release gates.
 
@@ -456,6 +521,7 @@ See the [implementation completion audit](docs/implementation-audit.md) for sour
 - Browse and search every card, including scheduled cards; edit objective links, tags, and attachments
 - Study with Space/Enter to reveal and 1–4 for Again/Hard/Good/Easy; shortcuts pause in forms and dialogs
 - Set target retention between 70% and 97% in Insights. It applies to future reviews; each event records its pinned FSRS parameter set so sync can replay historical settings. Preferences stay private and are included in workspace backups.
+- Clock rollback and clock-skewed synced reviews preserve their recorded timestamps. FSRS uses a nondecreasing derived review time so live reviews, previews, and causal history replay cannot produce negative elapsed time.
 - Create and edit Cloze cards with numbered deletions and optional hints. Portable JSON/ZIP imports expand unspecified deletion numbers into independent study cards; exports retain original Cloze text and the selected deletion number.
 - Compare a shared publication with your fork before creating a new personal copy, including card/objective changes and metadata
 - Open public or unlisted sharing links directly in the receiving flow, including with an empty library
@@ -465,7 +531,7 @@ See the [implementation completion audit](docs/implementation-audit.md) for sour
 - Web and Electron share framework-independent buttons, dialogs, empty states, status badges, and their styles through `@recall/ui-web`. The source-owned [shadcn/Radix foundation](docs/adr/0006-web-ui-foundation.md) supports composed links and a semantic Tailwind theme.
 - Native clients share React Native buttons, status badges, and empty states through `@recall/ui-native`; Storybook includes full-screen action, caught-up, and offline mock states.
 
-The repository's deep research report describes the wider target architecture. Tutor sessions, typed observations, and card proposals persist privately in Supabase and can be resumed on the current device. AI token usage and a 30-request daily account quota are implemented; database migrations and generated database types are in place, while runtime RLS checks, authenticated usage validation, and broader cross-device conflict validation remain. Desktop supports local study, encrypted sign-in, authenticated API access, and a main-process SQLite media store; signed packaging and device-level runtime validation remain. Web uses account-backed study data with only tab-memory drafts; mobile supports local image/audio attachments, hash-verified media ZIP packages, and private workspace backups that preserve local review history, schedules, and media. Full-screen media editing, review, publishing, token lifecycle, and Anki import states are captured in Storybook, with screenshots captured by the explicit local screenshot command. Browser SQL.js, Electron `node:sqlite`, and Expo SQLite adapters now read Anki Basic/Cloze cards and bounded revlog history from legacy `collection.anki2`, uncompressed `collection.anki21`, and normalized v18 `.anki21b` collections; modern field/deck/notetype rows are normalized through a shared decoder. The importer decompresses and validates `.anki21b` media with bounded Zstandard and protobuf decoding. Imported review logs append as review events and rebuild FSRS schedules; Anki intervals/due dates and broader template variants remain unsupported. Web sharing publishes verified image/audio media and creates persisted independent forks; shared Electron/mobile publication transports and a native mobile publishing panel use the shared client, with server-backed token rotation/revocation. Runtime native validation remains.
+The repository's deep research report describes the wider target architecture. Tutor sessions, typed observations, and card proposals persist privately in Supabase and can be resumed on the current device. AI token usage and a 30-request daily account quota are implemented; database migrations and generated database types are in place, while runtime RLS checks, authenticated usage validation, and broader cross-device conflict validation remain. Desktop supports local study, encrypted sign-in, authenticated API access, and a main-process SQLite media store; signed packaging and device-level runtime validation remain. Web uses account-backed study data with tab-memory drafts by default and explicit device retention; mobile supports local image/audio attachments, hash-verified media ZIP packages, and private workspace backups that preserve local review history, schedules, and media. Full-screen media editing, review, publishing, token lifecycle, and Anki import states are captured in Storybook, with screenshots captured by the explicit local screenshot command. Browser SQL.js, Electron `node:sqlite`, and Expo SQLite adapters now read Anki Basic/Cloze cards and bounded revlog history from legacy `collection.anki2`, uncompressed `collection.anki21`, and normalized v18 `.anki21b` collections; modern field/deck/notetype rows are normalized through a shared decoder. The importer decompresses and validates `.anki21b` media with bounded Zstandard and protobuf decoding. Imported review logs append as review events and rebuild FSRS schedules; Anki intervals/due dates and broader template variants remain unsupported. Web sharing publishes verified image/audio media and creates persisted independent forks; shared Electron/mobile publication transports and a native mobile publishing panel use the shared client, with server-backed token rotation/revocation. Runtime native validation remains.
 
 ## Useful commands
 
@@ -494,14 +560,29 @@ Pull requests and pushes to `main` validate workflow syntax, run local regressio
 
 Each `main` commit has its own desktop/mobile packaging run; newer commits do not cancel an earlier artifact build. Upload gates verify the expected desktop installer formats/architectures and embedded mobile JavaScript/native binaries before uploading. Artifacts are retained for 14 days in the matching GitHub Actions run.
 
-The client build workflows do not start Supabase or require service credentials. Optional repository variables supply public endpoint configuration (`NEXT_PUBLIC_*` for web/desktop, `RECALL_API_URL` for desktop, and `EXPO_PUBLIC_*` for mobile). The web archive requires account and API services; mobile and Electron retain local study when those settings are unset. CI builds the web application and uploads one standalone server archive containing its browser assets and static app shell. Start the archive with `node apps/web/server.js` after extraction and configure its API services before signing in. **Optional local Supabase integration** is a separate manual workflow. Storybook screenshots remain an explicit local command rather than a browser job on every push.
+The client build workflows do not start Supabase or require service credentials. Optional repository variables supply public endpoint configuration (`NEXT_PUBLIC_*` for web/desktop, `RECALL_API_URL` for desktop, and `EXPO_PUBLIC_*` for mobile). The web archive requires account and API services; mobile and Electron retain local study when those settings are unset. CI builds the web application and uploads one standalone server archive containing its browser assets and static app shell. Start the archive with `node apps/web/server.js` after extraction and configure its API services before signing in. **Local Supabase and backend integration** runs automatically for changes to backend, contracts, migrations, and shared sync/application packages, and can also be dispatched manually. It starts disposable Supabase and verifies real ASP.NET publishing routes. A separate **Backend contracts** workflow builds the .NET solution, checks generated schemas and shared fixtures, and verifies the live Development OpenAPI document. See [the contract bridge](docs/dotnet-contract-bridge.md) for `pnpm contracts:generate`, `pnpm contracts:check`, and the cross-language fixture commands. CI also captures the Storybook catalog for review.
 
-The manual desktop workflow can enable direct ChatGPT authorization for an eligible distribution. Signed desktop and EAS mobile release workflows remain opt-in and require their platform credentials. The default Android APK is for local installation, and the iOS archive is for a simulator; App Store/TestFlight and physical iOS installation require signed releases. Cross-platform workflows must run on GitHub before their resulting installers can be accepted; local source compilation alone does not establish native runtime behavior.
+Desktop development and packaged builds include direct ChatGPT authorization by default. Signed desktop and EAS mobile release workflows remain opt-in and require their platform credentials. The default Android APK is for local installation, and the iOS archive is for a simulator; App Store/TestFlight and physical iOS installation require signed releases. Cross-platform workflows must run on GitHub before their resulting installers can be accepted; local source compilation alone does not establish native runtime behavior.
 
-`pnpm lint` applies type-aware strict TypeScript rules to all three apps and shared core packages. The scheduler's use of ts-fsrs v5's deprecated `elapsed_days` field is narrowly exempted in package lint configuration because the current scheduler API still requires it; migrate that adapter when upgrading to v6.
+`pnpm typecheck` uses strict TypeScript across all apps and shared packages, including Storybook and TypeScript tooling configurations. `pnpm lint` applies the shared `strictTypeChecked` TypeScript ESLint preset and treats unhandled neverthrow results as errors (`neverthrow/must-use-result`) across `.ts`, `.tsx`, `.mts`, and `.cts` files. Effect remains the application error-handling abstraction. Explicit `any`, TypeScript error suppressions, and inline ESLint configuration are prohibited; lint commands allow zero warnings. `pnpm lint:config` verifies coverage of app, package, Storybook, and tooling files and checks that discarded results and promises are rejected. The neverthrow plugin uses `@eslint/compat` for ESLint 9 compatibility. The scheduler's use of ts-fsrs v5's deprecated `elapsed_days` field is narrowly exempted in package lint configuration because the current scheduler API still requires it; migrate that adapter when upgrading to v6.
 
 Shared layer ownership and allowed imports are documented in [architecture](docs/architecture.md); [sync protocol](docs/sync-protocol.md) describes coordination, event ordering and explicit conflict resolution. Design tokens have a canonical JSON source; `pnpm tokens:write` generates immutable TypeScript and web CSS variables, and `pnpm tokens:check` prevents drift.
+
+T3's `t3.json` commands include **Lint (strict TypeScript and neverthrow)**, **Typecheck**, and a separate **Check file size and indentation** command. Run the latter directly with `pnpm check:source-limits`, or pass source file paths for a focused check, for example `pnpm check:source-limits scripts/check-source-limits.mjs`. It checks tracked and untracked Git-visible source across project languages, including TypeScript/JavaScript, C#, SQL, Swift/Kotlin, Python, styles, HTML, shell, Gradle, and podspecs. Documentation, data/configuration files, generated output, and vendor files are excluded. The limits are 400 physical lines and eight indentation levels; a final newline does not add a line. Indentation counts leading whitespace on every nonblank line, including continuation lines, comments, and literal contents. C#, F#, Python, Java, Rust, and PHP use four spaces per level; other source languages use two, matching the project's TypeScript and native code. Tabs advance to the next indentation stop. The report has separate indentation and line-count sections, each sorted from highest to lowest with filename ordering for ties. Violations report file locations and exit with status 1; existing violations are reported without a baseline exemption. This check is independent of `pnpm lint` and `pnpm check`. Run `pnpm test:source-limits` to verify the checker itself.
 
 Web and native synchronization now use a shared Effect coordinator and reconciliation operations; platform adapters provide authentication, HTTP, media storage and explicit time/ID generation.
 
 Cloud synchronization saves the verified canonical account identity before uploading content, media or reviews. Native workspaces bound to a different account stay available for offline study and export; starting a separate workspace requires explicitly clearing local data. Web workspaces require an account and start from the server snapshot. Sync requests carry the expected account identity so a sign-in change cannot redirect an upload to another account.
+
+Tutor and Improve use a compact chat composer with an in-chat desktop model selector
+and a context-window pie. Desktop chat checks the exact request input-token count
+before generation and rejects requests above 100,000 tokens. The pie shows measured
+input usage for the latest request; its details include response tokens and reported
+cache reads/writes. Stable deck data and individual conversation messages retain
+separate boundaries for provider prompt caching. No saved chat transcript or local
+response cache is introduced. See [context limits and caching](docs/agent-chat-context-and-caching.md)
+for request behavior and the ChatGPT plan restriction on output-token limits.
+Improve answers direct questions and explanations before asking follow-ups, and
+proposes relevant cards as uncertainties emerge. Card editing keeps AI refinement
+shortcuts and custom instructions in one collapsible section, with suggested changes
+shown before they are applied.

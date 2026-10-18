@@ -1,11 +1,11 @@
-import { useState } from "react";
+import { useState, type ComponentProps } from "react";
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { Effect, Schema } from "effect";
 import { builtinActivityRegistry, type ActivityPlugin } from "@recall/application";
 import { Checkbox, Input, Label } from "@recall/ui-web";
 import { emptyActivityLibrary, type ActivityLibrary } from "@recall/domain";
-import { LearningActivitiesPanel } from "../components/knowledge/LearningActivitiesPanel";
-import { NativeLearningActivitiesPanel } from "../../../mobile/src/components/NativeLearningActivitiesPanel";
+import { LearningActivitiesPanel } from "../components/knowledge/activities/LearningActivitiesPanel";
+import { NativeLearningActivitiesPanel } from "../../../mobile/src/components/activities/NativeLearningActivitiesPanel";
 import { mockWorkspace } from "../features/workspace/mock-data";
 const area = mockWorkspace.areas[0];
 const meta = {
@@ -17,9 +17,41 @@ const meta = {
     cards: area?.cards ?? [],
     objectives: area?.objectives ?? [],
     createId: () => crypto.randomUUID(),
-    onSave: async () => true,
+    onSave: () => Promise.resolve(true),
   },
 } satisfies Meta<typeof LearningActivitiesPanel>;
+
+type CustomEstimateInteractionProps = Parameters<
+  NonNullable<ComponentProps<typeof LearningActivitiesPanel>["renderInteraction"]>
+>[0];
+
+function renderCustomEstimate({
+  activity,
+  response,
+  disabled,
+  onChange,
+}: CustomEstimateInteractionProps) {
+  if (activity.pluginId !== estimatePlugin.id) return null;
+  return (
+    <div className="grid gap-2">
+      <Label htmlFor="custom-estimate-response">
+        {typeof activity.payload.prompt === "string" ? activity.payload.prompt : "Estimate"}
+      </Label>
+      <Input
+        id="custom-estimate-response"
+        type="range"
+        min={0}
+        max={100}
+        disabled={disabled}
+        value={response.answers[0] || "50"}
+        onChange={(event) => {
+          onChange({ ...response, answers: [event.target.value] });
+        }}
+      />
+      <p>{response.answers[0] || "50"}%</p>
+    </div>
+  );
+}
 export default meta;
 type Story = StoryObj<typeof meta>;
 export const Web: Story = {
@@ -29,9 +61,9 @@ export const Web: Story = {
       <LearningActivitiesPanel
         {...args}
         library={library}
-        onSave={async (next) => {
+        onSave={(next) => {
           setLibrary(next);
-          return true;
+          return Promise.resolve(true);
         }}
       />
     );
@@ -45,9 +77,9 @@ export const Native: Story = {
       <NativeLearningActivitiesPanel
         {...args}
         library={library}
-        onSave={async (next) => {
+        onSave={(next) => {
           setLibrary(next);
-          return true;
+          return Promise.resolve(true);
         }}
       />
     );
@@ -63,17 +95,19 @@ export const SaveRecovery: Story = {
         <Label className="flex items-center gap-2">
           <Checkbox
             checked={failSaving}
-            onCheckedChange={(checked) => setFailSaving(checked === true)}
+            onCheckedChange={(checked) => {
+              setFailSaving(checked === true);
+            }}
           />
           Simulate unavailable storage
         </Label>
         <LearningActivitiesPanel
           {...args}
           library={library}
-          onSave={async (next) => {
-            if (failSaving) return false;
+          onSave={(next) => {
+            if (failSaving) return Promise.resolve(false);
             setLibrary(next);
-            return true;
+            return Promise.resolve(true);
           }}
         />
       </div>
@@ -129,7 +163,7 @@ const estimatePlugin: ActivityPlugin = {
         return Effect.succeed({
           evaluatorId: "example.estimate",
           evaluatorVersion: "1",
-          feedback: `Target: ${value.target}%. Your estimate: ${estimate}%.`,
+          feedback: `Target: ${String(value.target)}%. Your estimate: ${String(estimate)}%.`,
           evidence: activity.objectiveIds.map((objectiveId) => ({
             objectiveId,
             dimension: "application",
@@ -166,27 +200,11 @@ export const CustomPlugin: Story = {
         {...args}
         library={library}
         registry={[...builtinActivityRegistry, estimatePlugin]}
-        onSave={async (next) => {
+        onSave={(next) => {
           setLibrary(next);
-          return true;
+          return Promise.resolve(true);
         }}
-        renderInteraction={({ activity, response, disabled, onChange }) =>
-          activity.pluginId !== estimatePlugin.id ? null : (
-            <div className="grid gap-2">
-              <Label htmlFor="custom-estimate-response">{String(activity.payload.prompt)}</Label>
-              <Input
-                id="custom-estimate-response"
-                type="range"
-                min={0}
-                max={100}
-                disabled={disabled}
-                value={response.answers[0] || "50"}
-                onChange={(event) => onChange({ ...response, answers: [event.target.value] })}
-              />
-              <p>{response.answers[0] || "50"}%</p>
-            </div>
-          )
-        }
+        renderInteraction={renderCustomEstimate}
       />
     );
   },

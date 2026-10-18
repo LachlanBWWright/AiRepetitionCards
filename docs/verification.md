@@ -70,7 +70,7 @@ Use the existing local schema and a disposable test stack. The runner accepts on
 
 `pnpm --filter @recall/verification test:integration --check-config` validates configuration without contacting services. This only checks configuration shape; Supabase verifies the credentials during the actual suite. Integration files are excluded from `pnpm test`, but included in strict TypeScript, lint, formatting and policy checks.
 
-CI has a separate integration job that creates a fresh local Supabase stack, obtains its credentials without printing the status payload, runs the suite and stops the stack even after failure. This workflow source is not evidence that the integration suite has passed. No database commands were run in the implementation session.
+CI has a separate integration job that creates a fresh local Supabase stack, obtains its credentials without printing the status payload, runs the RLS suite and real ASP.NET publishing HTTP checks, and stops the stack even after failure. It runs automatically for backend, migration, contract, and shared application/sync changes, and supports manual dispatch. The separate backend contract job builds .NET, checks generated schema freshness and the shared TypeScript/C# fixture corpus, and verifies live OpenAPI metadata. See [the contract bridge](dotnet-contract-bridge.md) for local commands.
 
 The suite provisions isolated owner/stranger Auth accounts and proves each fixture has owner-visible data before checking anonymous/foreign denial across 16 private tables. It exercises authenticated content provisioning, foreign sync rejection, append-only table permissions, private/public/unlisted publication visibility, hidden capability digests, media ownership and path namespaces, referenced-media access, token rotation/revocation and denied deletion. Service credentials are used for fixture creation/cleanup, never as the ordinary owner or stranger. Cleanup targets only the generated fixture users, publication IDs and exact media paths.
 
@@ -104,3 +104,10 @@ There is no collaborator model in the current single-owner/private-fork scope. T
 These are executable examples and properties, not proof of every report invariant. Fake infrastructure does not verify Redis atomic scripts, Postgres/RLS, Storage policies, keyrings, real provider streams, real exported Anki archives, device power loss or signed artifacts. Contract coverage is still incomplete for all Route Handlers. Browser workflows must pass separately before claiming runtime UI coverage. The [completion audit](implementation-audit.md) remains the release ledger.
 
 To reproduce a property failure, preserve the printed seed/path and rerun the corresponding test. Add focused fixtures for a repaired regression; do not weaken the property or suppress lint to obtain a green run.
+
+## Source structure limits
+
+`pnpm check:source-limits` checks authored source for the 400-line and eight-level
+indentation limits. It runs in CI and at the start of `pnpm check:static`.
+`pnpm test:source-limits` verifies the checker itself. Extract focused components and
+workflow helpers when code reaches these limits; the checker includes new source files.

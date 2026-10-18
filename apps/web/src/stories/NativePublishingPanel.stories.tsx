@@ -9,7 +9,7 @@ import type { MediaStore } from "@recall/local-store";
 import type { PublicationForkOperationStore } from "@recall/application";
 import { createAssessmentId, createObjectiveId, type KnowledgeArea } from "@recall/domain";
 import { mockWorkspace } from "../features/workspace/mock-data";
-import { NativePublishingPanel } from "../../../mobile/src/components/NativePublishingPanel";
+import { NativePublishingPanel } from "../../../mobile/src/components/publishing/NativePublishingPanel";
 
 const workspaceArea = mockWorkspace.areas.find((item) => item.id === "area-biology");
 const decodedArea = workspaceArea
@@ -94,7 +94,7 @@ export const ShareAndReceive: Story = {
     publicationOperationStore: forkOperationStore,
     createPublishShareToken: () => "A".repeat(43),
     createForkOperationId: () => "00000000-0000-4000-8000-000000000900",
-    onFork: async () => true,
+    onFork: () => Promise.resolve(true),
   },
   globals: { viewport: { value: "recallMobile", isRotated: false } },
   render: (args) => (

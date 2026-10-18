@@ -129,7 +129,15 @@ export function scheduleReview(
     request_retention: Math.round(parameters.requestRetention * 10_000) / 10_000,
     enable_fuzz: false,
   });
-  return storeSchedule(scheduler.next(schedulerInput(schedule), now, ratingValue[rating]).card);
+  // Causal order can disagree with device/server timestamps after clock correction.
+  // Clamp only the derived scheduling time; callers retain the original event evidence.
+  const reviewAt =
+    typeof schedule.last_review === "string"
+      ? new Date(Math.max(now.getTime(), Date.parse(schedule.last_review)))
+      : now;
+  return storeSchedule(
+    scheduler.next(schedulerInput(schedule), reviewAt, ratingValue[rating]).card,
+  );
 }
 
 export function previewReviewSchedules(

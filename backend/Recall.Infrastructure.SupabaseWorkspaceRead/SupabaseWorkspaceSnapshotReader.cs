@@ -59,7 +59,8 @@ public sealed class SupabaseWorkspaceSnapshotReader(HttpClient httpClient) : IWo
         CancellationToken cancellationToken = default)
     {
         if (!context.ProjectUrl.IsAbsoluteUri ||
-            (context.ProjectUrl.Scheme != Uri.UriSchemeHttps && context.ProjectUrl.Host != "localhost") ||
+            (context.ProjectUrl.Scheme != Uri.UriSchemeHttps &&
+             !(context.ProjectUrl.Scheme == Uri.UriSchemeHttp && context.ProjectUrl.IsLoopback)) ||
             string.IsNullOrWhiteSpace(context.PublishableKey) ||
             string.IsNullOrWhiteSpace(context.AccessToken) ||
             context.UserId == Guid.Empty)

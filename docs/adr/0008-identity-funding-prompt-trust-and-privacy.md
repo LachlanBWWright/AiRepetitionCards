@@ -8,7 +8,7 @@ Supabase Auth is the canonical hosted identity on every platform. Website ChatGP
 
 Website session credentials remain in HttpOnly, SameSite=Lax cookies with Secure enabled in production. Browser account controls obtain only verified status and a display label from the server. Signing out clears the current application session; it preserves offline study data and does not revoke the user's OpenAI identity.
 
-Hosted tutoring uses the server API key. Eligible open-source desktop distributions can separately enable local ChatGPT plan inference; dynamic client registration and protected rotating tokens stay in Electron main. Website identity grants do not fund hosted tutoring. Native mobile ChatGPT registration remains disabled until a documented flow exists.
+Hosted tutoring uses the server API key. Eligible open-source desktop distributions can separately enable local ChatGPT plan inference; dynamic client registration and protected rotating tokens stay in Electron main. Website identity grants do not fund hosted tutoring. Rebuilt native mobile apps implement the same documented loopback registration flow with a platform callback module, OS signature verification and a separate SecureStore credential record. The login adapter does not require a Recall account; direct mobile tutor inference remains a separate integration step.
 
 Learning material and learner-authored AI instructions are untrusted data. The provider exposes no model database tools. Generated questions/evaluations/proposals pass shared schemas and objective checks. A learner must approve a proposal before it enters the durable card set; ordinary reviews invoke no model.
 

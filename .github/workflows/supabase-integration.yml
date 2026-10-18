@@ -1,10 +1,43 @@
-name: Optional local Supabase integration
+name: Local Supabase and backend integration
 
 on:
+  pull_request:
+    paths:
+      - "supabase/**"
+      - "backend/**"
+      - "contracts/**"
+      - "packages/contracts/**"
+      - "packages/domain/**"
+      - "packages/sync-core/**"
+      - "packages/infra-supabase/**"
+      - "packages/application/**"
+      - "packages/verification/**"
+      - "scripts/configure-integration-ci.mjs"
+      - "pnpm-lock.yaml"
+      - ".github/workflows/supabase-integration.yml"
+  push:
+    branches: [main]
+    paths:
+      - "supabase/**"
+      - "backend/**"
+      - "contracts/**"
+      - "packages/contracts/**"
+      - "packages/domain/**"
+      - "packages/sync-core/**"
+      - "packages/infra-supabase/**"
+      - "packages/application/**"
+      - "packages/verification/**"
+      - "scripts/configure-integration-ci.mjs"
+      - "pnpm-lock.yaml"
+      - ".github/workflows/supabase-integration.yml"
   workflow_dispatch:
 
 permissions:
   contents: read
+
+concurrency:
+  group: supabase-integration-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   integration:
@@ -21,12 +54,19 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
       - run: pnpm install --frozen-lockfile
       - name: Start disposable local Supabase
         run: pnpm exec supabase start > "$RUNNER_TEMP/recall-supabase-start.log" 2>&1
       - name: Configure isolated integration credentials
         run: node scripts/configure-integration-ci.mjs
       - run: pnpm test:integration
+      - name: Build API
+        run: dotnet build backend/Recall.sln --configuration Release
+      - name: Verify real ASP.NET publishing routes against disposable Supabase
+        run: python3 backend/scripts/verify-api.py --publishing
       - name: Stop disposable services
         if: always()
         run: pnpm exec supabase stop --no-backup

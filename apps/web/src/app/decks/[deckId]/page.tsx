@@ -1,8 +1,7 @@
 import Link from "next/link";
-import type { Route } from "next";
 import { Either, Schema } from "effect";
 import { DeckIdSchema } from "@recall/contracts";
-import { DeckLandingClient } from "@/components/publishing/DeckLandingClient";
+import { DeckLandingClient } from "@/components/publishing/sharing/DeckLandingClient";
 
 export default async function DeckLandingPage({
   params,
@@ -18,7 +17,7 @@ export default async function DeckLandingPage({
       <main className="mx-auto mt-12 w-full max-w-4xl space-y-4 rounded-xl border bg-card p-6">
         <h1 className="text-2xl font-semibold">Invalid deck link</h1>
         <p className="text-sm text-muted-foreground">Ask the sender for a complete deck link.</p>
-        <Link href={"/decks" as Route}>Browse decks</Link>
+        <Link href={"/decks"}>Browse decks</Link>
       </main>
     );
   }
@@ -26,10 +25,7 @@ export default async function DeckLandingPage({
   const token = typeof tokenValue === "string" && tokenValue.length <= 512 ? tokenValue : undefined;
   return (
     <main className="mx-auto min-h-screen w-full max-w-7xl space-y-6 px-4 py-8 sm:px-8">
-      <Link
-        className="text-sm text-muted-foreground hover:text-foreground"
-        href={"/decks" as Route}
-      >
+      <Link className="text-sm text-muted-foreground hover:text-foreground" href={"/decks"}>
         ← Discover decks
       </Link>
       <DeckLandingClient deckId={decoded.right} {...(token ? { token } : {})} />

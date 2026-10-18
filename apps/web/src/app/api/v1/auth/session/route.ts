@@ -24,7 +24,7 @@ async function handleGET(request: Request): Promise<Response> {
   if (
     Either.isLeft(verified) ||
     verified.right.error ||
-    verified.right.data.user?.id !== auth.userId
+    verified.right.data.user.id !== auth.userId
   )
     return privateJson({ error: "session-unavailable" }, { status: 502 });
 

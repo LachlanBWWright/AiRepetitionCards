@@ -4,6 +4,22 @@ import { Button } from "./Button";
 import { Dialog } from "./Dialog";
 import { StatusBadge } from "./StatusBadge";
 
+function DeleteAreaAction({
+  saving,
+  failed,
+  onDelete,
+}: {
+  readonly saving: boolean;
+  readonly failed: boolean;
+  readonly onDelete: () => void;
+}) {
+  return (
+    <Button variant="danger" disabled={saving} aria-busy={saving} onClick={onDelete}>
+      {saving ? "Deleting…" : failed ? "Try deleting again" : "Delete area"}
+    </Button>
+  );
+}
+
 function Confirmation({
   initialOpen = true,
   failed = false,
@@ -15,9 +31,19 @@ function Confirmation({
 }) {
   const [open, setOpen] = useState(initialOpen);
   const [deleted, setDeleted] = useState(false);
+  const keepArea = () => {
+    setOpen(false);
+  };
+  const deleteArea = () => {
+    if (failed) return;
+    setDeleted(true);
+    setOpen(false);
+  };
   return (
     <main className="mx-auto min-h-screen max-w-5xl space-y-6 bg-background px-5 py-8 text-foreground sm:px-8 sm:py-16">
-      <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">RECALL · SHARED UI</p>
+      <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+        RECALL · SHARED UI
+      </p>
       <h1>
         Your learning <em>library.</em>
       </h1>
@@ -42,7 +68,9 @@ function Confirmation({
           }}
         >
           <div className="w-full max-w-[440px] space-y-4 rounded-xl bg-card p-7">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">YOUR LIBRARY</p>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+              YOUR LIBRARY
+            </p>
             <h2 id="shared-dialog-title">Delete Biology foundations?</h2>
             <p>Its cards will leave your library. Your private review history stays saved.</p>
             {failed && (
@@ -51,28 +79,10 @@ function Confirmation({
               </p>
             )}
             <div className="mt-4 flex flex-wrap gap-2.5">
-              <Button
-                variant="secondary"
-                disabled={saving}
-                onClick={() => {
-                  setOpen(false);
-                }}
-              >
+              <Button variant="secondary" disabled={saving} onClick={keepArea}>
                 Keep area
               </Button>
-              <Button
-                variant="danger"
-                disabled={saving}
-                aria-busy={saving}
-                onClick={() => {
-                  if (!failed) {
-                    setDeleted(true);
-                    setOpen(false);
-                  }
-                }}
-              >
-                {saving ? "Deleting…" : failed ? "Try deleting again" : "Delete area"}
-              </Button>
+              <DeleteAreaAction saving={saving} failed={failed} onDelete={deleteArea} />
             </div>
           </div>
         </Dialog>

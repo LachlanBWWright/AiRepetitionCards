@@ -18,7 +18,9 @@ export const browserLocalBudget = createLocalBudgetService((update) =>
       const result = yield* update(state);
       if (result.state !== state)
         yield* Effect.try({
-          try: () => volatileStorage.setItem("recall-local-ai-usage", JSON.stringify(result.state)),
+          try: () => {
+            volatileStorage.setItem("recall-local-ai-usage", JSON.stringify(result.state));
+          },
           catch: () => localBudgetFailure(),
         });
       return result.value;

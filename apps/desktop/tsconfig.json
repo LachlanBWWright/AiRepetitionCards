@@ -19,6 +19,6 @@
     "types": ["node", "vite/client"],
     "paths": { "@/*": ["../web/src/*"] }
   },
-  "include": ["electron.vite.config.ts", "src/**/*.ts", "src/**/*.tsx"],
+  "include": ["**/*.ts", "**/*.tsx", "**/*.mts", "**/*.cts"],
   "exclude": ["node_modules"]
 }

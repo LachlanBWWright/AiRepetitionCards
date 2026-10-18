@@ -48,11 +48,11 @@ export const GET = observeRoute("tutor-retention", (request: NextRequest) =>
 );
 
 // Prevent Next's automatic HEAD handling from executing the cleanup GET.
-export const HEAD = observeRoute(
-  "tutor-retention",
-  async () =>
+export const HEAD = observeRoute("tutor-retention", () =>
+  Promise.resolve(
     new Response(null, {
       status: 405,
       headers: { Allow: "GET, POST", "Cache-Control": "private, no-store, max-age=0" },
     }),
+  ),
 );

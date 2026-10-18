@@ -22,12 +22,22 @@ export const browserPublicationOperationStore: PublicationOperationStore = {
     ),
   write: (id, value) =>
     coordinateLocalWrite(
-      Effect.try({ try: () => volatileStorage.setItem(key(id), value), catch: failure }),
+      Effect.try({
+        try: () => {
+          volatileStorage.setItem(key(id), value);
+        },
+        catch: failure,
+      }),
       failure,
     ),
   clear: (id) =>
     coordinateLocalWrite(
-      Effect.try({ try: () => volatileStorage.removeItem(key(id)), catch: failure }),
+      Effect.try({
+        try: () => {
+          volatileStorage.removeItem(key(id));
+        },
+        catch: failure,
+      }),
       failure,
     ),
 };

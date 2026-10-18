@@ -1,8 +1,10 @@
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import RecallDashboard from "../features/dashboard/RecallDashboard";
-import { DashboardView } from "../features/dashboard/dashboard-navigation";
-import { createObjectiveId, createReviewEventId } from "@recall/domain";
-import { caughtUpWorkspace, emptyWorkspace, mockWorkspace } from "../features/workspace/mock-data";
+import { DashboardView } from "../features/dashboard/navigation/dashboard-navigation";
+import type { Assessment } from "../features/workspace/types";
+import { createReviewEventId } from "@recall/domain";
+import { caughtUpWorkspace, mockWorkspace } from "../features/workspace/mock-data";
+import { authoredWorkspace } from "./RecallDashboard.story-fixtures";
 import {
   deletedCardPendingWorkspace,
   deletedAreaPendingWorkspace,
@@ -37,35 +39,24 @@ const reviewConflictWorkspace = {
   ...mockWorkspace,
   reviewConflictIds: firstReviewId ? [firstReviewId] : [],
 };
-const cellStructuresId = createObjectiveId("story-cell-structures");
-const authoredWorkspace = {
-  ...mockWorkspace,
-  areas: mockWorkspace.areas.map((area, index) =>
-    index === 0
-      ? {
-          ...area,
-          objectives: [
-            {
-              id: cellStructuresId,
-              title: "Cell structures",
-              description: "Explain how organelles support the cell.",
-              prerequisiteIds: [],
-            },
-          ],
-          ai: {
-            tutorInstructions: "Use short questions and everyday analogies.",
-            quizInstructions: null,
-            cardGenerationInstructions: "Keep each proposed card focused on one idea.",
-          },
-          cards: area.cards.map((card) => ({
-            ...card,
-            objectiveIds: [cellStructuresId],
-            tags: ["biology", "exam"],
-          })),
-        }
-      : area,
-  ),
+const clozeExample = {
+  text: "Mitochondria produce {{c1::ATP::energy molecule}} through {{c2::cellular respiration}}.",
+  deletionIndex: 1,
 };
+function withClozeExample(card: Assessment): Assessment {
+  return {
+    ...card,
+    front: "Mitochondria produce [energy molecule] through cellular respiration.",
+    back: "Mitochondria produce ATP through cellular respiration.",
+    cloze: clozeExample,
+  };
+}
+function withLatestAnswer(card: Assessment): Assessment {
+  return {
+    ...card,
+    back: "Latest synced answer: mitochondria produce ATP through cellular respiration.",
+  };
+}
 const clozeWorkspace = {
   ...authoredWorkspace,
   areas: authoredWorkspace.areas.map((area, index) =>
@@ -73,17 +64,7 @@ const clozeWorkspace = {
       ? {
           ...area,
           cards: area.cards.map((card, cardIndex) =>
-            cardIndex === 0
-              ? {
-                  ...card,
-                  front: "Mitochondria produce [energy molecule] through cellular respiration.",
-                  back: "Mitochondria produce ATP through cellular respiration.",
-                  cloze: {
-                    text: "Mitochondria produce {{c1::ATP::energy molecule}} through {{c2::cellular respiration}}.",
-                    deletionIndex: 1,
-                  },
-                }
-              : card,
+            cardIndex === 0 ? withClozeExample(card) : card,
           ),
         }
       : area,
@@ -208,9 +189,39 @@ export const CaughtUp: Story = {
 };
 
 export const Explore: Story = {
-  name: "Explore · learning areas",
+  name: "Library · deck collection",
   args: { demo: { workspace: mockWorkspace, view: DashboardView.Library } },
   globals: { viewport: { value: "recallDesktop", isRotated: false } },
+};
+
+export const LibraryDeckDetail: Story = {
+  name: "Library · open deck",
+  args: {
+    demo: {
+      workspace: authoredWorkspace,
+      view: DashboardView.Library,
+      selectedAreaId: "area-biology",
+    },
+  },
+  globals: { viewport: { value: "recallDesktop", isRotated: false } },
+};
+
+export const LibraryCollectionMobile: Story = {
+  name: "Library · deck collection on mobile",
+  args: { demo: { workspace: mockWorkspace, view: DashboardView.Library } },
+  globals: { viewport: { value: "recallMobile", isRotated: false } },
+};
+
+export const LibraryDeckDetailMobile: Story = {
+  name: "Library · open deck on mobile",
+  args: {
+    demo: {
+      workspace: authoredWorkspace,
+      view: DashboardView.Library,
+      selectedAreaId: "area-biology",
+    },
+  },
+  globals: { viewport: { value: "recallMobile", isRotated: false } },
 };
 
 export const EditLearningArea: Story = {
@@ -250,14 +261,7 @@ export const StaleCardDraft: Story = {
         ...authoredWorkspace,
         areas: authoredWorkspace.areas.map((area) => ({
           ...area,
-          cards: area.cards.map((card) =>
-            card.id === "bio-1"
-              ? {
-                  ...card,
-                  back: "Latest synced answer: mitochondria produce ATP through cellular respiration.",
-                }
-              : card,
-          ),
+          cards: area.cards.map((card) => (card.id === "bio-1" ? withLatestAnswer(card) : card)),
         })),
       },
       selectedAreaId: "area-biology",
@@ -321,100 +325,13 @@ export const ReviewSyncConflict: Story = {
   globals: { viewport: { value: "recallDesktop", isRotated: false } },
 };
 
-export const DifferentAccountWorkspace: Story = {
-  name: "Today · different account workspace",
-  args: {
-    demo: {
-      workspace: { ...mockWorkspace, syncOwnerId: "87654321-4321-4321-8321-abcdefabcdef" },
-      syncAccountState: "account-mismatch",
-    },
-  },
-  globals: { viewport: { value: "recallDesktop", isRotated: false } },
-};
-
-export const LegacyAccountAdoption: Story = {
-  name: "Today · confirm older workspace ownership",
-  args: {
-    demo: {
-      workspace: { ...mockWorkspace, syncCursor: "12" },
-      syncAccountState: "owner-adoption-required",
-    },
-  },
-  globals: { viewport: { value: "recallDesktop", isRotated: false } },
-};
-
-export const AccountBindingStorageFailure: Story = {
-  name: "Today · account binding storage failure",
-  args: { demo: { workspace: mockWorkspace, syncAccountState: "ownership-checkpoint" } },
-  globals: { viewport: { value: "recallDesktop", isRotated: false } },
-};
-
-export const EmptyLibrary: Story = {
-  name: "Today · empty library",
-  args: { demo: { workspace: emptyWorkspace } },
-  globals: { viewport: { value: "recallDesktop", isRotated: false } },
-};
-
-const originalAreaDraft = authoredWorkspace.areas.find((area) => area.id === "area-biology");
-export const StaleAreaDraft: Story = {
-  name: "Library · changed area preserves draft",
-  args: {
-    demo: {
-      workspace: {
-        ...authoredWorkspace,
-        areas: authoredWorkspace.areas.map((area) =>
-          area.id === "area-biology"
-            ? {
-                ...area,
-                title: "Biology: latest synced revision",
-                description: "Updated goals from another device.",
-                tags: ["biology", "updated"],
-              }
-            : area,
-        ),
-      },
-      editAreaId: "area-biology",
-      ...(originalAreaDraft ? { areaDraft: originalAreaDraft } : {}),
-      areaEditFailure: "stale-content",
-      view: DashboardView.Library,
-    },
-  },
-  globals: { viewport: { value: "recallDesktop", isRotated: false } },
-};
-export const AreaSaveFailure: Story = {
-  name: "Library · area save failure preserves draft",
-  args: {
-    demo: {
-      workspace: authoredWorkspace,
-      editAreaId: "area-biology",
-      ...(originalAreaDraft ? { areaDraft: originalAreaDraft } : {}),
-      areaEditFailure: "storage",
-      view: DashboardView.Library,
-    },
-  },
-  globals: { viewport: { value: "recallDesktop", isRotated: false } },
-};
-export const AreaDeletionFailure: Story = {
-  name: "Library · retry failed area deletion",
-  args: {
-    demo: {
-      workspace: authoredWorkspace,
-      selectedAreaId: "area-biology",
-      deletionFailure: "area",
-      view: DashboardView.Library,
-    },
-  },
-  globals: { viewport: { value: "recallDesktop", isRotated: false } },
-};
-export const CardDeletionFailure: Story = {
-  name: "Library · retry failed card deletion",
-  args: {
-    demo: {
-      workspace: authoredWorkspace,
-      selectedAreaId: "area-biology",
-      deletionFailure: "card",
-      view: DashboardView.Library,
-    },
-  },
-  globals: { viewport: { value: "recallDesktop", isRotated: false } },
-};
+export {
+  DifferentAccountWorkspace,
+  LegacyAccountAdoption,
+  AccountBindingStorageFailure,
+  EmptyLibrary,
+  StaleAreaDraft,
+  AreaSaveFailure,
+  AreaDeletionFailure,
+  CardDeletionFailure,
+} from "./RecallDashboard.recovery-stories";

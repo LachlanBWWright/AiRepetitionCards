@@ -1,0 +1,5 @@
+{
+  "platforms": ["apple", "android"],
+  "apple": { "modules": ["RecallChatGPTModule"] },
+  "android": { "modules": ["expo.modules.recallchatgpt.RecallChatGPTModule"] }
+}

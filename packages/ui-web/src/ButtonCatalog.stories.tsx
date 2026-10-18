@@ -24,11 +24,15 @@ export const FullScreenCatalog: Story = {
   parameters: { layout: "fullscreen" },
   render: () => (
     <main className="mx-auto min-h-screen max-w-5xl space-y-6 bg-background px-5 py-8 text-foreground sm:px-8 sm:py-16">
-      <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">RECALL · DESIGN SYSTEM</p>
+      <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+        RECALL · DESIGN SYSTEM
+      </p>
       <h1>
         Actions that feel <em>clear.</em>
       </h1>
-      <p className="text-sm text-muted-foreground">A small button set for focused study workflows.</p>
+      <p className="text-sm text-muted-foreground">
+        A small button set for focused study workflows.
+      </p>
       <div className="mt-8 grid grid-cols-1 gap-3 sm:grid-cols-2 [&>section]:min-h-[150px] [&>section]:rounded-xl [&>section]:border [&>section]:bg-card [&>section]:p-5 [&>section>h2]:m-0 [&>section>h2]:text-sm [&>section>p]:my-2 [&>section>p]:text-xs [&>section>p]:text-muted-foreground">
         <section>
           <h2>Primary</h2>

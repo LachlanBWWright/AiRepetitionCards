@@ -11,7 +11,10 @@
     "dev:api:desktop": "node scripts/dev-with-api.mjs desktop",
     "build:desktop": "turbo run build --filter=desktop",
     "package:desktop": "pnpm --filter desktop package",
-    "lint": "turbo run lint lint:packages",
+    "lint": "pnpm lint:config && turbo run lint lint:packages",
+    "lint:config": "node scripts/check-lint-config.mjs",
+    "check:source-limits": "node scripts/check-source-limits.mjs",
+    "test:source-limits": "node --test scripts/check-source-limits.test.mjs",
     "policy": "node scripts/generate-design-tokens.mjs --check && node scripts/check-policy.mjs && node scripts/check-migrations.mjs",
     "typecheck": "turbo run typecheck",
     "dev:mobile": "pnpm --filter mobile start",
@@ -30,21 +33,25 @@
     "tokens:write": "node scripts/generate-design-tokens.mjs",
     "tokens:check": "node scripts/generate-design-tokens.mjs --check",
     "policy:static": "node scripts/generate-design-tokens.mjs --check && node scripts/check-policy.mjs",
-    "check:static": "pnpm policy:static && pnpm typecheck && pnpm lint && pnpm format:check && pnpm build:all && pnpm build-storybook",
+    "check:static": "pnpm check:source-limits && pnpm test:source-limits && pnpm policy:static && pnpm typecheck && pnpm lint && pnpm format:check && pnpm build:all && pnpm build-storybook",
     "test": "pnpm --filter @recall/verification test",
     "test:integration": "pnpm --filter @recall/verification test:integration",
     "test:local-integration": "pnpm --filter @recall/verification test:local-integration",
     "test:e2e": "pnpm --filter web test:e2e",
     "check:pure": "pnpm test && pnpm test:local-integration && pnpm check:static",
     "check": "pnpm test && pnpm test:local-integration && pnpm test:integration && pnpm check:static",
-    "test:code-runner": "pnpm --filter @recall/verification test:code-runner"
+    "test:code-runner": "pnpm --filter @recall/verification test:code-runner",
+    "contracts:generate": "pnpm --filter @recall/verification contracts:generate",
+    "contracts:check": "pnpm --filter @recall/verification contracts:check"
   },
   "devDependencies": {
+    "@eslint/compat": "^2.1.1",
     "eslint": "^9.39.5",
+    "eslint-plugin-neverthrow": "^1.1.4",
     "supabase": "2.119.0",
-    "typescript-eslint": "^8.71.0",
     "turbo": "2.11.7",
-    "typescript": "5.9.3"
+    "typescript": "5.9.3",
+    "typescript-eslint": "^8.71.0"
   },
   "pnpm": {
     "onlyBuiltDependencies": [

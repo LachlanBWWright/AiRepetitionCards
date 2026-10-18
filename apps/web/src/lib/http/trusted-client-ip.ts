@@ -43,7 +43,7 @@ function canonicalAddress(value: string): string | null {
     const high = words[6];
     const low = words[7];
     if (high === undefined || low === undefined) return null;
-    return `ipv4:${high >> 8}.${high & 255}.${low >> 8}.${low & 255}`;
+    return `ipv4:${String(high >> 8)}.${String(high & 255)}.${String(low >> 8)}.${String(low & 255)}`;
   }
   return `ipv6:${words.map((word) => word.toString(16).padStart(4, "0")).join(":")}`;
 }

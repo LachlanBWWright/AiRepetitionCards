@@ -3,62 +3,17 @@
 
 from __future__ import annotations
 
-import json
 import os
 import secrets
 import sys
-import urllib.error
 import urllib.parse
-import urllib.request
 import uuid
 from typing import Any
 
-
-class CheckFailure(Exception):
-    pass
-
-
-class NoRedirect(urllib.request.HTTPRedirectHandler):
-    def redirect_request(self, req, fp, code, msg, headers, newurl):
-        return None
-
-
-OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect())
-
-
-def require(condition: bool, message: str) -> None:
-    if not condition:
-        raise CheckFailure(message)
-
-
-def loopback_origin(name: str) -> str:
-    value = os.environ.get(name, "").strip()
-    require(bool(value), f"Set {name} to an explicit loopback origin.")
-    try:
-        parsed = urllib.parse.urlsplit(value)
-        port = parsed.port
-    except ValueError:
-        raise CheckFailure(f"{name} must be a valid loopback HTTP(S) origin.") from None
-    require(
-        parsed.scheme in ("http", "https")
-        and parsed.hostname in ("localhost", "127.0.0.1", "::1")
-        and parsed.username is None
-        and parsed.password is None
-        and parsed.path in ("", "/")
-        and parsed.query == ""
-        and parsed.fragment == ""
-        and (port is None or 1 <= port <= 65535),
-        f"{name} must be a loopback HTTP(S) origin without credentials, path, query, or fragment.",
-    )
-    host = f"[{parsed.hostname}]" if ":" in (parsed.hostname or "") else parsed.hostname
-    return f"{parsed.scheme}://{host}" + (f":{port}" if port is not None else "")
-
-
-def required_secret(name: str) -> str:
-    value = os.environ.get(name, "")
-    require(bool(value) and value == value.strip(), f"Set {name} explicitly without surrounding whitespace.")
-    return value
-
+from verify_deck_sharing_http import (
+    CheckFailure, checked, loopback_origin, request, require, required_secret,
+)
+from verify_deck_sharing_publication import verify_publication_and_following
 
 SUPABASE_URL = ""
 API_URL = ""
@@ -70,52 +25,6 @@ created_users: list[str] = []
 area_ids: list[str] = []
 publication_ids: list[str] = []
 run_id = str(uuid.uuid4())
-
-
-def request(
-    origin: str,
-    path: str,
-    method: str = "GET",
-    body: Any = None,
-    token: str | None = None,
-    apikey: str | None = None,
-) -> tuple[int, Any]:
-    headers = {"Accept": "application/json"}
-    payload = None
-    if body is not None:
-        headers["Content-Type"] = "application/json"
-        payload = json.dumps(body, separators=(",", ":")).encode("utf-8")
-    if token:
-        headers["Authorization"] = f"Bearer {token}"
-    if apikey:
-        headers["apikey"] = apikey
-    req = urllib.request.Request(origin + path, data=payload, headers=headers, method=method)
-    try:
-        with OPENER.open(req, timeout=20) as response:
-            raw = response.read(1_048_577)
-            require(len(raw) <= 1_048_576, "Integration response exceeded its bound.")
-            if not raw:
-                return response.status, None
-            content_type = response.headers.get("Content-Type", "")
-            return response.status, json.loads(raw) if "json" in content_type.lower() else None
-    except urllib.error.HTTPError as error:
-        raw = error.read(1_048_577)
-        require(len(raw) <= 1_048_576, "Integration error response exceeded its bound.")
-        content_type = error.headers.get("Content-Type", "")
-        try:
-            payload_value = json.loads(raw) if "json" in content_type.lower() and raw else None
-        except (UnicodeDecodeError, json.JSONDecodeError):
-            payload_value = None
-        return error.code, payload_value
-    except (OSError, TimeoutError, UnicodeDecodeError, json.JSONDecodeError):
-        raise CheckFailure("Integration request could not complete or returned invalid JSON.") from None
-
-
-def checked(label: str, result: tuple[int, Any], statuses: tuple[int, ...]) -> Any:
-    status, body = result
-    print(f"{label}: HTTP {status}")
-    require(status in statuses, f"{label} returned an unexpected HTTP status.")
-    return body
 
 
 def api(path: str, method: str = "GET", body: Any = None, token: str | None = None) -> tuple[int, Any]:
@@ -215,7 +124,7 @@ def cleanup() -> list[str]:
 def run() -> None:
     health = checked("ASP.NET health", api("/health"), (200,))
     del health
-    _, owner_token = actor("owner")
+    owner_id, owner_token = actor("owner")
     _, viewer_token = actor("viewer")
     area_id = str(uuid.uuid4())
     area_ids.append(area_id)
@@ -229,6 +138,7 @@ def run() -> None:
         "title": "Deck sharing HTTP fixture",
         "description": "Isolated loopback-only integration fixture",
         "language": "en",
+        "difficulty": "beginner",
         "objectives": [{"id": objective_id, "title": "Fixture objective", "description": None,
                         "prerequisiteIds": []}],
         "ai": {"tutorInstructions": "", "quizInstructions": None,
@@ -270,138 +180,19 @@ def run() -> None:
         ],
     }
 
-    authored = checked(
-        "Author through ASP.NET workspace",
-        api("/api/v1/workspace", "POST", {"schemaVersion": 1, "areas": [
-            {"document": document, "color": "#123456", "baseContentHash": None}],
-            "tombstones": []}, owner_token),
-        (200,),
+    version_id, update_version_id, publication_request = verify_publication_and_following(
+        api,
+        owner_id=owner_id,
+        owner_token=owner_token,
+        viewer_token=viewer_token,
+        document=document,
+        area_id=area_id,
+        card_id=card_id,
+        activity_id=activity_id,
+        unknown_activity_id=unknown_activity_id,
+        area_ids=area_ids,
+        publication_ids=publication_ids,
     )
-    require(isinstance(authored, dict), "Workspace write response was invalid.")
-    publication_operation_id = str(uuid.uuid4())
-    publication_request = {
-        "schemaVersion": 1,
-        "operationId": publication_operation_id,
-        "sourceAreaId": area_id,
-        "content": document,
-        "visibility": "public",
-        "license": "CC0-1.0",
-        "attribution": None,
-        "reuseConfirmed": True,
-    }
-    published = checked(
-        "Publish through ASP.NET",
-        api("/api/v1/knowledge-areas", "POST", publication_request, owner_token),
-        (200, 201),
-    )
-    require(isinstance(published, dict) and isinstance(published.get("version"), dict),
-            "Publication response did not include its immutable version.")
-    version_id = str(uuid.UUID(published["version"].get("id", "")))
-    publication_ids.append(version_id)
-    replay = checked(
-        "Replay publication operation",
-        api("/api/v1/knowledge-areas", "POST", publication_request, owner_token),
-        (200,),
-    )
-    require(isinstance(replay, dict) and isinstance(replay.get("version"), dict)
-            and replay["version"].get("id") == version_id,
-            "Publication replay did not return the original immutable version.")
-    changed_operation = {**publication_request, "visibility": "private"}
-    checked(
-        "Reject conflicting publication operation reuse",
-        api("/api/v1/knowledge-areas", "POST", changed_operation, owner_token),
-        (409,),
-    )
-
-    discovery = checked("Public discovery", api("/api/v1/decks?q=Deck%20sharing%20HTTP"), (200,))
-    require(isinstance(discovery, dict), "Public discovery response was invalid.")
-    catalog_deck = next(
-        (deck for deck in discovery.get("decks", []) if isinstance(deck, dict) and deck.get("id") == area_id),
-        None,
-    )
-    require(catalog_deck is not None, "Public discovery omitted the fixture deck.")
-    require("ownerId" not in catalog_deck and "owner_id" not in catalog_deck,
-            "Public discovery disclosed owner identity.")
-    detail = checked("Stable public deck detail", api(f"/api/v1/decks/{area_id}"), (200,))
-    require(isinstance(detail, dict) and isinstance(detail.get("deck"), dict)
-            and detail["deck"].get("id") == area_id, "Deck detail response identity was invalid.")
-    require("ownerId" not in detail["deck"] and "owner_id" not in detail["deck"],
-            "Public deck detail disclosed owner identity.")
-
-    checked("Retired named-access GET route", api(f"/api/v1/decks/{area_id}/access", token=owner_token), (404,))
-    checked("Retired named-access PUT route", api(f"/api/v1/decks/{area_id}/access", "PUT",
-        {"userId": str(uuid.uuid4()), "role": "viewer"}, owner_token), (404,))
-    checked("Retired named-access DELETE route", api(f"/api/v1/decks/{area_id}/access/{uuid.uuid4()}",
-        "DELETE", token=owner_token), (404,))
-
-    fork = checked(
-        "Fork through ASP.NET",
-        api(f"/api/v1/published/{version_id}/fork", "POST",
-            {"schemaVersion": 1, "operationId": str(uuid.uuid4())}, viewer_token),
-        (200,),
-    )
-    require(isinstance(fork, dict) and isinstance(fork.get("areaId"), str)
-            and isinstance(fork.get("document"), dict)
-            and fork["document"].get("forkedFromVersionId") == version_id,
-            "Fork response did not preserve its source lineage.")
-    fork_area_id = str(uuid.UUID(fork["areaId"]))
-    area_ids.append(fork_area_id)
-    fork_document = fork["document"]
-    fork_activities = fork_document.get("activities")
-    require(isinstance(fork_activities, list) and len(fork_activities) == 2,
-            "Fork did not preserve portable activity definitions.")
-    fork_builtin = next((item for item in fork_activities if item.get("pluginId") == "recall.basic"), None)
-    fork_unknown = next((item for item in fork_activities if item.get("pluginId") == "community.diagram"), None)
-    require(isinstance(fork_builtin, dict) and isinstance(fork_unknown, dict),
-            "Fork lost a built-in or unknown plugin definition.")
-    fork_objective_id = fork_document["objectives"][0]["id"]
-    fork_card_id = fork_document["cards"][0]["id"]
-    require(fork_builtin.get("id") != activity_id and fork_builtin.get("areaId") == fork_area_id
-            and fork_builtin.get("objectiveIds") == [fork_objective_id]
-            and fork_builtin.get("payload", {}).get("cardId") == fork_card_id,
-            "Fork did not remap built-in activity identities and card references.")
-    require(fork_unknown.get("id") != unknown_activity_id and fork_unknown.get("areaId") == fork_area_id
-            and fork_unknown.get("payload") == {"opaque": {"cardId": card_id, "nodes": ["A", True, None, 3]}},
-            "Fork did not preserve the opaque unknown-plugin payload.")
-
-    followed = checked(
-        "Follow personal fork",
-        api("/api/v1/deck-subscriptions", "PUT", {
-            "deckId": area_id, "areaId": fork_area_id,
-            "versionId": version_id, "following": True,
-        }, viewer_token),
-        (200,),
-    )
-    require(isinstance(followed, dict), "Subscription response was invalid.")
-
-    update_request = {
-        **publication_request,
-        "operationId": str(uuid.uuid4()),
-        "releaseNotes": "A public release for the inbox.",
-    }
-    updated_publication = checked(
-        "Publish a later public release",
-        api("/api/v1/knowledge-areas", "POST", update_request, owner_token),
-        (200, 201),
-    )
-    require(isinstance(updated_publication, dict) and isinstance(updated_publication.get("version"), dict),
-            "Later public release response was invalid.")
-    update_version_id = str(uuid.UUID(updated_publication["version"].get("id", "")))
-    publication_ids.append(update_version_id)
-    updates = checked("Read followed-deck updates", api("/api/v1/deck-subscriptions/updates", token=viewer_token), (200,))
-    require(isinstance(updates, dict) and isinstance(updates.get("updates"), list), "Updates inbox response was invalid.")
-    update = next((item for item in updates["updates"] if isinstance(item, dict) and item.get("areaId") == fork_area_id), None)
-    require(update is not None and update.get("deckId") == area_id and update.get("knownVersionId") == version_id
-            and update.get("latestVersionId") == update_version_id and update.get("releaseNotes") == update_request["releaseNotes"]
-            and update.get("seen") is False, "Updates inbox omitted or misidentified the later public release.")
-    read_updates = checked("Acknowledge followed-deck update", api(
-        f"/api/v1/deck-subscriptions/{fork_area_id}/updates/read", "POST",
-        {"versionId": update_version_id}, viewer_token), (200,))
-    require(isinstance(read_updates, dict) and any(
-        isinstance(item, dict) and item.get("areaId") == fork_area_id
-        and item.get("latestVersionId") == update_version_id and item.get("seen") is True
-        for item in read_updates.get("updates", [])), "Update acknowledgment did not return its read marker.")
-
     feedback_id = str(uuid.uuid4())
     feedback = {"id": feedback_id, "versionId": version_id, "cardId": card_id,
                 "message": "Please clarify this question.", "kind": "suggestion"}
@@ -499,6 +290,11 @@ def run() -> None:
 
     blocked = checked("Block publisher", api(f"/api/v1/decks/{area_id}/block", "POST", token=viewer_token), (200,))
     require(isinstance(blocked, dict) and blocked.get("blocked") is True, "Publisher block was not confirmed.")
+    blocked_catalog = checked("Blocked publisher hidden from catalog", api(
+        "/api/v1/decks?" + urllib.parse.urlencode({"q": "Deck sharing HTTP fixture"}), token=viewer_token), (200,))
+    require(isinstance(blocked_catalog, dict) and all(
+        not isinstance(deck, dict) or deck.get("id") != area_id for deck in blocked_catalog.get("decks", [])
+    ), "Blocking a publisher did not hide its public deck from discovery.")
     blocked_updates = checked("Updates hidden after publisher block", api("/api/v1/deck-subscriptions/updates", token=viewer_token), (200,))
     require(isinstance(blocked_updates, dict) and not any(
         isinstance(item, dict) and item.get("deckId") == area_id
@@ -520,6 +316,11 @@ def run() -> None:
     checked("Exact unlisted version link", api(
         f"/api/v1/published/{old_unlisted_id}?token={urllib.parse.quote(old_unlisted_token)}"), (200,))
     checked("Public deck detail stays hidden after unlisted release", api(f"/api/v1/decks/{area_id}"), (404,))
+    unlisted_catalog = checked("Unlisted deck stays out of public discovery", api(
+        "/api/v1/decks?" + urllib.parse.urlencode({"q": "Deck sharing HTTP fixture"})), (200,))
+    require(isinstance(unlisted_catalog, dict) and all(
+        not isinstance(deck, dict) or deck.get("id") != area_id for deck in unlisted_catalog.get("decks", [])
+    ), "Exact link sharing also appeared in public discovery.")
 
     latest_unlisted_token = secrets.token_urlsafe(32)
     latest_unlisted_request = {**publication_request, "operationId": str(uuid.uuid4()), "visibility": "unlisted",
@@ -555,8 +356,8 @@ def run() -> None:
     require(isinstance(link_unblock, dict) and link_unblock.get("blocked") is False,
             "Unlisted token did not authorize publisher unblock.")
 
-    checked("Withdraw shared deck", api(f"/api/v1/decks/{area_id}", "PATCH",
-                                         {"status": "withdrawn"}, owner_token), (200,))
+    withdrawal = api(f"/api/v1/decks/{area_id}", "PATCH", {"status": "withdrawn"}, owner_token)
+    checked("Withdraw shared deck", withdrawal, (200,))
     checked("Withdrawal hides anonymous version", api(f"/api/v1/published/{version_id}"), (404,))
     checked("Withdrawal hides follower version without capability",
             api(f"/api/v1/published/{version_id}", token=viewer_token), (404,))

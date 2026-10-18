@@ -10,9 +10,9 @@ const mockWorkspaceValue = {
   schemaVersion: 1,
   reviews: 12,
   reviewEvents: Array.from({ length: 12 }, (_, index) => ({
-    id: `mock-review-${index + 1}`,
+    id: `mock-review-${String(index + 1)}`,
     areaId: "area-biology",
-    cardId: `bio-${(index % 2) + 1}`,
+    cardId: `bio-${String((index % 2) + 1)}`,
     ratedAt: "2026-10-02T09:00:00.000Z",
     rating: index % 4 === 0 ? ("hard" as const) : ("good" as const),
     schedulerFamily: "fsrs" as const,

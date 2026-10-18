@@ -1298,21 +1298,30 @@ export type Database = {
       };
       list_public_shared_decks: {
         Args: {
+          p_activity_type?: string;
           p_cursor?: string;
+          p_difficulty?: string;
           p_language?: string;
           p_limit?: number;
+          p_max_minutes?: number;
+          p_min_minutes?: number;
           p_q?: string;
           p_tag?: string;
         };
         Returns: {
+          activity_types: string[];
           attribution: string;
           author_name: string;
           card_count: number;
+          card_types: string[];
           deck_id: string;
           description: string;
+          difficulty: string;
+          estimated_minutes: number;
           language: string;
           latest_version_id: string;
           license: string;
+          preview: Json;
           status: string;
           tags: string[];
           title: string;
@@ -1406,15 +1415,20 @@ export type Database = {
       read_shared_deck: {
         Args: { p_deck_id: string; p_requester_id?: string; p_share_token_hash?: string };
         Returns: {
+          activity_types: string[];
           attribution: string;
           author_name: string;
           card_count: number;
+          card_types: string[];
           deck_id: string;
           description: string;
+          difficulty: string;
+          estimated_minutes: number;
           language: string;
           latest_version_id: string;
           license: string;
           owner_id: string;
+          preview: Json;
           status: string;
           tags: string[];
           title: string;

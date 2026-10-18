@@ -16,7 +16,11 @@ export function EmptyState({
 }) {
   return (
     <div className={cn("text-center", className)}>
-      {icon && <span className="mb-2 block text-2xl text-primary" aria-hidden="true">{icon}</span>}
+      {icon && (
+        <span className="mb-2 block text-2xl text-primary" aria-hidden="true">
+          {icon}
+        </span>
+      )}
       <h3 className="my-2 text-lg font-semibold">{title}</h3>
       <p className="mb-3 text-sm text-muted-foreground">{description}</p>
       {action}

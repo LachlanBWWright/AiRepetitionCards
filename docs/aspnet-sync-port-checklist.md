@@ -53,7 +53,7 @@ This checklist captures the behavior an ASP.NET Core implementation must preserv
 
 ## Verification scenarios
 
-Run existing compatibility tests as a baseline and add/use equivalent tests against the .NET API and real persistence adapter. `packages/verification/tests/workspace-sync.test.ts` currently covers:
+Run existing compatibility tests as a baseline and add/use equivalent tests against the .NET API and real persistence adapter. `packages/verification/tests/workspace/workspace-sync.test.ts` currently covers:
 
 - [ ] Durable fresh-owner checkpoint before content/media/review writes; checkpoint failure and account mismatch block writes.
 - [ ] Lost review response followed by idempotent retry; canonical receipt repairs effective/rated time even when the pull cursor has passed the event.

@@ -69,11 +69,9 @@ test("global search finds saved notebook content, filters kinds, and opens the m
     await suggestions.getByLabel("Show", { exact: true }).selectOption("suggestion");
     await suggestions.getByRole("button", { name: /How are goroutines multiplexed\?/ }).click();
     await page.getByRole("heading", { name: "Tutor", exact: true }).waitFor();
-    await page.getByRole("button", { name: "Review suggestions", exact: true }).waitFor();
+    await page.getByRole("tab", { name: /Suggestions/ }).waitFor();
     assert.equal(
-      await page
-        .getByRole("button", { name: "Review suggestions", exact: true })
-        .getAttribute("aria-pressed"),
+      await page.getByRole("tab", { name: /Suggestions/ }).getAttribute("aria-selected"),
       "true",
     );
     await page.getByText("How are goroutines multiplexed?", { exact: true }).waitFor();
@@ -153,7 +151,7 @@ test("a source passage search opens study materials without generating or saving
     await page.getByRole("heading", { name: "Tutor", exact: true }).waitFor();
     const materials = page.getByRole("button", { name: "Study materials", exact: true });
     await materials.waitFor();
-    assert.equal(await materials.getAttribute("aria-pressed"), "true");
+    assert.equal(await materials.getAttribute("aria-selected"), "true");
     await page
       .getByText("A goroutine runs concurrently with other goroutines.", { exact: true })
       .waitFor();

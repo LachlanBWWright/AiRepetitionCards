@@ -6,12 +6,27 @@ import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
+async function discoverTests(directory, prefix = "") {
+  const entries = await readdir(directory, { withFileTypes: true });
+  const groups = await Promise.all(
+    entries.map(async (entry) => {
+      const name = prefix ? prefix + "/" + entry.name : entry.name;
+      if (entry.isDirectory()) return discoverTests(path.join(directory, entry.name), name);
+      return entry.isFile() && entry.name.endsWith(".test.ts") ? [name] : [];
+    }),
+  );
+  return groups.flat().sort();
+}
+
 export async function runSuite(directory, requested) {
-  const available = (await readdir(path.join(root, directory)))
-    .filter((name) => name.endsWith(".test.ts"))
-    .sort();
-  const files = available.filter((name) => requested.length === 0 || requested.includes(name));
-  if (files.length === 0 || requested.some((name) => !available.includes(name))) {
+  const available = await discoverTests(path.join(root, directory));
+  const selections = requested.map((name) =>
+    available.filter(
+      (file) => file === name || (!name.includes("/") && path.basename(file) === name),
+    ),
+  );
+  const files = requested.length === 0 ? available : [...new Set(selections.flat())];
+  if (files.length === 0 || selections.some((matches) => matches.length !== 1)) {
     process.stderr.write("No regression checks found.\n");
     process.exitCode = 1;
   } else {
@@ -21,6 +36,7 @@ export async function runSuite(directory, requested) {
         absWorkingDir: root,
         entryPoints: files.map((name) => path.join(directory, name)),
         outdir: output,
+        outbase: path.join(root, directory),
         bundle: true,
         platform: "node",
         conditions: ["react-server"],

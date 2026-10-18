@@ -1,6 +1,6 @@
 import { useState, type ComponentProps } from "react";
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
-import { NativeCardHistoryPanel } from "../../../mobile/src/components/NativeCardHistoryPanel";
+import { NativeCardHistoryPanel } from "../../../mobile/src/components/review/NativeCardHistoryPanel";
 import { mockWorkspace } from "../features/workspace/mock-data";
 import type { Workspace } from "@recall/domain";
 const area = mockWorkspace.areas[0];
@@ -59,9 +59,9 @@ function ObservedRestore(args: ComponentProps<typeof NativeCardHistoryPanel>) {
     <>
       <NativeCardHistoryPanel
         {...args}
-        onRestore={(command, baseline) =>
-          setRestored(JSON.stringify({ command, baselineCaptured: baseline !== undefined }))
-        }
+        onRestore={(command, baseline) => {
+          setRestored(JSON.stringify({ command, baselineCaptured: baseline !== undefined }));
+        }}
       />
       {restored && (
         <output role="status" aria-label="Restore result">

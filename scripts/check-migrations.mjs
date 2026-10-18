@@ -67,7 +67,7 @@ const functions = [
 ];
 for (const match of functions) {
   const start = match.index;
-  const headerEnd = sql.indexOf("as $$", start);
+  const headerEnd = sql.toLowerCase().indexOf("as $$", start);
   const definition = sql.slice(start, headerEnd < 0 ? sql.length : headerEnd);
   if (!/\bsecurity\s+definer\b/i.test(definition)) continue;
   const functionName = match[1].toLowerCase();

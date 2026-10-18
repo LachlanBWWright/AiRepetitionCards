@@ -1,9 +1,9 @@
 import { useCallback, useState } from "react";
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { Button } from "@recall/ui-web";
-import { NativeWorkspaceAuthoringPanel } from "../../../mobile/src/components/NativeWorkspaceAuthoringPanel";
+import { NativeWorkspaceAuthoringPanel } from "../../../mobile/src/components/authoring/NativeWorkspaceAuthoringPanel";
 import { mockWorkspace } from "../features/workspace/mock-data";
-import { createAssessmentId, type Workspace } from "@recall/domain";
+import { createAssessmentId, type Assessment, type Workspace } from "@recall/domain";
 import { Effect, Either } from "effect";
 import {
   applyWorkspaceAuthoringCommand,
@@ -15,6 +15,30 @@ import {
 import { useLibraryNotes } from "../../../mobile/src/hooks/use-library-notes";
 import { createBrowserLibraryNotesStore } from "../lib/library-notes-store";
 const storyWorkspace: Workspace = mockWorkspace;
+const importedTags = [
+  "cells, tissues",
+  'say "ATP"',
+  "  source label  ",
+  "source\ncategory",
+  "imported:" + "x".repeat(90),
+];
+const sampleCloze = {
+  text: "Mitochondria produce {{c1::ATP::energy molecule}}.",
+  deletionIndex: 1,
+};
+function withImportedTags(card: Assessment): Assessment {
+  return { ...card, tags: importedTags };
+}
+function withSampleCloze(card: Assessment): Assessment {
+  return { ...card, cloze: sampleCloze, tags: ["cell-biology", "energy"] };
+}
+function conflictingCardCopy(card: Assessment): Assessment {
+  return {
+    ...card,
+    id: createAssessmentId("00000000-0000-4000-8000-000000000908"),
+    back: "A conflicting answer.",
+  };
+}
 const importedTagsWorkspace: Workspace = {
   ...storyWorkspace,
   areas: storyWorkspace.areas.map((area, index) =>
@@ -22,26 +46,9 @@ const importedTagsWorkspace: Workspace = {
       ? area
       : {
           ...area,
-          tags: [
-            "cells, tissues",
-            'say "ATP"',
-            "  source label  ",
-            "source\ncategory",
-            "imported:" + "x".repeat(90),
-          ],
+          tags: importedTags,
           cards: area.cards.map((card, cardIndex) =>
-            cardIndex !== 0
-              ? card
-              : {
-                  ...card,
-                  tags: [
-                    "cells, tissues",
-                    'say "ATP"',
-                    "  source label  ",
-                    "source\ncategory",
-                    "imported:" + "x".repeat(90),
-                  ],
-                },
+            cardIndex === 0 ? withImportedTags(card) : card,
           ),
         },
   ),
@@ -54,16 +61,7 @@ const clozeWorkspace: Workspace = {
       : {
           ...area,
           cards: area.cards.map((card, cardIndex) =>
-            cardIndex !== 0
-              ? card
-              : {
-                  ...card,
-                  cloze: {
-                    text: "Mitochondria produce {{c1::ATP::energy molecule}}.",
-                    deletionIndex: 1,
-                  },
-                  tags: ["cell-biology", "energy"],
-                },
+            cardIndex === 0 ? withSampleCloze(card) : card,
           ),
         },
   ),
@@ -76,10 +74,11 @@ const meta = {
     workspace: storyWorkspace,
     activeAreaId: storyWorkspace.areas[0]?.id ?? null,
     createId: () => "00000000-0000-4000-8000-000000000901",
-    onCommand: async (): Promise<{ ok: boolean; message: string }> => ({
-      ok: true,
-      message: "Saved on this device (mock).",
-    }),
+    onCommand: (): Promise<{ ok: boolean; message: string }> =>
+      Promise.resolve({
+        ok: true,
+        message: "Saved on this device (mock).",
+      }),
   },
   globals: { viewport: { value: "recallMobile", isRotated: false } },
   decorators: [
@@ -118,10 +117,11 @@ export const PersistenceFailure: Story = {
   args: {
     initialEditor: "edit-card",
     initialMessage: "This change could not be saved. Your draft remains here; try again.",
-    onCommand: async () => ({
-      ok: false,
-      message: "Storage is unavailable. Your draft remains here.",
-    }),
+    onCommand: () =>
+      Promise.resolve({
+        ok: false,
+        message: "Storage is unavailable. Your draft remains here.",
+      }),
   },
 };
 export const SavingDisabled: Story = {
@@ -150,10 +150,11 @@ export const ReviewRetentionSaveFailure: Story = {
     workspace: { ...storyWorkspace, schedulerSettings: { requestRetention: 0.97 } },
     initialMessage:
       "Review settings could not be saved. Your target remains in this draft; try again.",
-    onCommand: async () => ({
-      ok: false,
-      message: "Storage is unavailable. Your retention draft remains here.",
-    }),
+    onCommand: () =>
+      Promise.resolve({
+        ok: false,
+        message: "Storage is unavailable. Your retention draft remains here.",
+      }),
   },
 };
 export const ObjectiveFilteredLibrary: Story = {
@@ -175,14 +176,7 @@ export const DuplicateCards: Story = {
         index === 0 && area.cards[0]
           ? {
               ...area,
-              cards: [
-                ...area.cards,
-                {
-                  ...area.cards[0],
-                  id: createAssessmentId("00000000-0000-4000-8000-000000000908"),
-                  back: "A conflicting answer.",
-                },
-              ],
+              cards: [...area.cards, conflictingCardCopy(area.cards[0])],
             }
           : area,
       ),
@@ -230,11 +224,15 @@ export const LibraryWorkflows: Story = {
     const notes = useLibraryNotes(store);
     const updateNotes = notes.update;
     const retain = useCallback(
-      (draft: LibraryDraft) => updateNotes((current) => retainLibraryDraft(current, draft)),
+      (draft: LibraryDraft) => {
+        updateNotes((current) => retainLibraryDraft(current, draft));
+      },
       [updateNotes],
     );
     const discard = useCallback(
-      (key: string) => updateNotes((current) => discardLibraryDraft(current, key)),
+      (key: string) => {
+        updateNotes((current) => discardLibraryDraft(current, key));
+      },
       [updateNotes],
     );
     return (
@@ -249,7 +247,9 @@ export const LibraryWorkflows: Story = {
         onDiscardDraft={discard}
         onFlushDraft={notes.flush}
         onSelectDeck={setActiveAreaId}
-        onFlag={(id) => notes.update((current) => toggleCardFlag(current, id))}
+        onFlag={(id) => {
+          notes.update((current) => toggleCardFlag(current, id));
+        }}
         onCommand={async (command, baseline) => {
           const result = await Effect.runPromise(
             Effect.either(applyWorkspaceAuthoringCommand(workspace, command, new Date(), baseline)),

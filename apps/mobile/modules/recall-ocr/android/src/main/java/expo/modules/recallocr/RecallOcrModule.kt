@@ -45,56 +45,77 @@ class RecallOcrModule : Module() {
         fun read(bitmap: Bitmap): String = Tasks.await(
           recognizer.process(InputImage.fromBitmap(bitmap, 0))
         ).text
-        val pages = mutableListOf<Map<String, Any>>()
-        var count = 1
-        var textSize = 0
-        if (kind == "pdf") {
-          ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY).use { descriptor ->
-            PdfRenderer(descriptor).use { renderer ->
-              count = renderer.pageCount
-              if (last > count) return failure("page-range")
-              for (index in (first - 1) until last) {
-                renderer.openPage(index).use { page ->
-                  if (page.width <= 0 || page.height <= 0) return failure("invalid-file")
-                  val scale = min(2400.0 / page.width, 2400.0 / page.height)
-                  val bitmap = Bitmap.createBitmap(max(1, (page.width * scale).toInt()), max(1, (page.height * scale).toInt()), Bitmap.Config.ARGB_8888)
-                  try {
-                    bitmap.eraseColor(Color.WHITE)
-                    page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
-                    val text = read(bitmap)
-                    textSize += text.length
-                    if (textSize > 2000000) return failure("too-large")
-                    pages.add(mapOf("pageNumber" to index + 1, "text" to text))
-                  } finally { bitmap.recycle() }
-                }
-              }
-            }
-          }
-        } else if (kind == "image") {
-          if (first != 1 || last != 1) return failure("page-range")
-          val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-          BitmapFactory.decodeFile(file.path, bounds)
-          if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return failure("invalid-file")
-          var sample = 1
-          while (max(bounds.outWidth, bounds.outHeight) / sample > 2400) sample *= 2
-          val bitmap = BitmapFactory.decodeFile(file.path, BitmapFactory.Options().apply { inSampleSize = sample }) ?: return failure("invalid-file")
-          try {
-            val exif = ExifInterface(file)
-            val matrix = Matrix()
-            if (exif.isFlipped) matrix.postScale(-1f, 1f)
-            matrix.postRotate(exif.rotationDegrees.toFloat())
-            val oriented = Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
-            try {
-              val text = read(oriented)
-              if (text.length > 2000000) return failure("too-large")
-              pages.add(mapOf("pageNumber" to 1, "text" to text))
-            }
-            finally { if (oriented !== bitmap) oriented.recycle() }
-          } finally { bitmap.recycle() }
-        } else return failure("unsupported-format")
-        return mapOf("ok" to true, "pageCount" to count, "pages" to pages)
+        return when (kind) {
+          "pdf" -> recognizePdf(file, first, last, ::read)
+          "image" -> recognizeImage(file, first, last, ::read)
+          else -> failure("unsupported-format")
+        }
       } finally { recognizer.close() }
     } catch (_: SecurityException) { return failure("encrypted-or-inaccessible") }
       catch (_: Exception) { return failure("recognition-failed") }
   }
+
+  private fun recognizePdf(
+    file: File,
+    first: Int,
+    last: Int,
+    read: (Bitmap) -> String
+  ): Map<String, Any> {
+    val pages = mutableListOf<Map<String, Any>>()
+    var count = 1
+    var textSize = 0
+    ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY).use { descriptor ->
+      PdfRenderer(descriptor).use { renderer ->
+        count = renderer.pageCount
+        if (last > count) return failure("page-range")
+        for (index in (first - 1) until last) {
+          renderer.openPage(index).use { page ->
+            if (page.width <= 0 || page.height <= 0) return failure("invalid-file")
+            val scale = min(2400.0 / page.width, 2400.0 / page.height)
+            val bitmap = Bitmap.createBitmap(max(1, (page.width * scale).toInt()), max(1, (page.height * scale).toInt()), Bitmap.Config.ARGB_8888)
+            try {
+              bitmap.eraseColor(Color.WHITE)
+              page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+              val text = read(bitmap)
+              textSize += text.length
+              if (textSize > 2000000) return failure("too-large")
+              pages.add(mapOf("pageNumber" to index + 1, "text" to text))
+            } finally { bitmap.recycle() }
+          }
+        }
+      }
+    }
+    return mapOf("ok" to true, "pageCount" to count, "pages" to pages)
+  }
+
+  private fun recognizeImage(
+    file: File,
+    first: Int,
+    last: Int,
+    read: (Bitmap) -> String
+  ): Map<String, Any> {
+    val pages = mutableListOf<Map<String, Any>>()
+    if (first != 1 || last != 1) return failure("page-range")
+    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    BitmapFactory.decodeFile(file.path, bounds)
+    if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return failure("invalid-file")
+    var sample = 1
+    while (max(bounds.outWidth, bounds.outHeight) / sample > 2400) sample *= 2
+    val bitmap = BitmapFactory.decodeFile(file.path, BitmapFactory.Options().apply { inSampleSize = sample }) ?: return failure("invalid-file")
+    try {
+      val exif = ExifInterface(file)
+      val matrix = Matrix()
+      if (exif.isFlipped) matrix.postScale(-1f, 1f)
+      matrix.postRotate(exif.rotationDegrees.toFloat())
+      val oriented = Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+      try {
+        val text = read(oriented)
+        if (text.length > 2000000) return failure("too-large")
+        pages.add(mapOf("pageNumber" to 1, "text" to text))
+      }
+      finally { if (oriented !== bitmap) oriented.recycle() }
+    } finally { bitmap.recycle() }
+    return mapOf("ok" to true, "pageCount" to 1, "pages" to pages)
+  }
+
 }

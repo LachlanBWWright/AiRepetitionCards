@@ -1,3 +1,4 @@
+import type { PDFPageProxy } from "unpdf/pdfjs";
 import { Effect, Schema } from "effect";
 import {
   ExtractedStudyMaterialSchema,
@@ -93,12 +94,13 @@ export function extractStudyMaterialWithOcr(
             gzip: true,
             // Vendor jobs reject their promises; prevent the duplicate uncaught callback error.
             errorHandler: () => undefined,
-            logger: (message) =>
+            logger: (message) => {
               options.onProgress({
                 page: pageNumber,
                 pages,
                 progress: Math.min(1, Math.max(0, message.progress)),
-              }),
+              });
+            },
           });
           if (signal.aborted || options.signal.aborted) await created.terminate();
           return created;
@@ -109,21 +111,7 @@ export function extractStudyMaterialWithOcr(
       yield* check();
       const active = worker;
       const recognize = (canvas: HTMLCanvasElement) =>
-        Effect.gen(function* () {
-          yield* check();
-          const raw: unknown = yield* Effect.tryPromise({
-            try: () => active.recognize(canvas),
-            catch: () =>
-              failure(
-                canceled()
-                  ? "OCR canceled. No material was saved."
-                  : "The image could not be read by OCR.",
-              ),
-          });
-          return yield* Schema.decodeUnknown(OcrResult)(raw).pipe(
-            Effect.mapError(() => failure("OCR returned invalid text data.")),
-          );
-        });
+        recognizeCanvas(active, canvas, options.signal);
       const warnings = [
         "English OCR runs locally. Check spelling, reading order, tables, formulas and code before generating cards.",
       ];
@@ -134,11 +122,7 @@ export function extractStudyMaterialWithOcr(
           try: () =>
             createImageBitmap(
               new Blob([new Uint8Array(bytes)], {
-                type: name.toLowerCase().endsWith(".png")
-                  ? "image/png"
-                  : name.toLowerCase().endsWith(".webp")
-                    ? "image/webp"
-                    : "image/jpeg",
+                type: imageMimeType(name),
               }),
             ),
           catch: () => failure("This image could not be decoded."),
@@ -166,7 +150,13 @@ export function extractStudyMaterialWithOcr(
           sections.push(...section(result.data.text, null));
           if (result.data.confidence < 75)
             warnings.push("OCR confidence is low; review and correct this image's extracted text.");
-        }).pipe(Effect.ensuring(Effect.sync(() => bitmap.close())));
+        }).pipe(
+          Effect.ensuring(
+            Effect.sync(() => {
+              bitmap.close();
+            }),
+          ),
+        );
       } else {
         const pdfjs = yield* Effect.tryPromise({
           try: () => import("unpdf/pdfjs"),
@@ -219,61 +209,9 @@ export function extractStudyMaterialWithOcr(
                 .map((item) => item.str ?? "")
                 .join(" ")
                 .trim();
-              {
-                const base = yield* Effect.try({
-                  try: () => page.getViewport({ scale: 1 }),
-                  catch: () => failure("A PDF page has invalid dimensions."),
-                });
-                if (
-                  !Number.isFinite(base.width) ||
-                  !Number.isFinite(base.height) ||
-                  base.width <= 0 ||
-                  base.height <= 0
-                )
-                  return yield* Effect.fail(failure("A PDF page has invalid dimensions."));
-                const scale = Math.min(
-                  2,
-                  Math.sqrt(maxPixels / (base.width * base.height)),
-                  4096 / Math.max(base.width, base.height),
-                );
-                const viewport = page.getViewport({ scale });
-                const canvas = document.createElement("canvas");
-                canvas.width = Math.max(1, Math.floor(viewport.width));
-                canvas.height = Math.max(1, Math.floor(viewport.height));
-                const context = canvas.getContext("2d");
-                if (!context)
-                  return yield* Effect.fail(
-                    failure("This device cannot render PDF pages for OCR."),
-                  );
-                const render = yield* Effect.try({
-                  try: () =>
-                    page.render({ canvasContext: context, canvas, viewport, background: "white" }),
-                  catch: () => failure("A PDF page could not be rendered for OCR."),
-                });
-                const cancelRender = () => render.cancel();
-                options.signal.addEventListener("abort", cancelRender, { once: true });
-                yield* Effect.tryPromise({
-                  try: () => render.promise,
-                  catch: () =>
-                    failure(
-                      canceled()
-                        ? "OCR canceled. No material was saved."
-                        : "A PDF page could not be rendered for OCR.",
-                    ),
-                }).pipe(
-                  Effect.ensuring(
-                    Effect.sync(() => options.signal.removeEventListener("abort", cancelRender)),
-                  ),
-                );
-                const result = yield* recognize(canvas);
-                if (result.data.text.trim()) text = result.data.text;
-                canvas.width = 0;
-                canvas.height = 0;
-                if (result.data.confidence < 75)
-                  warnings.push(
-                    `Page ${String(pageNumber)} has low OCR confidence; check its extracted text.`,
-                  );
-              }
+              const result = yield* recognizePdfPage(page, options.signal, recognize);
+              if (result.data.text.trim()) text = result.data.text;
+              if (result.data.confidence < 75) warnings.push(lowConfidenceWarning(pageNumber));
               total += text.length;
               if (total > maxCharacters)
                 return yield* Effect.fail(failure("OCR text is too large. Import a smaller PDF."));
@@ -281,14 +219,7 @@ export function extractStudyMaterialWithOcr(
               if (!text.trim())
                 warnings.push(`Page ${String(pageNumber)} has no readable text after OCR.`);
               options.onProgress({ page: pageNumber, pages, progress: 1 });
-            }).pipe(
-              Effect.ensuring(
-                Effect.try({
-                  try: () => page.cleanup(),
-                  catch: () => failure("PDF cleanup failed."),
-                }).pipe(Effect.ignore),
-              ),
-            );
+            }).pipe(Effect.ensuring(cleanupPdfPage(page)));
           }
         }).pipe(
           Effect.ensuring(
@@ -316,10 +247,14 @@ export function extractStudyMaterialWithOcr(
       );
     });
     const cancellation = Effect.async<never, StudyOcrFailure>((resume) => {
-      const abort = () => resume(Effect.fail(failure("OCR canceled. No material was saved.")));
+      const abort = () => {
+        resume(Effect.fail(failure("OCR canceled. No material was saved.")));
+      };
       if (options.signal.aborted) abort();
       else options.signal.addEventListener("abort", abort, { once: true });
-      return Effect.sync(() => options.signal.removeEventListener("abort", abort));
+      return Effect.sync(() => {
+        options.signal.removeEventListener("abort", abort);
+      });
     });
     return yield* operation.pipe(
       Effect.raceFirst(cancellation),
@@ -340,4 +275,97 @@ export function extractStudyMaterialWithOcr(
       ),
     );
   });
+}
+
+function recognizePdfPage(
+  page: PDFPageProxy,
+  signal: AbortSignal,
+  recognize: (canvas: HTMLCanvasElement) => Effect.Effect<typeof OcrResult.Type, StudyOcrFailure>,
+) {
+  return Effect.gen(function* () {
+    const base = yield* Effect.try({
+      try: () => page.getViewport({ scale: 1 }),
+      catch: () => failure("A PDF page has invalid dimensions."),
+    });
+    if (
+      !Number.isFinite(base.width) ||
+      !Number.isFinite(base.height) ||
+      base.width <= 0 ||
+      base.height <= 0
+    )
+      return yield* Effect.fail(failure("A PDF page has invalid dimensions."));
+    const scale = Math.min(
+      2,
+      Math.sqrt(maxPixels / (base.width * base.height)),
+      4096 / Math.max(base.width, base.height),
+    );
+    const viewport = page.getViewport({ scale });
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.floor(viewport.width));
+    canvas.height = Math.max(1, Math.floor(viewport.height));
+    const context = canvas.getContext("2d");
+    if (!context)
+      return yield* Effect.fail(failure("This device cannot render PDF pages for OCR."));
+    const render = yield* Effect.try({
+      try: () => page.render({ canvasContext: context, canvas, viewport, background: "white" }),
+      catch: () => failure("A PDF page could not be rendered for OCR."),
+    });
+    const cancelRender = () => {
+      render.cancel();
+    };
+    signal.addEventListener("abort", cancelRender, { once: true });
+    yield* Effect.tryPromise({
+      try: () => render.promise,
+      catch: () =>
+        failure(
+          signal.aborted
+            ? "OCR canceled. No material was saved."
+            : "A PDF page could not be rendered for OCR.",
+        ),
+    }).pipe(
+      Effect.ensuring(
+        Effect.sync(() => {
+          signal.removeEventListener("abort", cancelRender);
+        }),
+      ),
+    );
+    const result = yield* recognize(canvas);
+    canvas.width = 0;
+    canvas.height = 0;
+
+    return result;
+  });
+}
+
+function imageMimeType(name: string): string {
+  const lower = name.toLowerCase();
+  if (lower.endsWith(".png")) return "image/png";
+  return lower.endsWith(".webp") ? "image/webp" : "image/jpeg";
+}
+
+function recognizeCanvas(worker: Worker, canvas: HTMLCanvasElement, signal: AbortSignal) {
+  return Effect.gen(function* () {
+    if (signal.aborted) return yield* Effect.fail(failure("OCR canceled. No material was saved."));
+    const raw: unknown = yield* Effect.tryPromise({
+      try: () => worker.recognize(canvas),
+      catch: () =>
+        failure(
+          signal.aborted
+            ? "OCR canceled. No material was saved."
+            : "The image could not be read by OCR.",
+        ),
+    });
+    return yield* Schema.decodeUnknown(OcrResult)(raw).pipe(
+      Effect.mapError(() => failure("OCR returned invalid text data.")),
+    );
+  });
+}
+function lowConfidenceWarning(pageNumber: number): string {
+  return `Page ${String(pageNumber)} has low OCR confidence; check its extracted text.`;
+}
+function cleanupPdfPage(page: PDFPageProxy) {
+  return Effect.try({
+    try: () => page.cleanup(),
+    catch: () => failure("PDF cleanup failed."),
+  }).pipe(Effect.ignore);
 }

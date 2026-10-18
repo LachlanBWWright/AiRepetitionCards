@@ -1,0 +1,104 @@
+[
+  {
+    "file": "auth-session-anonymous.json",
+    "contract": "auth-session",
+    "schemaValid": true,
+    "valid": true
+  },
+  {
+    "file": "auth-session-authenticated.json",
+    "contract": "auth-session",
+    "schemaValid": true,
+    "valid": true
+  },
+  {
+    "file": "workspace-empty.json",
+    "contract": "workspace-snapshot",
+    "schemaValid": true,
+    "valid": true
+  },
+  {
+    "file": "workspace-populated.json",
+    "contract": "workspace-snapshot",
+    "schemaValid": true,
+    "valid": true
+  },
+  {
+    "file": "invalid-account-uuid.json",
+    "contract": "auth-session",
+    "schemaValid": false,
+    "valid": false
+  },
+  {
+    "file": "invalid-session-version.json",
+    "contract": "auth-session",
+    "schemaValid": false,
+    "valid": false
+  },
+  {
+    "file": "invalid-missing-session-label.json",
+    "contract": "auth-session",
+    "schemaValid": false,
+    "valid": false
+  },
+  {
+    "file": "invalid-workspace-owner.json",
+    "contract": "workspace-snapshot",
+    "schemaValid": false,
+    "valid": false
+  },
+  {
+    "file": "invalid-workspace-version.json",
+    "contract": "workspace-snapshot",
+    "schemaValid": false,
+    "valid": false
+  },
+  {
+    "file": "invalid-hash.json",
+    "contract": "workspace-snapshot",
+    "schemaValid": false,
+    "valid": false
+  },
+  {
+    "file": "invalid-color.json",
+    "contract": "workspace-snapshot",
+    "schemaValid": false,
+    "valid": false
+  },
+  {
+    "file": "invalid-area-version.json",
+    "contract": "workspace-snapshot",
+    "schemaValid": false,
+    "valid": false
+  },
+  {
+    "file": "invalid-missing-area-title.json",
+    "contract": "workspace-snapshot",
+    "schemaValid": false,
+    "valid": false
+  },
+  {
+    "file": "invalid-media.json",
+    "contract": "workspace-snapshot",
+    "schemaValid": false,
+    "valid": false
+  },
+  {
+    "file": "invalid-objective-reference.json",
+    "contract": "workspace-snapshot",
+    "schemaValid": true,
+    "valid": false
+  },
+  {
+    "file": "auth-session-uppercase.json",
+    "contract": "auth-session",
+    "schemaValid": true,
+    "valid": true
+  },
+  {
+    "file": "workspace-uppercase.json",
+    "contract": "workspace-snapshot",
+    "schemaValid": true,
+    "valid": true
+  }
+]

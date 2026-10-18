@@ -19,7 +19,15 @@ export type NativeAppTabParamList = {
 export const nativeAppTabs = [
   NativeAppTab.Today,
   NativeAppTab.Library,
-  NativeAppTab.Tutor,
   NativeAppTab.Sharing,
   NativeAppTab.Account,
 ] as const satisfies readonly NativeAppTab[];
+
+export type SubjectMode = "overview" | "review" | "tutor" | "improve";
+export const nativeTabLabels: Readonly<Record<NativeAppTab, string>> = {
+  Today: "Home",
+  Library: "Subject",
+  Tutor: "Tutor",
+  Sharing: "Shared decks",
+  Account: "Account",
+};

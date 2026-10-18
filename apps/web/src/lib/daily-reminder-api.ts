@@ -93,38 +93,7 @@ export const dailyReminderApi: DailyReminderApi = {
             try: () => bridge.set(validated),
             catch: () => failure("Desktop reminder settings could not be saved."),
           }).pipe(Effect.flatMap(decodeDesktop));
-        return Effect.gen(function* () {
-          if (validated.enabled) {
-            if (typeof Notification === "undefined")
-              return yield* Effect.fail(failure("Notifications are unavailable in this browser."));
-            const permission = yield* Effect.tryPromise({
-              try: () => Notification.requestPermission(),
-              catch: () => failure("Notification permission could not be requested."),
-            });
-            if (permission !== "granted")
-              return yield* Effect.fail(
-                failure(
-                  "Notification permission was not granted. Enable notifications in browser settings, then save again.",
-                ),
-              );
-          }
-          const previous = yield* readBrowser().pipe(
-            Effect.catchAll(() => Effect.succeed({ lastDeliveredDay: null })),
-          );
-          yield* Effect.try({
-            try: () =>
-              volatileStorage.setItem(
-                storageKey,
-                JSON.stringify({
-                  settings: validated,
-                  lastDeliveredDay: previous.lastDeliveredDay,
-                }),
-              ),
-            catch: () => failure("Reminder settings could not be saved. Your edits are retained."),
-          });
-          window.dispatchEvent(new Event("recall-reminder-settings"));
-          return yield* readBrowser();
-        });
+        return saveBrowserReminder(validated);
       }),
     ),
 };
@@ -169,11 +138,12 @@ function deliverBrowser(onOpen: () => void) {
     });
     const current = yield* readBrowser();
     yield* Effect.try({
-      try: () =>
+      try: () => {
         volatileStorage.setItem(
           storageKey,
           JSON.stringify({ settings: current.settings, lastDeliveredDay: day }),
-        ),
+        );
+      },
       catch: () => failure("The reminder was shown, but its delivery could not be saved."),
     });
   });
@@ -214,7 +184,7 @@ export function startDailyReminderRuntime(onOpen: () => void): () => void {
   window.addEventListener("storage", check);
   window.addEventListener("recall-reminder-settings", check);
   document.addEventListener("visibilitychange", check);
-  navigator.serviceWorker?.addEventListener("message", message);
+  navigator.serviceWorker.addEventListener("message", message);
   check();
   return () => {
     active = false;
@@ -223,6 +193,42 @@ export function startDailyReminderRuntime(onOpen: () => void): () => void {
     window.removeEventListener("storage", check);
     window.removeEventListener("recall-reminder-settings", check);
     document.removeEventListener("visibilitychange", check);
-    navigator.serviceWorker?.removeEventListener("message", message);
+    navigator.serviceWorker.removeEventListener("message", message);
   };
+}
+
+function saveBrowserReminder(validated: DailyReminderSettings) {
+  return Effect.gen(function* () {
+    if (validated.enabled) {
+      if (typeof Notification === "undefined")
+        return yield* Effect.fail(failure("Notifications are unavailable in this browser."));
+      const permission = yield* Effect.tryPromise({
+        try: () => Notification.requestPermission(),
+        catch: () => failure("Notification permission could not be requested."),
+      });
+      if (permission !== "granted")
+        return yield* Effect.fail(
+          failure(
+            "Notification permission was not granted. Enable notifications in browser settings, then save again.",
+          ),
+        );
+    }
+    const previous = yield* readBrowser().pipe(
+      Effect.catchAll(() => Effect.succeed({ lastDeliveredDay: null })),
+    );
+    yield* Effect.try({
+      try: () => {
+        volatileStorage.setItem(
+          storageKey,
+          JSON.stringify({
+            settings: validated,
+            lastDeliveredDay: previous.lastDeliveredDay,
+          }),
+        );
+      },
+      catch: () => failure("Reminder settings could not be saved. Your edits are retained."),
+    });
+    window.dispatchEvent(new Event("recall-reminder-settings"));
+    return yield* readBrowser();
+  });
 }

@@ -248,11 +248,11 @@ test("deleting the last area excludes its cards and notebooks from search and pe
     await search.getByLabel("Show", { exact: true }).selectOption("material");
     await search.getByText("1 results", { exact: true }).waitFor();
     await search.getByRole("button", { name: "Close", exact: true }).click();
-    await page.getByLabel("Actions for Go programming", { exact: true }).click();
-    page.once("dialog", (prompt) => prompt.accept());
+    await page.getByLabel("Manage Go programming", { exact: true }).click();
+    await page.getByRole("menuitem", { name: "Delete deck", exact: true }).click();
     await page
-      .locator(".area-actions")
-      .getByRole("button", { name: "Delete", exact: true })
+      .getByRole("alertdialog")
+      .getByRole("button", { name: "Confirm", exact: true })
       .click();
     const deleted = await waitForWorkspace(page, (workspace) => workspace?.areas.length === 0);
     assert.deepEqual(deleted.reviewEvents, before.reviewEvents);

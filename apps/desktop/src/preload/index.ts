@@ -21,18 +21,16 @@ contextBridge.exposeInMainWorld("recallDesktop", {
   chatgpt: {
     status: (): Promise<unknown> => ipcRenderer.invoke("chatgpt:status"),
     signIn: (input: unknown): Promise<unknown> => ipcRenderer.invoke("chatgpt:sign-in", input),
-    select: (clientId: string): Promise<unknown> => ipcRenderer.invoke("chatgpt:select", clientId),
     signOut: (clientId: string): Promise<unknown> =>
       ipcRenderer.invoke("chatgpt:sign-out", clientId),
     resumePlan: (clientId: string): Promise<unknown> =>
       ipcRenderer.invoke("chatgpt:resume-plan", clientId),
     models: (): Promise<unknown> => ipcRenderer.invoke("chatgpt:models"),
     usage: (clientId: string): Promise<unknown> => ipcRenderer.invoke("chatgpt:usage", clientId),
-    setBudget: (input: unknown): Promise<unknown> =>
-      ipcRenderer.invoke("chatgpt:set-budget", input),
     respond: (input: {
       readonly model: string;
       readonly input: string;
+      readonly instructions?: string;
       readonly expectedClientId: string;
     }): Promise<unknown> => ipcRenderer.invoke("chatgpt:respond", input),
     research: (input: {
@@ -77,12 +75,16 @@ contextBridge.exposeInMainWorld("recallDesktop", {
       ipcRenderer.invoke("auth:magic-link", email),
     signOut: (): Promise<unknown> => ipcRenderer.invoke("auth:sign-out"),
     onStateChanged: (callback: (state: unknown) => void): (() => void) => {
-      const listener = (_event: Electron.IpcRendererEvent, state: unknown) => callback(state);
+      const listener = (_event: Electron.IpcRendererEvent, state: unknown) => {
+        callback(state);
+      };
       ipcRenderer.on("auth:state", listener);
       return () => ipcRenderer.removeListener("auth:state", listener);
     },
     onSignInResult: (callback: (result: unknown) => void): (() => void) => {
-      const listener = (_event: Electron.IpcRendererEvent, result: unknown) => callback(result);
+      const listener = (_event: Electron.IpcRendererEvent, result: unknown) => {
+        callback(result);
+      };
       ipcRenderer.on("auth:callback", listener);
       return () => ipcRenderer.removeListener("auth:callback", listener);
     },

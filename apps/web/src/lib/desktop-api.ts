@@ -18,12 +18,10 @@ declare global {
       readonly chatgpt?: {
         readonly status: () => Promise<unknown>;
         readonly signIn: (input: unknown) => Promise<unknown>;
-        readonly select: (clientId: string) => Promise<unknown>;
         readonly signOut: (clientId: string) => Promise<unknown>;
         readonly resumePlan: (clientId: string) => Promise<unknown>;
         readonly models: () => Promise<unknown>;
         readonly usage: (clientId: string) => Promise<unknown>;
-        readonly setBudget: (input: unknown) => Promise<unknown>;
         readonly research: (input: {
           readonly model: string;
           readonly query: string;
@@ -36,6 +34,7 @@ declare global {
         readonly respond: (input: {
           readonly model: string;
           readonly input: string;
+          readonly instructions?: string;
           readonly expectedClientId?: string;
         }) => Promise<unknown>;
       };
@@ -97,7 +96,9 @@ export async function apiFetch(path: string, init?: RequestInit): Promise<Respon
   if (!bridge) {
     const controller = new AbortController();
     const externalSignal = init?.signal;
-    const abortFromCaller = () => controller.abort();
+    const abortFromCaller = () => {
+      controller.abort();
+    };
     let cleanedUp = false;
     const clearCallerSignal = () => {
       externalSignal?.removeEventListener("abort", abortFromCaller);
@@ -122,7 +123,9 @@ export async function apiFetch(path: string, init?: RequestInit): Promise<Respon
       response = await fetch(path, { ...init, signal: controller.signal });
     } catch (error) {
       cleanup();
-      return Promise.reject(error);
+      return Promise.reject(
+        error instanceof Error ? error : new Error("Desktop request failed", { cause: error }),
+      );
     }
     if (!response.body) {
       cleanup();

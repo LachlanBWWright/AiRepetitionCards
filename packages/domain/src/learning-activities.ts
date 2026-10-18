@@ -70,8 +70,15 @@ export function isBoundedActivityJson(input: unknown): input is ActivityJson {
   }
   return true;
 }
-export const ActivityJsonSchema: Schema.Schema<ActivityJson> =
-  Schema.declare(isBoundedActivityJson);
+export const ActivityJsonSchema: Schema.Schema<ActivityJson> = Schema.declare(
+  isBoundedActivityJson,
+).annotations({
+  jsonSchema: {
+    type: ["null", "string", "number", "boolean", "array", "object"],
+    description:
+      "JSON value; runtime validation additionally enforces depth <= 32, <= 50000 visited values, and finite numbers.",
+  },
+});
 const payload = Schema.Record({ key: Schema.String, value: ActivityJsonSchema }).pipe(
   Schema.filter((value) => JSON.stringify(value).length <= 100_000),
 );

@@ -64,7 +64,9 @@ export function createBrowserKnowledgeNotebookStore(namespace: string, areaId: s
         if (current !== observed) return yield* Effect.fail(failure("stale"));
         const serialized = JSON.stringify(notebook);
         yield* Effect.try({
-          try: () => volatileStorage.setItem(key, serialized),
+          try: () => {
+            volatileStorage.setItem(key, serialized);
+          },
           catch: () => failure("unavailable"),
         });
         observed = serialized;
@@ -81,7 +83,9 @@ export function createBrowserKnowledgeNotebookStore(namespace: string, areaId: s
         });
         if (current !== observed) return yield* Effect.fail(failure("stale"));
         yield* Effect.try({
-          try: () => volatileStorage.removeItem(key),
+          try: () => {
+            volatileStorage.removeItem(key);
+          },
           catch: () => failure("unavailable"),
         });
         observed = null;
@@ -89,4 +93,26 @@ export function createBrowserKnowledgeNotebookStore(namespace: string, areaId: s
       () => failure("unavailable"),
     );
   return { read, write, clear };
+}
+
+/** Chat work lives only for this mounted session; approved cards use the workspace store. */
+export function createSessionKnowledgeNotebookStore() {
+  let value: KnowledgeNotebook | null = null;
+  return {
+    read: () => Effect.succeed(value),
+    write: (input: unknown) =>
+      Schema.decodeUnknown(KnowledgeNotebookSchema)(input).pipe(
+        Effect.mapError(() => failure("invalid")),
+        Effect.tap((next) =>
+          Effect.sync(() => {
+            value = next;
+          }),
+        ),
+        Effect.asVoid,
+      ),
+    clear: () =>
+      Effect.sync(() => {
+        value = null;
+      }),
+  };
 }

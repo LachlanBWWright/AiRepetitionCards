@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import { randomUUID, createHash } from "node:crypto";
 import { test } from "node:test";
 import { Effect, Either, Schema } from "effect";
-import { KnowledgeAreaSchema } from "@recall/domain";
-import { publicationContentHash } from "@recall/application";
+import { provisionRlsFixture } from "./supabase-rls-fixture";
+import { runPublicationChecks } from "./supabase-rls-publication-checks";
 import {
   configuration,
   request,
@@ -97,181 +97,25 @@ function suite(config: Configuration) {
   const execute = Effect.gen(function* () {
     const owner = yield* makeUser("owner");
     const stranger = yield* makeUser("stranger");
-    const areaId = id();
-    areaIds.push(areaId);
-    const cardId = id();
-    const objectiveId = id();
-    const prerequisiteId = id();
-    const versionId = id();
-    const revisionId = id();
-    const reviewId = id();
-    const sessionId = id();
-    const observationId = id();
-    const proposalId = id();
-    const usageId = id();
-    const document = yield* Schema.decodeUnknown(KnowledgeAreaSchema)({
-      schemaVersion: "1.0.0",
-      id: areaId,
-      title: "RLS fixture",
-      description: null,
-      language: "en",
-      objectives: [
-        {
-          id: objectiveId,
-          title: "Objective",
-          description: null,
-          prerequisiteIds: [prerequisiteId],
-        },
-        { id: prerequisiteId, title: "Prerequisite", description: null, prerequisiteIds: [] },
-      ],
-      ai: { tutorInstructions: "", quizInstructions: null, cardGenerationInstructions: null },
-      cards: [
-        {
-          kind: "basic",
-          id: cardId,
-          front: "Question",
-          back: "Answer",
-          objectiveIds: [objectiveId],
-          tags: [],
-          origin: "authored",
-          provenance: { externalId: null, source: "authored", sourceVersion: null },
-          media: [{ id: mediaId, mimeType: "image/png", byteLength: mediaBytes.byteLength }],
-        },
-      ],
-      tags: [],
-      licence: null,
-    }).pipe(Effect.mapError(() => failure("Canonical integration document was invalid.")));
-    const contentHash = publicationContentHash(document);
-    const envelope = {
-      id: areaId,
-      title: document.title,
-      language: "en",
-      color: "#123456",
-      tags: [],
+    const fixture = yield* provisionRlsFixture({
+      config,
+      owner,
+      stranger,
+      anon,
+      mediaBytes,
+      mediaId,
+      registerArea: (areaId) => areaIds.push(areaId),
+    });
+    const {
+      areaId,
+      cardId,
+      objectiveId,
+      prerequisiteId,
+      reviewId,
       document,
       contentHash,
-      baseContentHash: null,
-      versionId,
-      objectives: document.objectives,
-      cards: document.cards.map((card) => ({ ...card, revisionId })),
-    };
-    const provision = yield* rpc(owner, "sync_workspace_content", {
-      p_areas: [envelope],
-      p_tombstones: [],
-    });
-    yield* successful(provision, "Owner transactional content provisioning");
-    yield* verify(provision.body === true, "Owner content provisioning was rejected.");
-    const unchangedSync = yield* rpc(owner, "sync_workspace_content", {
-      p_areas: [envelope],
-      p_tombstones: [],
-    });
-    yield* successful(unchangedSync, "Unchanged workspace content replay");
-    yield* verify(unchangedSync.body === true, "Unchanged workspace content replay was rejected.");
-    const areaVersions = yield* rows(
-      yield* request(
-        config,
-        owner,
-        `/rest/v1/knowledge_area_versions?select=id&knowledge_area_id=eq.${areaId}`,
-      ),
-      "Workspace content version replay",
-    );
-    yield* verify(
-      areaVersions.length === 1,
-      "Unchanged workspace replay created a duplicate area version.",
-    );
-    const seedRows: readonly [string, unknown][] = [
-      ["profiles", { user_id: owner.userId, display_name: "Fixture owner" }],
-      [
-        "review_events",
-        {
-          id: reviewId,
-          user_id: owner.userId,
-          card_id: cardId,
-          device_id: id(),
-          device_sequence: 1,
-          reviewed_at_device: "2026-10-04T00:00:00Z",
-          effective_reviewed_at: "2026-10-04T00:00:00Z",
-          rating: "good",
-          scheduler_family: "fsrs",
-          scheduler_version: "ts-fsrs@5.4.2",
-        },
-      ],
-      [
-        "scheduling_state",
-        {
-          user_id: owner.userId,
-          card_id: cardId,
-          scheduler_family: "fsrs",
-          scheduler_version: "ts-fsrs@5.4.2",
-          last_review_event_id: reviewId,
-          state: {},
-        },
-      ],
-      [
-        "tutor_sessions",
-        {
-          id: sessionId,
-          user_id: owner.userId,
-          area_id: areaId,
-          area_title: document.title,
-          area_snapshot: document,
-        },
-      ],
-      [
-        "tutor_messages",
-        {
-          id: id(),
-          session_id: sessionId,
-          user_id: owner.userId,
-          role: "learner",
-          kind: "question",
-          content: { text: "Question" },
-        },
-      ],
-      [
-        "ai_observations",
-        {
-          id: observationId,
-          session_id: sessionId,
-          user_id: owner.userId,
-          objective_id: objectiveId,
-          result: "partial",
-          confidence: 0.8,
-          evidence_summary: "Fixture",
-          suggested_action: "propose-card",
-          payload: {},
-        },
-      ],
-      [
-        "generated_card_proposals",
-        {
-          id: proposalId,
-          session_id: sessionId,
-          observation_id: observationId,
-          user_id: owner.userId,
-          content: {},
-        },
-      ],
-    ];
-    for (const [table, body] of seedRows) {
-      yield* successful(yield* insert(owner, table, body), `Owner insert ${table}`);
-      const fields = yield* Schema.decodeUnknown(
-        Schema.Record({ key: Schema.String, value: Schema.Unknown }),
-      )(body).pipe(Effect.mapError(() => failure("Integration row fixture was invalid.")));
-      const spoof = { ...fields, ...("id" in fields ? { id: id() } : {}) };
-      yield* expectDenied(
-        insert(stranger, table, spoof),
-        `Stranger cannot insert ${table} as owner`,
-      );
-      yield* expectDenied(insert(anon, table, spoof), `Anonymous cannot insert ${table}`);
-    }
-    const reserve = yield* rpc(owner, "reserve_tutor_ai_call", {
-      p_id: usageId,
-      p_operation: "question",
-      p_model: "fixture",
-    });
-    yield* successful(reserve, "Owner quota reservation");
-    yield* verify(reserve.body === true, "Owner quota reservation failed.");
+      envelope,
+    } = fixture;
     const privateTables: readonly [string, string][] = [
       ["profiles", `user_id=eq.${owner.userId}`],
       ["knowledge_areas", `id=eq.${areaId}`],
@@ -407,223 +251,54 @@ function suite(config: Configuration) {
       rpc(owner, "erase_account_data", { p_user_id: stranger.userId }),
       "Client invocation of service-only account erasure",
     );
-    const uploadPath = `${owner.userId}/${mediaId}`;
-    uploadedPaths.add(uploadPath);
-    yield* successful(
-      yield* request(config, owner, `/storage/v1/object/published-media/${uploadPath}`, {
-        method: "POST",
-        bytes: mediaBytes,
-        headers: { "content-type": "image/png", "x-upsert": "false" },
-      }),
-      "Owner Storage upload",
-    );
-    const unreferencedPath = `${owner.userId}/${otherMediaId}`;
-    uploadedPaths.add(unreferencedPath);
-    yield* successful(
-      yield* request(config, owner, `/storage/v1/object/published-media/${unreferencedPath}`, {
-        method: "POST",
-        bytes: otherBytes,
-        headers: { "content-type": "image/png" },
-      }),
-      "Owner unreferenced Storage upload",
-    );
-    const download = (identity: Identity, path: string, version?: string, hash?: string) =>
-      request(config, identity, `/storage/v1/object/authenticated/published-media/${path}`, {
-        headers: {
-          ...(version ? { "x-recall-publication-version-id": version } : {}),
-          ...(hash ? { "x-recall-share-token-hash": hash } : {}),
-        },
-      });
-    const ownerMedia = yield* download(owner, uploadPath);
-    yield* successful(ownerMedia, "Owner private Storage read");
-    yield* verify(
-      Buffer.from(ownerMedia.bytes).equals(Buffer.from(mediaBytes)),
-      "Owner Storage bytes changed.",
-    );
-    for (const identity of [anon, stranger])
-      yield* expectDenied(download(identity, uploadPath), "Unpublished Storage read");
-    const strangerPath = `${stranger.userId}/${mediaId}`;
-    uploadedPaths.add(strangerPath);
-    yield* successful(
-      yield* request(config, stranger, `/storage/v1/object/published-media/${strangerPath}`, {
-        method: "POST",
-        bytes: mediaBytes,
-        headers: { "content-type": "image/png" },
-      }),
-      "Stranger can upload in own namespace",
-    );
-    yield* expectDenied(download(owner, strangerPath), "Owner cannot read stranger private media");
-    const foreignBytes = new Uint8Array([...mediaBytes, 1]);
-    const foreignHash = createHash("sha256").update(foreignBytes).digest("hex");
-    const foreignPath = `${owner.userId}/${foreignHash}`;
-    uploadedPaths.add(foreignPath);
-    yield* expectDenied(
-      request(config, stranger, `/storage/v1/object/published-media/${foreignPath}`, {
-        method: "POST",
-        bytes: foreignBytes,
-        headers: { "content-type": "image/png" },
-      }),
-      "Stranger cannot upload in owner's namespace",
-    );
-    const tokenHash = createHash("sha256").update(id()).digest("hex");
-    const wrongHash = createHash("sha256").update(id()).digest("hex");
-    const versions = { private: id(), unlisted: id(), public: id() };
-    for (const visibility of ["private", "unlisted", "public"] as const) {
-      const publicationId = versions[visibility];
-      publications.push(publicationId);
-      const publicationArgs = {
-        p_version_id: publicationId,
-        p_source_area_id: areaId,
-        p_owner_id: owner.userId,
-        p_operation_id: id(),
-        p_content: document,
-        p_content_hash: contentHash,
-        p_visibility: visibility,
-        p_attribution: null,
-        p_license: "CC-BY-4.0",
-        p_forked_from_version_id: null,
-        p_share_token_hash: visibility === "unlisted" ? tokenHash : null,
-      };
-      yield* successful(
-        yield* rpc(admin, "create_deck_publication", publicationArgs),
-        "Service atomic immutable publication registration",
-      );
-      yield* expectDenied(
-        rpc(owner, "create_deck_publication", {
-          ...publicationArgs,
-          p_version_id: id(),
-          p_operation_id: id(),
-        }),
-        "Authenticated direct publication registration",
-      );
-      for (const identity of [owner, anon, stranger]) {
-        const reply = yield* request(
-          config,
-          identity,
-          `/rest/v1/published_knowledge_area_versions?select=id,content,visibility&id=eq.${publicationId}`,
-        );
-        if (identity === owner || visibility === "public")
-          yield* verify(
-            (yield* rows(reply, "Publication readable")).length === 1,
-            "Readable publication was hidden.",
-          );
-        else yield* verify(denied(reply), "Private/unlisted publication leaked through SELECT.");
-      }
-      yield* expectDenied(
-        request(
-          config,
-          owner,
-          `/rest/v1/published_knowledge_area_versions?select=share_token_hash&id=eq.${publicationId}`,
-        ),
-        "Publication token digest SELECT",
-      );
-      yield* expectDenied(
-        request(
-          config,
-          owner,
-          `/rest/v1/published_knowledge_area_versions?id=eq.${publicationId}`,
-          { method: "PATCH", body: { content: {} } },
-        ),
-        "Publication immutable content",
-      );
-    }
-    for (const identity of [anon, stranger]) {
-      for (const [hash, expected] of [
-        [wrongHash, 0],
-        [tokenHash, 1],
-      ] as const) {
-        const result = yield* rpc(identity, "read_unlisted_knowledge_area_version", {
-          p_version_id: versions.unlisted,
-          p_share_token_hash: hash,
-        });
-        yield* verify(
-          (yield* rows(result, "Unlisted capability read")).length === expected,
-          "Unlisted capability isolation failed.",
-        );
-      }
-      yield* expectDenied(
-        download(identity, uploadPath, versions.private, tokenHash),
-        "Private publication Storage read",
-      );
-      yield* expectDenied(
-        download(identity, uploadPath, versions.unlisted, wrongHash),
-        "Wrong unlisted Storage capability",
-      );
-      yield* successful(
-        yield* download(identity, uploadPath, versions.unlisted, tokenHash),
-        "Valid unlisted Storage capability",
-      );
-      yield* successful(
-        yield* download(identity, uploadPath, versions.public),
-        "Public referenced Storage read",
-      );
-      yield* expectDenied(
-        download(identity, unreferencedPath, versions.public),
-        "Unreferenced Storage read",
-      );
-    }
-    const forbiddenRotation = yield* rpc(stranger, "manage_unlisted_knowledge_area_share_token", {
-      p_version_id: versions.unlisted,
-      p_action: "revoke",
-      p_share_token_hash: null,
+    const uploadPath = yield* runPublicationChecks({
+      config,
+      admin,
+      anon,
+      owner,
+      stranger,
+      areaId,
+      mediaBytes,
+      otherBytes,
+      mediaId,
+      otherMediaId,
+      document,
+      contentHash,
+      id,
+      uploadedPaths,
+      publications,
+      rpc,
+      expectDenied,
     });
-    yield* successful(forbiddenRotation, "Foreign token management rejection");
-    yield* verify(
-      forbiddenRotation.body === false,
-      "Stranger revoked another owner's share capability.",
-    );
-    const rotated = yield* rpc(owner, "manage_unlisted_knowledge_area_share_token", {
-      p_version_id: versions.unlisted,
-      p_action: "rotate",
-      p_share_token_hash: wrongHash,
-    });
-    yield* successful(rotated, "Owner token rotation");
-    yield* verify(rotated.body === true, "Owner token rotation failed.");
-    yield* verify(
-      (yield* rows(
-        yield* rpc(anon, "read_unlisted_knowledge_area_version", {
-          p_version_id: versions.unlisted,
-          p_share_token_hash: tokenHash,
-        }),
-        "Old token revoked",
-      )).length === 0,
-      "Rotated token still reads content.",
-    );
-    yield* expectDenied(
-      download(anon, uploadPath, versions.unlisted, tokenHash),
-      "Rotated token still reads media",
-    );
-    const revoked = yield* rpc(owner, "manage_unlisted_knowledge_area_share_token", {
-      p_version_id: versions.unlisted,
-      p_action: "revoke",
-      p_share_token_hash: null,
-    });
-    yield* successful(revoked, "Owner token revocation");
-    yield* verify(revoked.body === true, "Owner token revocation failed.");
-    yield* verify(
-      (yield* rows(
-        yield* rpc(anon, "read_unlisted_knowledge_area_version", {
-          p_version_id: versions.unlisted,
-          p_share_token_hash: wrongHash,
-        }),
-        "Revoked capability read",
-      )).length === 0,
-      "Revoked token still reads content.",
-    );
-    yield* expectDenied(
-      download(anon, uploadPath, versions.unlisted, wrongHash),
-      "Revoked token still reads media",
-    );
     const deletion = yield* request(config, stranger, "/storage/v1/object/published-media", {
       method: "DELETE",
       body: { prefixes: [uploadPath] },
     });
     yield* verify(denied(deletion), "Stranger Storage deletion was accepted.");
     yield* successful(
-      yield* download(owner, uploadPath),
+      yield* request(
+        config,
+        owner,
+        `/storage/v1/object/authenticated/published-media/${uploadPath}`,
+      ),
       "Foreign Storage deletion preserved owner data",
     );
   });
+
+  const cleanupUser = (userId: string) =>
+    rpc(admin, "erase_account_data", { p_user_id: userId }).pipe(
+      Effect.flatMap((reply) =>
+        successful(reply, "Scoped learning fixture cleanup").pipe(
+          Effect.flatMap(() =>
+            verify(reply.body === true, "Learning fixture erasure was rejected."),
+          ),
+        ),
+      ),
+      Effect.flatMap(() =>
+        request(config, admin, `/auth/v1/admin/users/${userId}`, { method: "DELETE" }),
+      ),
+      Effect.flatMap((reply) => successful(reply, "Scoped Auth fixture cleanup")),
+    );
 
   const cleanup = Effect.gen(function* () {
     const results = [];
@@ -659,25 +334,7 @@ function suite(config: Configuration) {
           ),
         ),
       );
-    for (const userId of createdUsers) {
-      results.push(
-        yield* Effect.either(
-          rpc(admin, "erase_account_data", { p_user_id: userId }).pipe(
-            Effect.flatMap((reply) =>
-              successful(reply, "Scoped learning fixture cleanup").pipe(
-                Effect.flatMap(() =>
-                  verify(reply.body === true, "Learning fixture erasure was rejected."),
-                ),
-              ),
-            ),
-            Effect.flatMap(() =>
-              request(config, admin, `/auth/v1/admin/users/${userId}`, { method: "DELETE" }),
-            ),
-            Effect.flatMap((reply) => successful(reply, "Scoped Auth fixture cleanup")),
-          ),
-        ),
-      );
-    }
+    for (const userId of createdUsers) results.push(yield* Effect.either(cleanupUser(userId)));
     yield* verify(
       results.every(Either.isRight),
       `Integration fixture cleanup was incomplete for run ${runId}; inspect fixture user IDs ${createdUsers.join(", ")} before retrying.`,

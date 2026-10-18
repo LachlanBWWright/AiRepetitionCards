@@ -10,7 +10,9 @@ const operationalLog: HttpTelemetrySink = {
   record: (event) =>
     process.env.RECALL_HTTP_LOGGING === "true"
       ? Effect.try({
-          try: () => console.info(JSON.stringify(event)),
+          try: () => {
+            console.info(JSON.stringify(event));
+          },
           catch: () => ({ _tag: "HttpTelemetryDeliveryFailed" }) as const,
         })
       : Effect.void,

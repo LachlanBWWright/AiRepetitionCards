@@ -13,14 +13,40 @@ Example payloads live in `contracts/fixtures/dotnet-v1/`. They are ordinary JSON
 
 ## Export and verification workflow
 
-The current .NET boundary validator is `backend/Recall.Api/Contracts/ContractBoundaryValidator.cs`. It validates the checked-in fixture names against the auth and workspace response shapes, including Knowledge Area fields, card variants, media bounds, objective references, and prerequisite uniqueness/cycles. The TS exporter remains a follow-up: this checkout has no declared TypeScript runtime loader for executing a script that imports the Effect schemas, so generation should be added alongside an explicit supported runner rather than relying on a transitive tool.
+Run these commands from the repository root (Node.js 22, pnpm 10, and .NET 10):
 
-When added, the exporter should import the schemas above and use Effect's `JSONSchema.make(schema)` to write named schema files into a generated contract directory. Keep generation deterministic, strip generator-only metadata only when it does not affect validation, and review diffs whenever the Effect or schema version changes. JSON Schema is a useful cross-language shape/constraint format, but it does not replace the runtime behavior of `Schema.decodeUnknown`; preserve any transformations, filters, brands, and cross-field rules in explicit C# validators.
+```sh
+pnpm contracts:generate
+pnpm contracts:check
+pnpm --filter @recall/verification test dotnet-contract-parity.test.ts
+dotnet run --project backend/Recall.ContractChecks -- .
+```
 
-The validator exposes `ValidateDotnetV1Fixture` for use by a small fixture runner. A runnable shared positive and negative corpus is not yet wired: TypeScript should validate fixtures with `Schema.decodeUnknownEither`, and .NET should validate the same paths with this validator. Add negative cases for malformed account UUIDs, wrong schema versions, invalid hashes/colors, missing required fields, invalid Knowledge Area versions, malformed media, and broken objective references. Preserve the API's existing error envelope separately from successful schema validation.
+The exporter uses the verification package's declared esbuild dependency to execute a typed
+entrypoint. It calls Effect's `JSONSchema.make` for both response schemas and writes deterministic,
+checked-in files under `contracts/generated/`. `contracts:check` fails if either file is missing or
+stale. Commit regenerated schemas alongside intentional contract changes. Regexes use explicit
+uppercase/lowercase ranges because JSON Schema patterns do not preserve JavaScript regex flags.
+
+The shared `contracts/fixtures/dotnet-v1/manifest.json` records each fixture's contract, expected
+schema validity, and expected final validity. Both runners load these same JSON files. Cases cover
+anonymous/authenticated sessions, uppercase identities and hashes, empty/populated workspaces,
+malformed UUIDs, versions, hashes, colors, missing fields, media, and broken objective references.
+TypeScript checks shapes with `Schema.decodeUnknownEither` and rejects excess properties; workspace
+semantic checks use the existing `parseKnowledgeAreaJson`. The .NET runner consumes the generated
+schemas with JsonSchema.Net, then runs the existing `ContractBoundaryValidator` semantic checks.
+The fixture suite exposed and now guards a missing-session-field crash in that validator.
+
+JSON Schema covers serializable shape constraints, not every Effect filter, transformation, or
+cross-field invariant. The bounded activity JSON declaration carries an explicit annotation;
+its depth, traversal, and payload-size limits remain runtime checks. Broken objective references
+are deliberately schema-valid but semantically invalid. C# retains its runtime boundary validator;
+this initial fixture corpus verifies the listed cases rather than proving complete semantic parity.
+Add paired fixtures whenever either implementation changes. The backend CI workflow checks schema
+freshness, runs both fixture validators, builds the solution, and verifies the live OpenAPI document.
 
 The C# wire DTOs should use explicit JSON property naming and strict unknown-value handling at the HTTP boundary. Keep incoming JSON as `unknown`/untrusted until validation succeeds. In particular, preserve null versus omitted fields: anonymous auth responses require `displayLabel: null` and `ownerId: null`, while the authenticated response requires both values.
 
 ## Fixture maintenance
 
-Update fixtures alongside intentional contract changes. A fixture change should include the corresponding Effect schema change and, once available, a .NET parity check. The fixtures are examples, not replacements for exhaustive boundary tests or generated OpenAPI documentation.
+Update fixtures alongside intentional contract changes. A fixture change should include the corresponding Effect schema change and a .NET parity check. The fixtures are examples, not replacements for exhaustive boundary tests or generated OpenAPI documentation.

@@ -43,7 +43,7 @@ function request(
         const decoder = new TextDecoder();
         let bytes = 0;
         let document = "";
-        while (true) {
+        for (;;) {
           const chunk = await reader.read();
           if (chunk.done) break;
           bytes += chunk.value.byteLength;

@@ -261,7 +261,7 @@ public static partial class PublishingEndpoints
     // version, so the fork boundary mirrors the current 1.0.0 schema decoder by stripping unknown keys.
     private static void NormalizeForkDocument(JsonObject document, JsonArray objectives, JsonArray cards)
     {
-        KeepOnly(document, "schemaVersion", "id", "sourceId", "title", "description", "language", "objectives", "ai", "cards", "tags", "licence", "attribution", "forkedFromVersionId", "activities");
+        KeepOnly(document, "schemaVersion", "id", "sourceId", "title", "description", "language", "difficulty", "objectives", "ai", "cards", "tags", "licence", "attribution", "forkedFromVersionId", "activities");
         foreach (var objective in objectives.OfType<JsonObject>())
             KeepOnly(objective, "id", "title", "description", "prerequisiteIds", "sourceId");
         if (document["ai"] is JsonObject ai)

@@ -10,6 +10,27 @@ const IsoDate = Schema.String.pipe(
 );
 
 export const DeckIdSchema = Uuid;
+export const DeckDifficultySchema = Schema.Union(
+  Schema.Literal("beginner"),
+  Schema.Literal("intermediate"),
+  Schema.Literal("advanced"),
+);
+export const DeckPreviewCardSchema = Schema.Struct({
+  kind: Schema.Union(Schema.Literal("basic"), Schema.Literal("cloze"), Schema.Literal("activity")),
+  prompt: Schema.String.pipe(Schema.maxLength(240)),
+  answer: Schema.NullOr(Schema.String.pipe(Schema.maxLength(240))),
+});
+export const DeckCatalogMetadataSchema = Schema.Struct({
+  difficulty: Schema.NullOr(DeckDifficultySchema),
+  cardTypes: Schema.Array(Schema.Union(Schema.Literal("basic"), Schema.Literal("cloze"))).pipe(
+    Schema.maxItems(2),
+  ),
+  activityTypes: Schema.Array(Schema.String.pipe(Schema.minLength(1), Schema.maxLength(200))).pipe(
+    Schema.maxItems(500),
+  ),
+  estimatedMinutes: PositiveInt,
+  preview: Schema.Array(DeckPreviewCardSchema).pipe(Schema.maxItems(3)),
+});
 export const DeckSummarySchema = Schema.Struct({
   id: Uuid,
   title: Schema.String.pipe(Schema.minLength(1), Schema.maxLength(300)),
@@ -29,6 +50,7 @@ export const DeckSummarySchema = Schema.Struct({
   updatedAt: IsoDate,
   license: Schema.NullOr(Schema.String),
   attribution: Schema.NullOr(Schema.String),
+  catalog: Schema.optional(Schema.NullOr(DeckCatalogMetadataSchema)),
 });
 export const DeckVersionSummarySchema = Schema.Struct({
   id: Uuid,
@@ -159,6 +181,8 @@ export const ModerationMutationResponseSchema = Schema.Struct({
 });
 
 export type DeckSummary = typeof DeckSummarySchema.Type;
+export type DeckCatalogMetadata = typeof DeckCatalogMetadataSchema.Type;
+export type DeckPreviewCard = typeof DeckPreviewCardSchema.Type;
 export type DeckVersionSummary = typeof DeckVersionSummarySchema.Type;
 export type DeckSubscription = typeof DeckSubscriptionSchema.Type;
 export type DeckFeedback = typeof DeckFeedbackSchema.Type;

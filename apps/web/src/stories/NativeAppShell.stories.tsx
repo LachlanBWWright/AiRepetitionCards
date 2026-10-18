@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type Dispatch, type SetStateAction } from "react";
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { Effect, Either, Schema } from "effect";
 import { sha256 } from "@noble/hashes/sha2.js";
@@ -16,15 +16,16 @@ import {
   NativeAppTab,
   type NativeAppTab as NativeAppTabValue,
 } from "../../../mobile/src/navigation";
-import { NativeTodayScreen } from "../../../mobile/src/components/NativeTodayScreen";
+import { NativeTodayScreen } from "../../../mobile/src/components/review/NativeTodayScreen";
 import {
   NativeWorkspaceAuthoringPanel,
   type NativeWorkspaceAuthoringPanelProps,
-} from "../../../mobile/src/components/NativeWorkspaceAuthoringPanel";
-import { NativeTutorPanel } from "../../../mobile/src/components/NativeTutorPanel";
-import { NativePublishingPanel } from "../../../mobile/src/components/NativePublishingPanel";
-import { NativeAccountPanel } from "../../../mobile/src/components/NativeAccountPanel";
+} from "../../../mobile/src/components/authoring/NativeWorkspaceAuthoringPanel";
+import { NativeTutorPanel } from "../../../mobile/src/components/tutor/practice/NativeTutorPanel";
+import { NativePublishingPanel } from "../../../mobile/src/components/publishing/NativePublishingPanel";
+import { NativeAccountPanel } from "../../../mobile/src/components/account/NativeAccountPanel";
 import { mockWorkspace } from "../features/workspace/mock-data";
+import type { Workspace } from "../features/workspace/types";
 
 const now = new Date("2026-10-03T09:00:00.000Z");
 const attachmentBytes = Uint8Array.from(
@@ -41,7 +42,8 @@ const attachment = {
   }),
   bytes: attachmentBytes,
 };
-const mockResult = async () => "Mock action ready. No account or cloud service was contacted.";
+const mockResult = () =>
+  Promise.resolve("Mock action ready. No account or cloud service was contacted.");
 const clients = {
   publishing: createPublishingApi(() => Effect.succeed({ status: 503, body: null })),
   media: createPublishedMediaGateway(() => Effect.succeed({ status: 503, body: null })),
@@ -52,6 +54,20 @@ const tutorApi = createTutorApi(() =>
     body: { error: "Mock tutor is offline. Your draft remains available." },
   }),
 );
+
+function applyStoryAuthoringCommand(
+  workspace: Workspace,
+  command: Parameters<NativeWorkspaceAuthoringPanelProps["onCommand"]>[0],
+  expectedBaseline: Parameters<NativeWorkspaceAuthoringPanelProps["onCommand"]>[1],
+  setWorkspace: Dispatch<SetStateAction<Workspace>>,
+) {
+  const result = Effect.runSync(
+    Effect.either(applyWorkspaceAuthoringCommand(workspace, command, now, expectedBaseline)),
+  );
+  if (Either.isLeft(result)) return Promise.resolve({ ok: false, message: result.left.message });
+  setWorkspace(result.right.workspace);
+  return Promise.resolve({ ok: true, message: result.right.message });
+}
 
 function ShellStory({
   initialTab = NativeAppTab.Today,
@@ -99,7 +115,9 @@ function ShellStory({
         }}
         today={
           <NativeTodayScreen
-            onOpenLibrary={() => setActiveTab(NativeAppTab.Library)}
+            onOpenLibrary={() => {
+              setActiveTab(NativeAppTab.Library);
+            }}
             ready
             workspace={workspace}
             activeAreaId={activeAreaId}
@@ -109,9 +127,15 @@ function ShellStory({
             showAnswer={showAnswer}
             canReset={false}
             onSelectArea={setActiveAreaId}
-            onHideAnswer={() => setShowAnswer(false)}
-            onShowAnswer={() => setShowAnswer(true)}
-            onReview={() => setShowAnswer(false)}
+            onHideAnswer={() => {
+              setShowAnswer(false);
+            }}
+            onShowAnswer={() => {
+              setShowAnswer(true);
+            }}
+            onReview={() => {
+              setShowAnswer(false);
+            }}
             onReset={() => undefined}
             onImportAnki={() => undefined}
           />
@@ -123,16 +147,9 @@ function ShellStory({
             createId={() => "00000000-0000-4000-8000-000000000810"}
             onPickAttachment={() => Effect.succeed(attachment)}
             {...(initialEditor ? { initialEditor } : {})}
-            onCommand={async (command, expectedBaseline) => {
-              const result = Effect.runSync(
-                Effect.either(
-                  applyWorkspaceAuthoringCommand(workspace, command, now, expectedBaseline),
-                ),
-              );
-              if (Either.isLeft(result)) return { ok: false, message: result.left.message };
-              setWorkspace(result.right.workspace);
-              return { ok: true, message: result.right.message };
-            }}
+            onCommand={(command, expectedBaseline) =>
+              applyStoryAuthoringCommand(workspace, command, expectedBaseline, setWorkspace)
+            }
           />
         }
         tutor={
@@ -142,7 +159,7 @@ function ShellStory({
             createId={() => "00000000-0000-4000-8000-000000000811"}
             initialSessionId={null}
             onSessionIdChange={() => undefined}
-            onApproveProposal={async () => null}
+            onApproveProposal={() => Promise.resolve(null)}
           />
         }
         sharing={
@@ -154,7 +171,7 @@ function ShellStory({
             publicationOperationStore={operationStore}
             createForkOperationId={() => "00000000-0000-4000-8000-000000000812"}
             createPublishShareToken={() => "A".repeat(43)}
-            onFork={async () => true}
+            onFork={() => Promise.resolve(true)}
           />
         }
         account={

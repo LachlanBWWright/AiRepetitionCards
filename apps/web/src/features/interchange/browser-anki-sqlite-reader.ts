@@ -5,7 +5,6 @@ import {
   type AnkiCollection,
   type AnkiSqliteReader,
   type AnkiSqliteReaderError,
-  type AnkiV18CollectionRows,
 } from "@recall/application";
 
 const databaseLimit = 500;
@@ -155,7 +154,7 @@ function readCollection(
         notes,
         cards,
         reviews: reviews.right,
-      } as AnkiV18CollectionRows);
+      });
     }
     const [collection] = values(database, "SELECT models, decks FROM col LIMIT 1");
     if (!collection || typeof collection[0] !== "string" || typeof collection[1] !== "string") {

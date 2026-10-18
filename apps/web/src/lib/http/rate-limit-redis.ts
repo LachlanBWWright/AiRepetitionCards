@@ -70,23 +70,7 @@ function validatedConfiguration(input: unknown): Either.Either<Configuration, Ap
         Effect.mapError(unavailable),
         Effect.flatMap((configuration) =>
           Effect.try({ try: () => new URL(configuration.url), catch: unavailable }).pipe(
-            Effect.flatMap((url) => {
-              const loopback = ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname);
-              if (
-                (url.protocol !== "https:" &&
-                  !(
-                    process.env.NODE_ENV === "development" &&
-                    url.protocol === "http:" &&
-                    loopback
-                  )) ||
-                url.username ||
-                url.password ||
-                url.search ||
-                url.hash
-              )
-                return Effect.fail(unavailable());
-              return Effect.succeed({ ...configuration, url: url.toString() });
-            }),
+            Effect.flatMap((url) => normalizeRedisUrl(url, configuration)),
           ),
         ),
       ),
@@ -98,7 +82,9 @@ function command(configuration: Configuration, key: string, width: number, limit
   return Effect.tryPromise({
     try: async (): Promise<unknown> => {
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 10_000);
+      const timeout = setTimeout(() => {
+        controller.abort();
+      }, 10_000);
       try {
         const response = await fetch(configuration.url, {
           method: "POST",
@@ -202,4 +188,18 @@ export function createConfiguredApiRateLimitStore(): ApiRateLimitStore {
     token: process.env.API_RATE_LIMIT_STORE_REST_TOKEN?.trim(),
     prefix: process.env.API_RATE_LIMIT_STORE_PREFIX?.trim() || "recall:api-rate-limit",
   });
+}
+
+function normalizeRedisUrl(url: URL, configuration: Configuration) {
+  const loopback = ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname);
+  if (
+    (url.protocol !== "https:" &&
+      !(process.env.NODE_ENV === "development" && url.protocol === "http:" && loopback)) ||
+    url.username ||
+    url.password ||
+    url.search ||
+    url.hash
+  )
+    return Effect.fail(unavailable());
+  return Effect.succeed({ ...configuration, url: url.toString() });
 }

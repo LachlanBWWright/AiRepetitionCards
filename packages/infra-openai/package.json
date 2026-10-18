@@ -4,7 +4,9 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./chatgpt-inference": "./src/chatgpt-inference.ts",
+    "./chatgpt-plan-errors": "./src/chatgpt-plan-errors.ts"
   },
   "dependencies": {
     "@recall/ai-core": "workspace:*",

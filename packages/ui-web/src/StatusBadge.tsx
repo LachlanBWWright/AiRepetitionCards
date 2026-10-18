@@ -16,5 +16,9 @@ export function StatusBadge({
     warning: "bg-[var(--status-warning-bg)] text-[var(--status-warning-fg)]",
     danger: "bg-[var(--status-danger-bg)] text-[var(--status-danger-fg)]",
   };
-  return <Badge variant="outline" className={toneClasses[tone]}>{children}</Badge>;
+  return (
+    <Badge variant="outline" className={toneClasses[tone]}>
+      {children}
+    </Badge>
+  );
 }

@@ -79,7 +79,7 @@ public static class AccountEndpointMappings
             format = "recall-account-export",
             version = 1,
             exportedAt = now.ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", CultureInfo.InvariantCulture),
-            account = new { userId = ownerId, profile = profiles!.FirstOrDefault() },
+            account = new { userId = ownerId, profile = profiles!.Count > 0 ? (JsonElement?)profiles[0] : null },
             data = new
             {
                 knowledgeAreas = areas,
@@ -290,7 +290,8 @@ public static class AccountEndpointMappings
         var key = (configuration["SUPABASE_PUBLISHABLE_KEY"] ?? configuration["NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY"])?.Trim();
         return !string.IsNullOrWhiteSpace(key) &&
             Uri.TryCreate(url, UriKind.Absolute, out var parsed) &&
-            (parsed.Scheme == Uri.UriSchemeHttps || parsed.Host == "localhost");
+            (parsed.Scheme == Uri.UriSchemeHttps ||
+             parsed.Scheme == Uri.UriSchemeHttp && parsed.IsLoopback);
     }
 
     private static void SetPrivateHeaders(HttpResponse response)

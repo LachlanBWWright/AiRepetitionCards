@@ -12,6 +12,12 @@ Scheduling and content import operations receive an explicit timestamp from the 
 The scheduler never reads the clock. Replay without events requires an explicit initial timestamp;
 otherwise it returns `missing-initial-timestamp` through its typed failure channel.
 
+Causal event order takes precedence over timestamp order. For each transition, the derived
+scheduling time is the later of the event time and the schedule's previous review time. This
+prevents negative elapsed time after device clock rollback or server clock correction. The same
+rule applies to live reviews, previews, and historical replay. Raw and server-effective timestamps
+remain unchanged in the review log; consecutive reviews may have zero elapsed scheduling time.
+
 Changing the preference affects future reviews. It does not rewrite events or immediately move
 existing due dates. Each new event stores a parameter-set identifier such as
 `ts-fsrs-5.4.2-default-r9000`. The integer suffix records retention to four decimal places, matching

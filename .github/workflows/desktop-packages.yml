@@ -3,11 +3,6 @@ name: Desktop packages (unsigned development)
 on:
   pull_request:
   workflow_dispatch:
-    inputs:
-      chatgpt_direct:
-        description: Enable direct ChatGPT authorization for an eligible local desktop distribution
-        type: boolean
-        default: false
   push:
     branches: [main]
     tags:
@@ -70,7 +65,6 @@ jobs:
       NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ vars.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
       NEXT_PUBLIC_RECALL_API_URL: ${{ vars.NEXT_PUBLIC_RECALL_API_URL }}
       RECALL_API_URL: ${{ vars.RECALL_API_URL || vars.NEXT_PUBLIC_RECALL_API_URL }}
-      RECALL_CHATGPT_LOCAL_ENABLED: ${{ github.event_name == 'workflow_dispatch' && inputs.chatgpt_direct && 'true' || 'false' }}
     steps:
       - uses: actions/checkout@v6
         with:

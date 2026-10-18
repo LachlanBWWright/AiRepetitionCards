@@ -1,6 +1,6 @@
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { defineConfig, externalizeDepsPlugin } from "electron-vite";
+import { defineConfig } from "electron-vite";
 import react from "@vitejs/plugin-react";
 import { loadEnv } from "vite";
 
@@ -23,14 +23,13 @@ export default defineConfig(({ mode }) => {
     main: {
       define: {
         ...publicEnvironment,
-        "process.env.RECALL_CHATGPT_LOCAL_ENABLED": JSON.stringify(
-          env.RECALL_CHATGPT_LOCAL_ENABLED ?? process.env.RECALL_CHATGPT_LOCAL_ENABLED ?? "false",
-        ),
       },
     },
     preload: {
-      plugins: [externalizeDepsPlugin()],
-      build: { rollupOptions: { output: { format: "cjs", entryFileNames: "index.cjs" } } },
+      build: {
+        externalizeDeps: true,
+        rollupOptions: { output: { format: "cjs", entryFileNames: "index.cjs" } },
+      },
     },
     renderer: {
       root: resolve(appDirectory, "src/renderer"),

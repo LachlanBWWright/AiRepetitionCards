@@ -13,6 +13,12 @@ export async function refreshSupabaseSession(
   const config = readSupabaseConfig();
   if (Either.isLeft(config)) return response;
 
+  const cookiePolicy = {
+    httpOnly: true,
+    secure: request.nextUrl.protocol === "https:" || process.env.NODE_ENV === "production",
+    sameSite: "lax" as const,
+    path: "/",
+  };
   const refresh = Effect.tryPromise({
     try: async () => {
       const client = createServerClient(config.right.url, config.right.publishableKey, {
@@ -30,11 +36,7 @@ export async function refreshSupabaseSession(
             for (const { name, value, options } of cookiesToSet) {
               response.cookies.set(name, value, {
                 ...options,
-                httpOnly: true,
-                secure:
-                  request.nextUrl.protocol === "https:" || process.env.NODE_ENV === "production",
-                sameSite: "lax",
-                path: "/",
+                ...cookiePolicy,
               });
             }
           },

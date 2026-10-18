@@ -50,7 +50,9 @@ export const FullScreenStates: Story = {
   name: "Full-screen · empty and recovery states",
   render: () => (
     <>
-      <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">RECALL · SHARED UI</p>
+      <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+        RECALL · SHARED UI
+      </p>
       <h1>
         Make the next step <em>clear.</em>
       </h1>

@@ -12,6 +12,38 @@ import {
 import type { SyncPushResponse } from "@recall/contracts";
 import { stableSyncId } from "./ids";
 
+function mergedAreaObjectives(
+  areas: readonly Workspace["areas"][number][],
+  area: Workspace["areas"][number],
+) {
+  return [
+    ...new Map(
+      areas
+        .filter((item) => item.id === area.id)
+        .flatMap((item) =>
+          (
+            item.objectives ??
+            [...new Set(item.cards.map((card) => card.objective))].map((title) => ({
+              id: createObjectiveId(stableSyncId(`objective:${item.sourceId ?? item.id}:${title}`)),
+              title,
+              description: null,
+              prerequisiteIds: [],
+            }))
+          ).map((objective) => [objective.id, objective] as const),
+        ),
+    ).values(),
+  ];
+}
+function normalizedCardId(
+  area: Workspace["areas"][number],
+  card: Workspace["areas"][number]["cards"][number],
+) {
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(card.id))
+    return card.id;
+  const seed = area.sourceId ?? area.id;
+  return createAssessmentId(stableSyncId(`card:${seed}:${card.sourceId ?? card.id}`));
+}
+
 export function repairReviewSyncConflicts(
   workspace: Workspace,
   conflicts: SyncPushResponse["conflicts"],
@@ -93,25 +125,7 @@ export function prepareWorkspaceForSync(workspace: Workspace, createId: () => st
       ],
       ...(allAreas.some((item) => item.id === area.id && item.objectives !== undefined)
         ? {
-            objectives: [
-              ...new Map(
-                allAreas
-                  .filter((item) => item.id === area.id)
-                  .flatMap((item) =>
-                    (
-                      item.objectives ??
-                      [...new Set(item.cards.map((card) => card.objective))].map((title) => ({
-                        id: createObjectiveId(
-                          stableSyncId(`objective:${item.sourceId ?? item.id}:${title}`),
-                        ),
-                        title,
-                        description: null,
-                        prerequisiteIds: [],
-                      }))
-                    ).map((objective) => [objective.id, objective] as const),
-                  ),
-              ).values(),
-            ],
+            objectives: mergedAreaObjectives(allAreas, area),
           }
         : {}),
     }),
@@ -129,15 +143,7 @@ export function prepareWorkspaceForSync(workspace: Workspace, createId: () => st
   const cardIds = new Map(
     identityAreas.flatMap((area) =>
       area.cards.map(
-        (card) =>
-          [
-            scopedKey(area.id, card.id),
-            isUuid(card.id)
-              ? card.id
-              : createAssessmentId(
-                  stableSyncId(`card:${areaSeed(area)}:${card.sourceId ?? card.id}`),
-                ),
-          ] as const,
+        (card) => [scopedKey(area.id, card.id), normalizedCardId(area, card)] as const,
       ),
     ),
   );
@@ -249,25 +255,26 @@ export function prepareWorkspaceForSync(workspace: Workspace, createId: () => st
       lastEventByCard.set(cardId, eventId);
       return normalized;
     });
+  const normalizeCardVersion = (version: NonNullable<Workspace["cardVersions"]>[number]) => {
+    const normalized = normalizeArea({ ...version.area, cards: [version.card] });
+    const card = normalized.cards[0];
+    return card
+      ? {
+          ...version,
+          areaId: normalized.id,
+          cardId: card.id,
+          area: { ...normalized, cards: [] },
+          card,
+        }
+      : version;
+  };
   return {
     ...workspace,
     areas,
     ...(retainedReviewAreas ? { retainedReviewAreas } : {}),
     ...(workspace.cardVersions
       ? {
-          cardVersions: workspace.cardVersions.map((version) => {
-            const normalized = normalizeArea({ ...version.area, cards: [version.card] });
-            const card = normalized.cards[0];
-            return card
-              ? {
-                  ...version,
-                  areaId: normalized.id,
-                  cardId: card.id,
-                  area: { ...normalized, cards: [] },
-                  card,
-                }
-              : version;
-          }),
+          cardVersions: workspace.cardVersions.map(normalizeCardVersion),
         }
       : {}),
     ...(workspace.deletedAreas

@@ -70,9 +70,15 @@ function command(
         child.stderr.on("data", (chunk: unknown) => {
           if (Buffer.isBuffer(chunk)) stderr = (stderr + chunk.toString("utf8")).slice(0, 2000);
         });
-        child.on("error", () => finish(false));
-        child.on("close", (code) => finish(code === 0));
-        child.stdin.on("error", () => finish(false));
+        child.on("error", () => {
+          finish(false);
+        });
+        child.on("close", (code) => {
+          finish(code === 0);
+        });
+        child.stdin.on("error", () => {
+          finish(false);
+        });
         child.stdin.end(input);
       }),
     catch: () => failure("Code execution is unavailable. Your solution is retained."),

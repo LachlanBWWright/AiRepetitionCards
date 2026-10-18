@@ -6,7 +6,7 @@ import {
   KnowledgeAreaSchema,
 } from "@recall/domain";
 
-const ContentHashSchema = Schema.String.pipe(Schema.pattern(/^[a-f0-9]{64}$/i));
+const ContentHashSchema = Schema.String.pipe(Schema.pattern(/^[a-fA-F0-9]{64}$/));
 
 export const WorkspaceSnapshotSchema = Schema.Struct({
   schemaVersion: Schema.Literal(1),
@@ -14,7 +14,7 @@ export const WorkspaceSnapshotSchema = Schema.Struct({
   areas: Schema.Array(
     Schema.Struct({
       document: KnowledgeAreaSchema,
-      color: Schema.String.pipe(Schema.pattern(/^#[0-9a-f]{6}$/i)),
+      color: Schema.String.pipe(Schema.pattern(/^#[0-9a-fA-F]{6}$/)),
       contentHash: ContentHashSchema,
     }),
   ),
@@ -23,7 +23,7 @@ export const WorkspaceSnapshotSchema = Schema.Struct({
 
 export const WorkspaceContentPushAreaSchema = Schema.Struct({
   document: KnowledgeAreaSchema,
-  color: Schema.String.pipe(Schema.pattern(/^#[0-9a-f]{6}$/i)),
+  color: Schema.String.pipe(Schema.pattern(/^#[0-9a-fA-F]{6}$/)),
   baseContentHash: Schema.NullOr(ContentHashSchema),
 });
 

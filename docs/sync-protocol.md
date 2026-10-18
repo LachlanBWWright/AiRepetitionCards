@@ -1,6 +1,6 @@
 # Workspace and review synchronization
 
-Hosted sync uses Supabase's canonical authenticated user. Web supplies cookies; native and Electron adapters supply bearer credentials. Application coordination lives in `packages/application/src/workspace-sync.ts`, with transports and storage composed by each client.
+Hosted sync uses Supabase's canonical authenticated user. Web supplies cookies; native and Electron adapters supply bearer credentials. Application coordination lives in `packages/application/src/workspace/sync/workspace-sync.ts`, with transports and storage composed by each client.
 
 ## Account ownership
 

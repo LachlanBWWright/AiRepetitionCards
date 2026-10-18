@@ -1,7 +1,7 @@
 /** Storage-shaped, tab-lifetime memory for UI workflows that need keyed state. */
 const values = new Map<string, string>();
 const desktopStorage = () =>
-  typeof window === "undefined" ? undefined : window.recallDesktop && window.localStorage;
+  typeof window === "undefined" || !window.recallDesktop ? undefined : window.localStorage;
 
 export const volatileStorage = {
   get length() {
@@ -12,8 +12,8 @@ export const volatileStorage = {
   },
   setItem(key: string, value: string) {
     const storage = desktopStorage();
-    if (storage) storage.setItem(key, String(value));
-    else values.set(key, String(value));
+    if (storage) storage.setItem(key, value);
+    else values.set(key, value);
   },
   removeItem(key: string) {
     const storage = desktopStorage();
@@ -21,9 +21,10 @@ export const volatileStorage = {
     else values.delete(key);
   },
   clear() {
-    const storage = desktopStorage();
-    if (!storage) values.clear();
-    else {
+    values.clear();
+    const storage =
+      typeof window === "undefined" ? undefined : (desktopStorage() ?? window.localStorage);
+    if (storage) {
       const privatePrefixes = [
         "recall-tutor-session:",
         "recall-chatgpt-tutor:",
@@ -31,6 +32,8 @@ export const volatileStorage = {
         "recall-chatgpt-welcome:",
         "recall-knowledge-notebook:",
         "recall-library-notes:",
+        "recall-library-notes-durable:",
+        "recall-release-draft:",
         "recall-local-ai-usage",
         "recall-daily-reminders",
         "recall-pending-publication:",
@@ -41,6 +44,11 @@ export const volatileStorage = {
       ])
         if (key && privatePrefixes.some((prefix) => key.startsWith(prefix)))
           storage.removeItem(key);
+      try {
+        window.dispatchEvent(new Event("recall-library-notes-durable-change"));
+      } catch {
+        // Erasure has completed; subscribers can refresh on their next render.
+      }
     }
   },
   key(index: number) {
