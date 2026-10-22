@@ -1,4 +1,5 @@
 import { normalizeReviewTimestamp } from "./review-timestamp";
+import { StudySyncDocumentSchema } from "@recall/domain";
 import { ActivityLibrarySchema } from "@recall/domain";
 import * as Schema from "effect/Schema";
 
@@ -43,6 +44,7 @@ export const AccountExportResponseSchema = Schema.Struct({
     aiObservations: DatabaseRowsSchema,
     generatedCardProposals: DatabaseRowsSchema,
     aiUsage: DatabaseRowsSchema,
+    studySettings: Schema.optional(StudySyncDocumentSchema),
     learningActivities: Schema.optional(ActivityLibrarySchema),
   }),
 });

@@ -1,7 +1,7 @@
 import { Alert } from "react-native";
 import { Effect, Either } from "effect";
 import * as Crypto from "expo-crypto";
-import type { AnkiImportProposal } from "@recall/application";
+import { applyAnkiImport, type AnkiImportProposal } from "@recall/application";
 import { pickAnkiImport } from "../../storage/interchange/native-anki-import";
 import { palette } from "../state/AppEnvironment";
 import type { AppCoreState } from "../useAppController";
@@ -63,7 +63,7 @@ export function createAppAnkiActions(
     const proposal = picked.right;
     Alert.alert(
       "Review Anki import",
-      `${proposal.area.title}\n${String(proposal.area.cards.length)} cards · ${String(proposal.reviewEvents.length)} reviews${proposal.excludedReviewCount > 0 ? ` · ${String(proposal.excludedReviewCount)} cram/reschedule entries excluded` : ""}\n\nImported review history is retained. New cards start with a fresh Recall schedule.`,
+      `${proposal.area.title}\n${String(proposal.area.cards.length)} cards · ${String(proposal.reviewEvents.length)} reviews${proposal.excludedReviewCount > 0 ? ` · ${String(proposal.excludedReviewCount)} cram/reschedule entries excluded` : ""}\n\nMatching Anki cards update their content while keeping local scheduling and history. New cards retain imported review history. Supported schedules preserve due dates and intervals; other schedules are rebuilt.\n\n${(proposal.warnings ?? []).join("\n")}`,
       [
         { text: "Cancel", style: "cancel" },
         {
@@ -81,21 +81,11 @@ export function createAppAnkiActions(
     if (!mediaStore) return;
     const accepted = await Effect.runPromise(
       Effect.either(
-        commitWorkspaceChange(
-          (current) =>
-            Effect.succeed({
-              ...current,
-              areas: [...current.areas, proposal.area],
-              reviews: current.reviews + proposal.reviewEvents.length,
-              reviewEvents: [...(current.reviewEvents ?? []), ...proposal.reviewEvents],
-            }),
-          generation,
-          {
-            persistFirst: true,
-            media: proposal.media,
-            isCurrent: () => authSession.current.generation === authGeneration,
-          },
-        ),
+        commitWorkspaceChange((current) => applyAnkiImport(current, proposal), generation, {
+          persistFirst: true,
+          media: proposal.media,
+          isCurrent: () => authSession.current.generation === authGeneration,
+        }),
       ),
     );
     if (Either.isLeft(accepted)) {
@@ -105,6 +95,14 @@ export function createAppAnkiActions(
           accepted.left.mediaRollback
             ? "The import was not added. Local storage failed and some temporary attachments could not be removed."
             : "The import was not added because its workspace or attachments could not be saved.",
+        );
+      } else if (accepted.left._tag === "AnkiReimportFailure") {
+        setMessage(
+          accepted.left.reason === "ambiguous-matches"
+            ? "Import stopped: matching Anki cards occur in multiple areas or are duplicated."
+            : accepted.left.reason === "partial-note-family"
+              ? "Import the complete shared-note family to update existing notes safely."
+              : "The updated collection did not pass validation.",
         );
       } else setMessage("Import discarded because this workspace or account changed.");
       return;

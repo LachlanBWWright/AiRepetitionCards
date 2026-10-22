@@ -1,5 +1,6 @@
+import type { ImageOcclusion } from "@recall/domain";
 import { useCallback, useRef, useState, type SetStateAction } from "react";
-import { type AreaId } from "@recall/domain";
+import { type ReviewPresentation, type AreaId } from "@recall/domain";
 import {
   workspaceAuthoringBaseline,
   formatTagInput,
@@ -134,11 +135,17 @@ export function useRecallDashboardEditorState(
   const [front, setFront] = useState(demoCard?.front ?? "");
   const [back, setBack] = useState(demoCard?.back ?? "");
   const [duplicateAcknowledgement, setDuplicateAcknowledgement] = useState<string | null>(null);
+  const [imageOcclusion, setImageOcclusion] = useState<ImageOcclusion | undefined>(
+    demoCard?.imageOcclusion,
+  );
   const [cardKind, setCardKind] = useState<"basic" | "cloze">(demoCard?.cloze ? "cloze" : "basic");
   const [clozeText, setClozeText] = useState(demoCard?.cloze?.text ?? "");
   const [clozeIndex, setClozeIndex] = useState(String(demoCard?.cloze?.deletionIndex ?? 1));
   const [cardObjectiveIds, setCardObjectiveIds] = useState<readonly string[]>(
     demoCard?.objectiveIds ?? [],
+  );
+  const [cardPresentation, setCardPresentation] = useState<ReviewPresentation | undefined>(
+    demoCard?.presentation,
   );
   const [cardTags, setCardTags] = useState(formatTagInput(demoCard?.tags ?? []));
   const [removedMediaIds, setRemovedMediaIds] = useState<readonly string[]>([]);
@@ -227,6 +234,8 @@ export function useRecallDashboardEditorState(
     setBack,
     duplicateAcknowledgement,
     setDuplicateAcknowledgement,
+    imageOcclusion,
+    setImageOcclusion,
     cardKind,
     setCardKind,
     clozeText,
@@ -235,6 +244,8 @@ export function useRecallDashboardEditorState(
     setClozeIndex,
     cardObjectiveIds,
     setCardObjectiveIds,
+    cardPresentation,
+    setCardPresentation,
     cardTags,
     setCardTags,
     removedMediaIds,

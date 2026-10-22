@@ -1,3 +1,4 @@
+import { areaMediaReferences } from "@recall/application";
 import { useEffect, useMemo, useState } from "react";
 import { Effect, Either, Fiber } from "effect";
 import {
@@ -164,11 +165,7 @@ export function useKnowledgeAreaPublishingState({
   useEffect(() => {
     if (!area) return;
     let active = true;
-    const references = [
-      ...new Map(
-        area.cards.flatMap((card) => card.media ?? []).map((item) => [item.id, item]),
-      ).values(),
-    ];
+    const references = areaMediaReferences(area);
     const quality = Effect.all(
       references.map((reference) =>
         Effect.either(mediaStore.get(reference.id)).pipe(

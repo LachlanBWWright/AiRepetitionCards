@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { Effect, Either, Schema } from "effect";
-import { TUTOR_QUESTION_INSTRUCTIONS } from "@recall/ai-core";
+import {
+  IMPROVEMENT_CHAT_INSTRUCTIONS,
+  TUTOR_QUESTION_INSTRUCTIONS,
+  type TutorTokenUsage,
+} from "@recall/ai-core";
 import { sendImprovementMessage } from "@recall/application";
 import { Request } from "../../../../apps/desktop/src/main/chatgpt/transport/chatgpt-local-protocol.js";
 import { createAreaId, createObjectiveId, type KnowledgeArea } from "@recall/domain";
@@ -23,6 +27,21 @@ const area: KnowledgeArea = {
     cardGenerationInstructions: null,
   },
 };
+function inferenceReply(value: unknown) {
+  return {
+    _tag: "Success",
+    value: {
+      text: JSON.stringify(value),
+      usage: {
+        model: "study-model",
+        inputTokens: 1200,
+        outputTokens: 40,
+        cachedInputTokens: null,
+        cacheWriteTokens: null,
+      },
+    },
+  };
+}
 const HttpFailure = Schema.Struct({ reason: Schema.Literal("http"), code: Schema.String });
 const Inference = Schema.Struct({
   instructions: Schema.String,
@@ -59,20 +78,22 @@ async function withDesktop<A>(
 
 await test("the real local tutor workflow sends trusted instructions separately and accepts validated JSON", async () => {
   let captured: unknown = null;
+  const usage: TutorTokenUsage[] = [];
   await withDesktop(
     (input) => {
       captured = input;
-      return Promise.resolve({
-        _tag: "Success",
-        value: JSON.stringify({
+      return Promise.resolve(
+        inferenceReply({
           question: "Why do cells need ATP?",
           objectiveId: null,
           teachingIntent: "Retrieve the role of ATP.",
         }),
-      });
+      );
     },
     async () => {
-      const api = createLocalChatGptTutor("test-client", "study-model", area.id);
+      const api = createLocalChatGptTutor("test-client", "study-model", area.id, (next) => {
+        usage.push(next);
+      });
       const result = await Effect.runPromise(
         api.request({ action: "question", context: { knowledgeArea: area, history: [] } }),
       );
@@ -80,6 +101,8 @@ await test("the real local tutor workflow sends trusted instructions separately 
       assert.equal(result.result.question, "Why do cells need ATP?");
     },
   );
+  assert.equal(usage.length, 1);
+  assert.equal(usage[0]?.inputTokens, 1200);
   const inference = await Effect.runPromise(Schema.decodeUnknown(Inference)(captured));
   assert.match(inference.instructions, /untrusted learning data/);
   assert.match(inference.instructions, /Return only JSON/);
@@ -96,14 +119,13 @@ await test("the real local tutor workflow sends trusted instructions separately 
 await test("invalid objective output fails validation without blaming the connection or saving a session", async () => {
   await withDesktop(
     () =>
-      Promise.resolve({
-        _tag: "Success",
-        value: JSON.stringify({
+      Promise.resolve(
+        inferenceReply({
           question: "Why ATP?",
           objectiveId: "invented-objective",
           teachingIntent: "Recall.",
         }),
-      }),
+      ),
     async () => {
       const api = createLocalChatGptTutor("test-client", "study-model", area.id);
       const result = await Effect.runPromise(
@@ -146,15 +168,16 @@ await test("Improve's first message passes the real local workflow and desktop i
     (input) => {
       const decoded = Schema.decodeUnknownEither(Request)(input);
       assert.ok(Either.isRight(decoded), "Desktop must accept the generated inference request");
+      assert.ok(decoded.right.instructions, "Improvement requests must include instructions");
+      assert.ok(decoded.right.instructions.includes(IMPROVEMENT_CHAT_INSTRUCTIONS));
       calls += 1;
-      return Promise.resolve({
-        _tag: "Success",
-        value: JSON.stringify({
+      return Promise.resolve(
+        inferenceReply({
           question: "How does ATP connect energy release and cellular work?",
           objectiveId: null,
           teachingIntent: "Explore the connection.",
         }),
-      });
+      );
     },
     async () => {
       const api = createLocalChatGptTutor("test-client", "study-model", area.id);
@@ -170,7 +193,12 @@ await test("Improve's first message passes the real local workflow and desktop i
         ),
       );
       assert.equal(result.session.pendingQuestion, null);
-      assert.equal(result.improvementChat?.length, 2);
+      assert.equal(result.improvementChat?.length, 3);
+      assert.deepEqual(
+        result.improvementChat.map((message) => message.role),
+        ["assistant", "learner", "assistant"],
+      );
+      assert.equal(result.evidence.length, 0);
     },
   );
   assert.equal(calls, 1);

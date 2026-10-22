@@ -1,4 +1,5 @@
-import type { TutorTokenUsage } from "@recall/ai-core";
+import type { ChatModelSelection } from "./chat-model-selection";
+export type { ChatModelSelection } from "./chat-model-selection";
 import {
   Select,
   SelectContent,
@@ -6,14 +7,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@recall/ui-web/components/select";
-
-export type ChatModelSelection = {
-  readonly usage?: TutorTokenUsage | null | undefined;
-  readonly models: readonly { readonly slug: string; readonly displayName: string }[];
-  readonly value: string;
-  readonly onChange: (value: string) => void;
-  readonly disabled: boolean;
-};
 
 export function ChatModelPicker({
   selection,

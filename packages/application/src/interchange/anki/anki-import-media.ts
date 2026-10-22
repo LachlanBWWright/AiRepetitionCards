@@ -1,3 +1,4 @@
+import { isMp4AudioContainer, isWebmAudioContainer } from "../audio-signatures";
 import type { MediaReference } from "@recall/domain";
 import type { StoredMediaAsset } from "@recall/local-store";
 
@@ -44,6 +45,9 @@ export function mimeFor(name: string, bytes: Uint8Array): MediaReference["mimeTy
     new TextDecoder().decode(bytes.slice(8, 12)) === "WAVE"
   )
     return "audio/wav";
+  if ((lower.endsWith(".m4a") || lower.endsWith(".mp4")) && isMp4AudioContainer(bytes))
+    return "audio/mp4";
+  if (lower.endsWith(".webm") && isWebmAudioContainer(bytes)) return "audio/webm";
   return undefined;
 }
 

@@ -31,6 +31,8 @@ export function useNativeCardMedia(
           "audio/mpeg": "mp3",
           "audio/ogg": "ogg",
           "audio/wav": "wav",
+          "audio/mp4": "m4a",
+          "audio/webm": "webm",
         };
         const file = yield* Effect.try({
           try: () =>

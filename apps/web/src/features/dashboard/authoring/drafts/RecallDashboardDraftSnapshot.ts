@@ -1,5 +1,5 @@
 import { formatTagInput, type LibraryDraft } from "@recall/application";
-import type { AreaId } from "@recall/domain";
+import type { ReviewPresentation, ImageOcclusion, AreaId } from "@recall/domain";
 import type { Assessment, LearningArea, Workspace } from "@/features/workspace/types";
 
 export type LibraryDraftSnapshotInput = {
@@ -16,10 +16,12 @@ export type LibraryDraftSnapshotInput = {
   readonly front: string;
   readonly back: string;
   readonly clozeText: string;
+  readonly cardPresentation?: ReviewPresentation | undefined;
   readonly cardTags: string;
   readonly mediaFilePresent: boolean;
   readonly removedMediaIds: readonly string[];
   readonly sourceCard: Assessment | null;
+  readonly imageOcclusion?: ImageOcclusion | undefined;
   readonly cardKind: "basic" | "cloze";
   readonly clozeIndex: string;
   readonly cardObjectiveIds: readonly string[];
@@ -63,6 +65,8 @@ export function snapshotLibraryDraft(input: LibraryDraftSnapshotInput): LibraryD
   const source = input.sourceCard;
   if (
     source &&
+    JSON.stringify(source.imageOcclusion) === JSON.stringify(input.imageOcclusion) &&
+    JSON.stringify(source.presentation) === JSON.stringify(input.cardPresentation) &&
     source.front === input.front &&
     source.back === input.back &&
     (source.cloze?.text ?? "") === input.clozeText &&
@@ -80,11 +84,13 @@ export function snapshotLibraryDraft(input: LibraryDraftSnapshotInput): LibraryD
     areaId: input.area.id,
     id: input.editingCardId ?? "new",
     mode: input.editingCardId ? "edit" : "create",
+    imageOcclusion: input.imageOcclusion,
     cardKind: input.cardKind,
     front: input.front,
     back: input.back,
     clozeText: input.clozeText,
     clozeIndex: input.clozeIndex,
+    presentation: input.cardPresentation,
     tagsText: input.cardTags,
     objectiveIds: input.cardObjectiveIds,
     media: source?.media ?? [],

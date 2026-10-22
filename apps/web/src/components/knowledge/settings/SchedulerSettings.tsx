@@ -3,7 +3,11 @@
 import { useEffect, useId, useRef, useState } from "react";
 import type { SubmitEvent } from "react";
 import { Effect, Either } from "effect";
-import { updateSchedulerSettings, workspaceAuthoringBaseline } from "@recall/application";
+import {
+  updateSchedulerSettings,
+  workspaceAuthoringBaseline,
+  schedulerSettingsDraft,
+} from "@recall/application";
 import type { SchedulerSettings as SchedulerPreferences, Workspace } from "@recall/domain";
 import { Button } from "@/components/ui/Button";
 import { Alert, AlertDescription, Input } from "@recall/ui-web";
@@ -18,6 +22,11 @@ import {
   AlertDialogTitle,
 } from "@recall/ui-web/components/alert-dialog";
 import { Slider } from "@recall/ui-web/components/slider";
+import { ReviewerSettingsFields } from "./ReviewerSettingsFields";
+import { StudyPolicyFields } from "./StudyPolicyFields";
+import { ParameterFittingPanel } from "./ParameterFittingPanel";
+import { AdvancedSchedulingFields } from "./AdvancedSchedulingFields";
+import { StudyPresetEditor } from "./StudyPresetEditor";
 
 export type SchedulerSettingsSaveFailure = {
   readonly _tag: "SchedulerSettingsSaveFailure";
@@ -48,9 +57,13 @@ const baselineOf = (workspace: Workspace): string =>
 export function SchedulerSettings({ workspace, onSave, readLatest, initialDraft }: Props) {
   const prefix = useId();
   const [draftWorkspace, setDraftWorkspace] = useState(workspace);
+  const [studySettings, setStudySettings] = useState<SchedulerPreferences>(
+    workspace.schedulerSettings ?? { requestRetention: 0.9 },
+  );
   const [retentionPercent, setRetentionPercent] = useState(
     () => initialDraft?.retentionPercent ?? percentText(workspace),
   );
+  const effectiveSettings = schedulerSettingsDraft(studySettings, { retentionPercent });
   const [busy, setBusy] = useState(false);
   const [confirmReload, setConfirmReload] = useState(false);
   const saving = useRef(false);
@@ -73,19 +86,14 @@ export function SchedulerSettings({ workspace, onSave, readLatest, initialDraft 
     if (saving.current || !readLatest) return;
     const latest = readLatest();
     setDraftWorkspace(latest);
+    setStudySettings(latest.schedulerSettings ?? { requestRetention: 0.9 });
     setRetentionPercent(percentText(latest));
     setFeedback(null);
   };
   const save = async (event: SubmitEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (saving.current) return;
-    const initialPercent = percentText(draftWorkspace);
-    const settings: SchedulerPreferences = {
-      requestRetention:
-        retentionPercent === initialPercent
-          ? (draftWorkspace.schedulerSettings?.requestRetention ?? 0.9)
-          : Number(retentionPercent) / 100,
-    };
+    const settings = effectiveSettings;
     const validated = Effect.runSync(
       Effect.either(updateSchedulerSettings(draftWorkspace, settings)),
     );
@@ -106,6 +114,7 @@ export function SchedulerSettings({ workspace, onSave, readLatest, initialDraft 
       return;
     }
     setDraftWorkspace(result.right);
+    setStudySettings(result.right.schedulerSettings ?? { requestRetention: 0.9 });
     setRetentionPercent(percentText(result.right));
     setFeedback({
       kind: "saved",
@@ -177,6 +186,26 @@ export function SchedulerSettings({ workspace, onSave, readLatest, initialDraft 
             Applies after each card’s next review.
           </p>
         </section>
+        <StudyPolicyFields settings={effectiveSettings} onChange={setStudySettings} />
+        <ReviewerSettingsFields settings={effectiveSettings} onChange={setStudySettings} />
+        <AdvancedSchedulingFields
+          key={`advanced:${JSON.stringify(draftWorkspace.schedulerSettings)}`}
+          policy={effectiveSettings}
+          onChange={(policy) => {
+            setStudySettings({ ...studySettings, ...policy });
+          }}
+        />
+        <StudyPresetEditor
+          workspace={draftWorkspace}
+          settings={effectiveSettings}
+          onChange={setStudySettings}
+        />
+        <ParameterFittingPanel
+          key={`fitting:${JSON.stringify(draftWorkspace.schedulerSettings)}`}
+          workspace={draftWorkspace}
+          settings={effectiveSettings}
+          onChange={setStudySettings}
+        />
       </fieldset>
       {feedback && (
         <Alert

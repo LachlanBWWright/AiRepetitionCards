@@ -83,6 +83,8 @@ export function runWorkspaceSyncAction(args: {
     hasMore: boolean,
     uploadDeferred: boolean,
     baseline: Workspace,
+    studyDocument?: import("@recall/domain").StudySyncDocument,
+    studyConflict?: Workspace["studySettingsConflict"],
   ) => Workspace | null;
   readonly onMissingReviewContent?: (() => void) | undefined;
   readonly onReviewProvisionCapacity?: (() => void) | undefined;
@@ -246,6 +248,8 @@ export function runWorkspaceSyncAction(args: {
           result.hasMore,
           result.uploadDeferred,
           result.baseline,
+          result.studyDocument,
+          result.studyConflict,
         );
         if (!applied) {
           setMessage("Review history could not be replayed. Changes remain only in this tab.");

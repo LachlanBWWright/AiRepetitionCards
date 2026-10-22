@@ -51,7 +51,7 @@ public static partial class PublishingEndpoints
             if (value.ValueKind != JsonValueKind.Object) return null;
             var document = JsonNode.Parse(value.GetRawText())?.AsObject();
             if (document is null) return null;
-            KeepOnly(document, "schemaVersion", "id", "sourceId", "title", "description", "language", "difficulty", "objectives", "ai", "cards", "tags", "licence", "attribution", "forkedFromVersionId", "activities");
+            KeepOnly(document, "schemaVersion", "id", "sourceId", "title", "description", "language", "difficulty", "objectives", "ai", "cards", "tags", "licence", "attribution", "forkedFromVersionId", "activities", "noteLibrary");
             if (document["objectives"] is JsonArray objectives)
                 foreach (var objective in objectives.OfType<JsonObject>())
                     KeepOnly(objective, "id", "title", "description", "prerequisiteIds", "sourceId");
@@ -62,9 +62,9 @@ public static partial class PublishingEndpoints
                 foreach (var card in cards.OfType<JsonObject>())
                 {
                     if (card["kind"]?.GetValue<string>() == "basic")
-                        KeepOnly(card, "kind", "id", "front", "back", "objectiveIds", "media", "tags", "origin", "sourceId");
+                        KeepOnly(card, "kind", "id", "front", "back", "objectiveIds", "media", "tags", "origin", "sourceId", "noteId", "templateId", "presentation", "imageOcclusion");
                     else
-                        KeepOnly(card, "kind", "id", "text", "deletionIndex", "objectiveIds", "media", "tags", "origin", "sourceId");
+                        KeepOnly(card, "kind", "id", "text", "deletionIndex", "objectiveIds", "media", "tags", "origin", "sourceId", "noteId", "templateId", "presentation", "imageOcclusion");
                     if (card["media"] is JsonArray media)
                         foreach (var reference in media.OfType<JsonObject>())
                             KeepOnly(reference, "id", "mimeType", "byteLength");
@@ -73,6 +73,7 @@ public static partial class PublishingEndpoints
             if (document["activities"] is JsonArray activities)
                 foreach (var activity in activities.OfType<JsonObject>())
                     KeepOnly(activity, "id", "sourceId", "areaId", "title", "pluginId", "pluginVersion", "revision", "objectiveIds", "fallback", "payload", "archived");
+            Recall.Api.Contracts.AuthoredMetadataValidator.Normalize(document);
             using var normalized = JsonDocument.Parse(document.ToJsonString());
             return normalized.RootElement.Clone();
         }

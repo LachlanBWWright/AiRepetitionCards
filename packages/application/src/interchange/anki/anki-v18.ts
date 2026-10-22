@@ -1,3 +1,4 @@
+import { decodeAnkiTemplateConfig } from "./anki-template-protobuf";
 import { Either } from "effect";
 import type { AnkiCollection, AnkiSqliteReaderError } from "./anki-import";
 
@@ -25,10 +26,18 @@ export type AnkiV18CollectionRows = {
     readonly noteId: unknown;
     readonly ordinal: unknown;
     readonly deckId: unknown;
+    readonly scheduling?: AnkiCollection["cards"][number]["scheduling"];
+  }[];
+  readonly templates?: readonly {
+    readonly noteTypeId: unknown;
+    readonly ordinal: unknown;
+    readonly name: unknown;
+    readonly config: unknown;
   }[];
   readonly reviews?: readonly {
     readonly cardId: unknown;
     readonly reviewedAt: unknown;
+    readonly elapsedMs?: unknown;
     readonly ease: unknown;
     readonly type: unknown;
   }[];
@@ -36,7 +45,7 @@ export type AnkiV18CollectionRows = {
 
 const fail = (reason: AnkiSqliteReaderError["reason"]) =>
   Either.left({ _tag: "AnkiSqliteReaderError", reason } as const);
-const maxRows = 500;
+const maxRows = 50_000;
 
 function decodeNotetypeKind(input: unknown): "basic" | "cloze" | "unsupported" | undefined {
   if (!(input instanceof Uint8Array)) return undefined;
@@ -45,19 +54,21 @@ function decodeNotetypeKind(input: unknown): "basic" | "cloze" | "unsupported" |
   const readVarint = (): number | undefined => {
     let value = 0;
     let shift = 0;
-    while (offset < input.length && shift < 35) {
+    while (offset < input.length && shift < 70) {
       const byte = input[offset];
       if (byte === undefined) return undefined;
       offset += 1;
-      value |= (byte & 0x7f) << shift;
-      if ((byte & 0x80) === 0) return value >>> 0;
+      if (shift === 63 && byte > 1) return undefined;
+      value += (byte & 0x7f) * 2 ** shift;
+      if ((byte & 0x80) === 0) return value;
       shift += 7;
     }
     return undefined;
   };
   while (offset < input.length) {
     const tag = readVarint();
-    if (tag === undefined || tag === 0) return undefined;
+    if (tag === undefined || !Number.isSafeInteger(tag) || tag === 0 || tag > 0xffffffff)
+      return undefined;
     const fieldNumber = tag >>> 3;
     const wireType = tag & 7;
     if (wireType === 0) {
@@ -68,7 +79,8 @@ function decodeNotetypeKind(input: unknown): "basic" | "cloze" | "unsupported" |
       offset += 8;
     } else if (wireType === 2) {
       const size = readVarint();
-      if (size === undefined || size > input.length - offset) return undefined;
+      if (size === undefined || !Number.isSafeInteger(size) || size > input.length - offset)
+        return undefined;
       offset += size;
     } else if (wireType === 5) {
       offset += 4;
@@ -92,7 +104,8 @@ export function decodeAnkiV18Collection(
     rows.decks.length > 2_000 ||
     rows.notes.length > maxRows ||
     rows.cards.length > maxRows ||
-    (rows.reviews?.length ?? 0) > 10_000
+    (rows.reviews?.length ?? 0) > 250_000 ||
+    (rows.templates?.length ?? 0) > 50_000
   )
     return fail("limits-exceeded");
 
@@ -135,7 +148,23 @@ export function decodeAnkiV18Collection(
     const kind = decodeNotetypeKind(row.config);
     if (kind === undefined) return fail("invalid-database");
     noteTypeIds.add(row.id);
-    noteTypes.push({ id: row.id, name: row.name, kind, fields: fields.map((field) => field.name) });
+    const templateRows = (rows.templates ?? [])
+      .filter((template) => template.noteTypeId === row.id)
+      .sort((left, right) => Number(left.ordinal) - Number(right.ordinal));
+    const templates: NonNullable<AnkiCollection["noteTypes"][number]["templates"]>[number][] = [];
+    for (const [index, template] of templateRows.entries()) {
+      const config = decodeAnkiTemplateConfig(template.config);
+      if (template.ordinal !== index || typeof template.name !== "string" || !config)
+        return fail("invalid-database");
+      templates.push({ name: template.name, ...config });
+    }
+    noteTypes.push({
+      id: row.id,
+      name: row.name,
+      kind,
+      fields: fields.map((field) => field.name),
+      ...(templates.length ? { templates } : {}),
+    });
   }
 
   const deckById = new Map<number, string>();
@@ -190,7 +219,12 @@ export function decodeAnkiV18Collection(
         tags: note.tags.trim().split(/\s+/).filter(Boolean),
       });
     }
-    cards.push({ id: card.id, noteId: card.noteId, ordinal: card.ordinal });
+    cards.push({
+      id: card.id,
+      noteId: card.noteId,
+      ordinal: card.ordinal,
+      scheduling: card.scheduling,
+    });
     const deckName = deckById.get(card.deckId);
     if (deckName) deckNames.add(deckName);
   }
@@ -214,7 +248,19 @@ export function decodeAnkiV18Collection(
       type > 4
     )
       return fail("invalid-database");
-    reviews.push({ cardId, reviewedAt, ease, type });
+    const elapsedMs = review.elapsedMs;
+    if (
+      elapsedMs !== undefined &&
+      (typeof elapsedMs !== "number" || !Number.isSafeInteger(elapsedMs) || elapsedMs < 0)
+    )
+      return fail("invalid-database");
+    reviews.push({
+      cardId,
+      reviewedAt,
+      ease,
+      type,
+      ...(typeof elapsedMs === "number" ? { elapsedMs } : {}),
+    });
   }
   return Either.right({
     deckNames: [...deckNames],

@@ -1,3 +1,6 @@
+import { NativeAnkiExportAction } from "./NativeAnkiExportAction";
+import { reviewEventsInArea } from "@recall/domain";
+import { privateDeckHistory } from "@recall/application";
 import { useEffect, useRef, useState } from "react";
 import { Pressable, Switch, Text, View } from "react-native";
 import { Effect, Either, Schema } from "effect";
@@ -76,16 +79,7 @@ export function NativePortableDeckTransfer({
       setBusy(false);
       return;
     }
-    const privateHistory = includePrivate
-      ? {
-          currentArea: area,
-          reviewEvents: (workspace.reviewEvents ?? []).filter((event) => event.areaId === area.id),
-          cardVersions: (workspace.cardVersions ?? []).filter(
-            (version) => version.areaId === area.id,
-          ),
-          ...(workspace.activityLibrary ? { activityLibrary: workspace.activityLibrary } : {}),
-        }
-      : undefined;
+    const privateHistory = includePrivate ? privateDeckHistory(workspace, area) : undefined;
     const packaged = await Effect.runPromise(
       Effect.either(exportPortableDeckPackage(validated.right, mediaStore, privateHistory)),
     );
@@ -183,6 +177,14 @@ export function NativePortableDeckTransfer({
         label="Choose deck ZIP"
         tone="soft"
         onPress={() => void chooseFile()}
+        disabled={busy || disabled}
+      />
+      <NativeAnkiExportAction
+        area={area}
+        mediaStore={mediaStore}
+        includeScheduling={includePrivate}
+        reviewEvents={reviewEventsInArea(workspace, area?.id)}
+        suspendedCardIds={workspace.schedulerSettings?.suspendedCardIds ?? []}
         disabled={busy || disabled}
       />
       {preview ? (

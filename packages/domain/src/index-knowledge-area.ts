@@ -1,28 +1,14 @@
+import { MAX_COLLECTION_CARDS } from "./collection-capacity";
 import { Effect, Either, Schema } from "effect";
+import { ReviewPresentationSchema } from "./review-presentation";
+import { ImageOcclusionSchema } from "./image-occlusion";
+import { NoteLibrarySchema } from "./notes";
+import { MediaReferenceSchema } from "./media";
 import { LearningActivitySchema } from "./learning-activities";
-import { AreaIdSchema, AssessmentIdSchema, MediaIdSchema, ObjectiveIdSchema } from "./ids";
+import { AreaIdSchema, AssessmentIdSchema, ObjectiveIdSchema } from "./ids";
 
-export const MediaMimeTypeSchema = Schema.Union(
-  Schema.Literal("image/jpeg"),
-  Schema.Literal("image/png"),
-  Schema.Literal("image/gif"),
-  Schema.Literal("image/webp"),
-  Schema.Literal("audio/mpeg"),
-  Schema.Literal("audio/ogg"),
-  Schema.Literal("audio/wav"),
-);
-export type MediaMimeType = typeof MediaMimeTypeSchema.Type;
-
-export const MediaReferenceSchema = Schema.Struct({
-  id: MediaIdSchema,
-  mimeType: MediaMimeTypeSchema,
-  byteLength: Schema.Number.pipe(
-    Schema.int(),
-    Schema.positive(),
-    Schema.lessThanOrEqualTo(20_000_000),
-  ),
-});
-export type MediaReference = typeof MediaReferenceSchema.Type;
+export { MediaMimeTypeSchema, MediaReferenceSchema } from "./media";
+export type { MediaMimeType, MediaReference } from "./media";
 
 const AssessmentOriginSchema = Schema.Union(
   Schema.Literal("authored"),
@@ -32,7 +18,11 @@ const AssessmentOriginSchema = Schema.Union(
 
 export const FlashcardAssessmentContentSchema = Schema.Struct({
   kind: Schema.Literal("basic"),
+  presentation: Schema.optional(ReviewPresentationSchema),
+  imageOcclusion: Schema.optional(ImageOcclusionSchema),
   id: AssessmentIdSchema,
+  noteId: Schema.optional(Schema.String),
+  templateId: Schema.optional(Schema.String),
   front: Schema.String.pipe(Schema.minLength(1)),
   back: Schema.String.pipe(Schema.minLength(1)),
   objectiveIds: Schema.Array(ObjectiveIdSchema),
@@ -44,7 +34,11 @@ export const FlashcardAssessmentContentSchema = Schema.Struct({
 
 export const ClozeAssessmentContentSchema = Schema.Struct({
   kind: Schema.Literal("cloze"),
+  presentation: Schema.optional(ReviewPresentationSchema),
+  imageOcclusion: Schema.optional(ImageOcclusionSchema),
   id: AssessmentIdSchema,
+  noteId: Schema.optional(Schema.String),
+  templateId: Schema.optional(Schema.String),
   text: Schema.String.pipe(Schema.minLength(1), Schema.maxLength(20_000)),
   deletionIndex: Schema.optional(Schema.Number.pipe(Schema.int(), Schema.between(1, 20))),
   objectiveIds: Schema.Array(ObjectiveIdSchema),
@@ -91,7 +85,8 @@ export const KnowledgeAreaSchema = Schema.Struct({
     quizInstructions: Schema.NullOr(Schema.String.pipe(Schema.maxLength(2_000))),
     cardGenerationInstructions: Schema.NullOr(Schema.String.pipe(Schema.maxLength(2_000))),
   }),
-  cards: Schema.Array(AssessmentContentSchema).pipe(Schema.maxItems(500)),
+  noteLibrary: Schema.optional(NoteLibrarySchema),
+  cards: Schema.Array(AssessmentContentSchema).pipe(Schema.maxItems(MAX_COLLECTION_CARDS)),
   tags: Schema.Array(Schema.String),
   licence: Schema.NullOr(Schema.String),
   attribution: Schema.optional(Schema.NullOr(Schema.String.pipe(Schema.maxLength(500)))),
@@ -117,6 +112,8 @@ const KnowledgeAreaV0_9Schema = Schema.Struct({
   cards: Schema.Array(
     Schema.Struct({
       id: AssessmentIdSchema,
+      noteId: Schema.optional(Schema.String),
+      templateId: Schema.optional(Schema.String),
       front: Schema.String.pipe(Schema.minLength(1)),
       back: Schema.String.pipe(Schema.minLength(1)),
       objectiveIds: Schema.Array(ObjectiveIdSchema),

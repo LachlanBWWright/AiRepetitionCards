@@ -6,6 +6,7 @@ const id = new RegExp(`^${uuid}$`, "i");
 const routes: Readonly<Record<DesktopApiMethod, readonly RegExp[]>> = {
   GET: [
     /^\/api\/v1\/workspace$/,
+    /^\/api\/v1\/workspace\/study$/,
     /^\/api\/v1\/sync$/,
     /^\/api\/v1\/tutor$/,
     /^\/api\/v1\/tutor\/privacy$/,
@@ -21,6 +22,7 @@ const routes: Readonly<Record<DesktopApiMethod, readonly RegExp[]>> = {
   ],
   POST: [
     /^\/api\/v1\/workspace$/,
+    /^\/api\/v1\/workspace\/study$/,
     /^\/api\/v1\/sync$/,
     /^\/api\/v1\/workspace\/(?:area-tombstones|review-identities)$/,
     /^\/api\/v1\/tutor$/,

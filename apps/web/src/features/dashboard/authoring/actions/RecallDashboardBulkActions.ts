@@ -1,3 +1,5 @@
+import type { StoredMediaAsset } from "@recall/local-store";
+import { browserMediaStore } from "@/features/workspace/browser-media-store";
 import { readRef } from "@/lib/read-ref";
 import { Effect, Either } from "effect";
 import { createAssessmentId, createObjectiveId, type CardVersion } from "@recall/domain";
@@ -7,6 +9,7 @@ import {
   type WorkspaceAuthoringCommand,
   parseTagInput,
   saveWorkspace,
+  saveWorkspaceWithMedia,
   cardVersionRestoresAsCopy,
 } from "@recall/application";
 import { browserWorkspaceStore } from "@/features/workspace/browser-workspace-store";
@@ -15,6 +18,14 @@ import { localWritesBlocked } from "@/features/workspace/local-write-coordinator
 import { type CardRefinementResult } from "@recall/ai-core";
 import type { RecallDashboardCore } from "../../state/useRecallDashboardController";
 import type { createRecallDashboardEditorCloseActions } from "./RecallDashboardEditorCloseActions";
+function persistAuthoringWorkspace(
+  workspace: import("@recall/domain").Workspace,
+  assets: readonly StoredMediaAsset[],
+) {
+  return assets.length
+    ? saveWorkspaceWithMedia(browserWorkspaceStore, browserMediaStore, workspace, assets)
+    : saveWorkspace(browserWorkspaceStore, workspace);
+}
 export function createRecallDashboardBulkActions(
   model: Pick<
     RecallDashboardCore & ReturnType<typeof createRecallDashboardEditorCloseActions>,
@@ -116,7 +127,11 @@ export function createRecallDashboardBulkActions(
     setNow(new Date());
     return { ok: true };
   }
-  const saveAuthoringCommand = (command: WorkspaceAuthoringCommand, expectedBaseline?: string) =>
+  const saveAuthoringCommand = (
+    command: WorkspaceAuthoringCommand,
+    expectedBaseline?: string,
+    assets: readonly StoredMediaAsset[] = [],
+  ) =>
     enqueueWorkspaceCommit(
       Effect.gen(function* () {
         for (;;) {
@@ -136,7 +151,7 @@ export function createRecallDashboardBulkActions(
             new Date(),
             expectedBaseline,
           );
-          if (!demo) yield* saveWorkspace(browserWorkspaceStore, prepared.workspace);
+          if (!demo) yield* persistAuthoringWorkspace(prepared.workspace, assets);
           if (localWritesBlocked() || localSnapshotStale() || readRef(pendingReviewRef))
             return yield* Effect.fail({ _tag: "SettingsCommitPaused" } as const);
           if (workspaceRef.current !== current) continue;

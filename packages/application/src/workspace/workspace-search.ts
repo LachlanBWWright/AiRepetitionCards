@@ -1,5 +1,7 @@
 import type { AreaId, AssessmentId, ObjectiveId, Workspace } from "@recall/domain";
 import type { KnowledgeNotebook } from "../notebook/knowledge-notebook";
+import { Effect, Either } from "effect";
+import { searchStudyCards, isStructuredStudyQuery } from "../review/search/card-search";
 
 export type WorkspaceSearchTarget =
   | { readonly kind: "area" }
@@ -52,6 +54,7 @@ export type WorkspaceSearchResult = {
   readonly score: number;
 };
 export type WorkspaceSearchOptions = {
+  readonly now?: number;
   readonly limit?: number;
   readonly kinds?: readonly WorkspaceSearchKind[];
 };
@@ -83,6 +86,22 @@ export function searchWorkspace(
   query: string,
   options: WorkspaceSearchOptions = {},
 ): readonly WorkspaceSearchResult[] {
+  if (options.now !== undefined && isStructuredStudyQuery(query)) {
+    if (options.kinds && !options.kinds.includes("card")) return [];
+    const found = Effect.runSync(Effect.either(searchStudyCards(workspace, query, options.now)));
+    return Either.isLeft(found)
+      ? []
+      : found.right.slice(0, options.limit ?? 200).map(({ area, card }) => ({
+          id: JSON.stringify([area.id, "card", card.id]),
+          kind: "card",
+          title: card.front,
+          snippet: card.back.slice(0, 210),
+          areaId: area.id,
+          areaTitle: area.title,
+          target: { kind: "card", cardId: card.id },
+          score: 1,
+        }));
+  }
   const phrase = normalize(query).slice(0, 500);
   const terms = [...new Set(phrase.split(/\s+/u).filter(Boolean))];
   if (!terms.length) return [];

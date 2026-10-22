@@ -15,6 +15,10 @@ public static class SyncEndpointMappings
 {
     public static IEndpointRouteBuilder MapSyncEndpoints(this IEndpointRouteBuilder endpoints)
     {
+        endpoints.MapMethods("/api/v1/workspace/study/pages", ["GET", "POST"], SyncHandlers.StudyPages).AllowAnonymous()
+            .WithApiRateLimit(ApiRateLimitScope.StudyPages, "study-pages").WithPrivateResponseHeaders();
+        endpoints.MapMethods("/api/v1/workspace/study", ["GET", "POST"], SyncHandlers.StudySync).AllowAnonymous()
+            .WithApiRateLimit(ApiRateLimitScope.WorkspaceSync, "workspace-sync").WithPrivateResponseHeaders();
         endpoints.MapPost("/api/v1/workspace", SyncHandlers.PushWorkspace).AllowAnonymous()
             .WithApiRateLimit(ApiRateLimitScope.WorkspaceSync, "workspace-sync").WithPrivateResponseHeaders();
         endpoints.MapPost("/api/v1/workspace/review-identities", SyncHandlers.ReadReviewIdentities).AllowAnonymous()
@@ -45,7 +49,7 @@ public static class SyncEndpointMappings
 
 internal static partial class SyncHandlers
 {
-    private const long ContentBodyLimit = 5_000_000;
+    private const long ContentBodyLimit = 50_000_000;
     private const long ReviewBodyLimit = 512_000;
     private const long SmallBodyLimit = 64_000;
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
@@ -54,6 +58,8 @@ internal static partial class SyncHandlers
     {
         var auth = await SyncRequestContext.Create(context, config, cancellationToken);
         if (auth.Error is not null) return auth.Error;
+        var bodyLimit = context.Features.Get<Microsoft.AspNetCore.Http.Features.IHttpMaxRequestBodySizeFeature>();
+        if (bodyLimit is { IsReadOnly: false }) bodyLimit.MaxRequestBodySize = ContentBodyLimit;
         var read = await ReadJson(context.Request, ContentBodyLimit, cancellationToken);
         if (!read.Ok) return Error(read.TooLarge ? "request-too-large" : "invalid-request", read.TooLarge ? 413 : 400);
         if (read.Value is not JsonObject body || IntegerNode(body["schemaVersion"]) != 1 || body["areas"] is not JsonArray areas || areas.Count > 100)
@@ -78,7 +84,7 @@ internal static partial class SyncHandlers
                 !ValidateDocument(document, areaId, cardIds, objectiveIds, out var cards, out var objectives))
                 return Error("invalid-content", 400);
             cardCount += cards;
-            if (cardCount > 2_000) return Error("batch-too-large", 413);
+            if (cardCount > 50_000) return Error("batch-too-large", 413);
             var contentHash = Hash(document);
             validated.Add(new JsonObject
             {
@@ -244,7 +250,7 @@ internal static partial class SyncHandlers
                 JsonNullOrNonNegativeInteger(payload, "elapsed_ms") &&
                 TryJsonString(payload, "scheduler_family", out var family) && family == "fsrs" &&
                 TryJsonString(payload, "scheduler_version", out var version) && version.Length <= 80 &&
-                JsonNullOrBoundedString(payload, "scheduler_parameter_set_id", 80) &&
+                JsonNullOrBoundedString(payload, "scheduler_parameter_set_id", 2048) &&
                 JsonNullOrHash(payload, "previous_state_hash");
         }
 

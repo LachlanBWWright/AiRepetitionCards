@@ -62,3 +62,18 @@ Portable snapshots and publications exclude personal review history, schedules, 
 Effect Schema owns request/response validation in `@recall/contracts`. Review pull pages contain at most 100 changes. The coordinator checks cursor progress and page validity and refuses malformed data. Server body limits and per-process request limits are documented in [HTTP operations](http-operations.md).
 
 Runtime RLS, interrupted sync and concurrent device acceptance remain required before release. This document describes the implemented protocol; source compilation does not prove those runtime properties.
+
+## Linked notes and card placement
+
+The content coordinator groups subjects connected by either current or previously synced note
+links and card moves. Each family fits one bounded request and one server transaction; a stale
+member rejects the entire family. Independent families can still upload in separate batches.
+The server rejects partial linked-family writes from older clients and prevents source deletion
+while a surviving destination still references it.
+
+A private card's stable ID survives subject moves. The database updates its placement without
+recreating its identity, revisions or reviews. Historical review events keep their original
+subject as provenance; replay, daily budgets, statistics and administrative actions resolve the
+current placement. Canonical receipts may use that known current subject, but unrelated subject
+or card identities remain collisions. Public copies and forks retain their existing fresh-progress
+semantics. Migration `20261024000000_atomic_linked_notes.sql` enables these guarantees.

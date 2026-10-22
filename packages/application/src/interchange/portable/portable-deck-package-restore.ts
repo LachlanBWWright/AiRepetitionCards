@@ -74,19 +74,34 @@ export function checkPortableDeckPrivateRestore(
   const incomingDrafts = history.activityLibrary.drafts ?? [];
   const incomingEditorDrafts = history.activityLibrary.editorDrafts ?? [];
   const deckCardIds = new Set<string>(imported.knowledgeArea.cards.map((card) => card.id));
+  const eventIds = new Set(incomingEvents.map((event) => event.id));
+  const corrections = history.reviewCorrections ?? [],
+    undoStates = history.reviewUndoStates ?? [],
+    adjustments = history.scheduleAdjustments ?? [];
   const referencesValid =
-    incomingEvents.every(
-      (event) => event.areaId === imported.knowledgeArea.id && deckCardIds.has(event.cardId),
+    corrections.every((item) => eventIds.has(item.eventId)) &&
+    undoStates.every((item) => eventIds.has(item.eventId)) &&
+    adjustments.every(
+      (item) =>
+        deckCardIds.has(item.cardId) &&
+        (item.afterReviewEventId === null || eventIds.has(item.afterReviewEventId)),
     ) &&
+    incomingEvents.every((event) => deckCardIds.has(event.cardId)) &&
     incomingVersions.every(
-      (version) =>
-        version.areaId === imported.knowledgeArea.id &&
-        deckCardIds.has(version.cardId) &&
-        version.card.id === version.cardId,
+      (version) => deckCardIds.has(version.cardId) && version.card.id === version.cardId,
     ) &&
     incomingActivities.every((activity) => activity.areaId === imported.knowledgeArea.id) &&
     snapshotActivities.every((activity) => activity.areaId === imported.knowledgeArea.id);
   const collisions =
+    corrections.some((item) =>
+      workspace.reviewCorrections?.some((existing) => existing.id === item.id),
+    ) ||
+    adjustments.some((item) =>
+      workspace.scheduleAdjustments?.some((existing) => existing.id === item.id),
+    ) ||
+    new Set(corrections.map((item) => item.id)).size !== corrections.length ||
+    new Set(undoStates.map((item) => item.eventId)).size !== undoStates.length ||
+    new Set(adjustments.map((item) => item.id)).size !== adjustments.length ||
     existingAreaIds.has(imported.knowledgeArea.id) ||
     imported.knowledgeArea.cards.some((card) => existingCardIds.has(card.id)) ||
     imported.knowledgeArea.objectives.some((item) => existingObjectiveIds.has(item.id)) ||
@@ -312,6 +327,18 @@ export function acceptPortableDeckImport(input: {
       ...(privateHistory
         ? {
             reviewEvents: [...(input.workspace.reviewEvents ?? []), ...privateHistory.reviewEvents],
+            reviewCorrections: [
+              ...(input.workspace.reviewCorrections ?? []),
+              ...(privateHistory.reviewCorrections ?? []),
+            ],
+            reviewUndoStates: [
+              ...(input.workspace.reviewUndoStates ?? []),
+              ...(privateHistory.reviewUndoStates ?? []),
+            ],
+            scheduleAdjustments: [
+              ...(input.workspace.scheduleAdjustments ?? []),
+              ...(privateHistory.scheduleAdjustments ?? []),
+            ],
             cardVersions: [...(input.workspace.cardVersions ?? []), ...privateHistory.cardVersions],
           }
         : {}),

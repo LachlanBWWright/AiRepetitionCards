@@ -1,3 +1,5 @@
+import type { MediaReference } from "@recall/domain";
+import { RichTextEditor } from "@/components/cards/RichTextEditor";
 import { Input } from "@recall/ui-web/components/input";
 import {
   Select,
@@ -6,10 +8,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@recall/ui-web/components/select";
-import { Textarea } from "@recall/ui-web/components/textarea";
 
 type Preview = { readonly front: string; readonly back: string };
 type Props = {
+  readonly media: readonly MediaReference[];
   readonly cardKind: "basic" | "cloze";
   readonly setCardKind: (kind: "basic" | "cloze") => void;
   readonly generation: number;
@@ -45,25 +47,23 @@ export function RecallDashboardCardPromptFields(props: Props) {
       {props.cardKind === "basic" ? (
         <>
           <label htmlFor="card-front">Question</label>
-          <Textarea
+          <RichTextEditor
+            media={props.media}
             id="card-front"
             key={`question-${String(props.generation)}`}
             autoFocus
             value={props.front}
-            onChange={(event) => {
-              props.setFront(event.target.value);
-            }}
+            onChange={props.setFront}
             placeholder="What do you want to remember?"
             maxLength={500}
             rows={3}
           />
           <label htmlFor="card-back">Answer</label>
-          <Textarea
+          <RichTextEditor
+            media={props.media}
             id="card-back"
             value={props.back}
-            onChange={(event) => {
-              props.setBack(event.target.value);
-            }}
+            onChange={props.setBack}
             placeholder="Write the answer in your own words…"
             maxLength={1500}
             rows={4}
@@ -72,14 +72,13 @@ export function RecallDashboardCardPromptFields(props: Props) {
       ) : (
         <>
           <label htmlFor="card-cloze-text">Cloze text</label>
-          <Textarea
+          <RichTextEditor
+            media={props.media}
             id="card-cloze-text"
             key={`cloze-${String(props.generation)}`}
             autoFocus
             value={props.clozeText}
-            onChange={(event) => {
-              props.setClozeText(event.target.value);
-            }}
+            onChange={props.setClozeText}
             maxLength={10000}
             rows={5}
             placeholder="Mitochondria produce {{c1::ATP::energy molecule}}."

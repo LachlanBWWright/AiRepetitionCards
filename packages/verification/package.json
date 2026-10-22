@@ -26,6 +26,8 @@
     "fast-check": "3.23.2",
     "typescript": "5.9.3",
     "fflate": "0.8.3",
-    "@noble/hashes": "2.4.0"
+    "@noble/hashes": "2.4.0",
+    "@recall/local-store": "workspace:*",
+    "@recall/infra-rich-content": "workspace:*"
   }
 }

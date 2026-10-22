@@ -11,14 +11,18 @@ type Props = {
   readonly onAccept: (proposal: AnkiImportProposal) => Promise<void>;
 };
 const failureCopy: Record<ImportFailure, string> = {
+  "ambiguous-matches":
+    "Matching Anki identities occur in multiple areas or are duplicated. Resolve those duplicates before re-importing.",
+  "partial-note-family":
+    "This update omits existing cards from a shared note. Export and import the complete note family to update it safely.",
   "invalid-input": "Choose an Anki .apkg package to continue.",
   "limits-exceeded": "This package exceeds the supported import limits.",
   "unsupported-format":
-    "This file is not a supported Anki deck package. Anki collection backups are not supported.",
+    "This file is not a supported Anki deck package. Collection packages import content; they do not restore Anki preferences.",
   "invalid-archive": "The package archive is invalid or contains unsafe file paths.",
   "invalid-database": "The package’s Anki database could not be read.",
   "unsupported-note-type":
-    "This deck uses a note type or card template that is not supported yet. Basic and Cloze notes are supported.",
+    "This deck uses a note type or card template that is not supported yet. Static field templates, Basic and Cloze notes are supported. Executable templates and unsupported filters are rejected.",
   "invalid-note": "The package contains a note that could not be converted into a study card.",
   "invalid-media": "A card refers to missing or unsupported media.",
   "media-too-large": "An attachment in this package is too large to import.",
@@ -52,8 +56,8 @@ export function AnkiImportBody({ state, onChoosePackage, onReset, onAccept }: Pr
     case "saving":
       return (
         <ImportProgress
-          title="Adding cards to your workspace"
-          detail="Saving verified attachments and rebuilding FSRS schedules…"
+          title="Importing cards into your workspace"
+          detail="Saving verified attachments and schedules…"
         />
       );
     case "review":
@@ -68,9 +72,10 @@ function ReadyImport({ onChoosePackage }: { readonly onChoosePackage: () => void
   return (
     <>
       <p className="mb-5 mt-3 max-w-[31rem] text-sm leading-7 text-muted-foreground">
-        Basic and Cloze cards, tags, images, audio, and review history are imported into a fresh
-        Knowledge Area. Imported review history rebuilds schedules with FSRS; Anki intervals and due
-        dates are not carried over.
+        Basic, reversed and static custom cards, Cloze notes, tags, media and review history are
+        imported into a Knowledge Area. Matching cards update their content while retaining local
+        study history. Supported legacy schedules retain due dates and intervals; other schedules
+        are rebuilt with FSRS.
       </p>
       <div className="mb-5 flex items-start gap-4 rounded-xl border border-border bg-muted/40 p-4">
         <span
@@ -81,11 +86,11 @@ function ReadyImport({ onChoosePackage }: { readonly onChoosePackage: () => void
         </span>
         <div>
           <strong className="mb-1 block text-sm font-semibold">
-            Choose a deck package (.apkg)
+            Choose a package (.apkg or .colpkg)
           </strong>
           <p className="text-sm leading-6 text-muted-foreground">
-            Up to 50 MB. Supports legacy, .anki21, and modern .anki21b deck packages; collection
-            backups are not supported.
+            Up to 50 MB. Supports legacy, .anki21, and modern .anki21b packages. Collection packages
+            import content rather than replacing your workspace.
           </p>
         </div>
       </div>
@@ -123,7 +128,8 @@ function ImportPreview({
     <>
       <p className="mb-5 mt-3 max-w-[31rem] text-sm leading-7 text-muted-foreground">
         Review this preview before adding anything to your workspace. Imported review history is
-        retained and used to rebuild FSRS schedules; unsafe formatting is removed.
+        retained. Supported legacy due dates and intervals are preserved; unsafe formatting is
+        removed.
       </p>
       <div className="rounded-xl bg-muted/60 p-4 sm:px-5">
         <h3 className="mb-1 text-xl font-medium">{proposal.area.title}</h3>
@@ -137,6 +143,11 @@ function ImportPreview({
             history.
           </p>
         )}
+        {proposal.warnings?.map((warning) => (
+          <p key={warning} className="mt-2 text-xs text-muted-foreground">
+            {warning}
+          </p>
+        ))}
         {proposal.provenance.deckNames.length > 0 && (
           <p className="mt-2 text-xs text-muted-foreground">
             Decks: {proposal.provenance.deckNames.join(" · ")}
@@ -158,7 +169,7 @@ function ImportPreview({
           Choose another
         </Button>
         <Button variant="default" type="button" onClick={() => void onAccept(proposal)}>
-          Add {counts.cards} cards
+          Import {counts.cards} cards
         </Button>
       </div>
     </>

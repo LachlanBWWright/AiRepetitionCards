@@ -180,6 +180,7 @@ export type PendingReview = {
   readonly rating: ReviewRating;
   readonly eventId: string;
   readonly ratedAt: string;
+  readonly elapsedMs?: number;
   readonly event?: ReviewEvent;
   readonly schedule?: AssessmentSchedule;
   readonly baseSchedule?: string;

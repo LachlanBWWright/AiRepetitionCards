@@ -1,5 +1,7 @@
+import { independentCardContent } from "./authoring/independent-card-copy";
 import {
   AreaIdSchema,
+  reviewPlacement,
   AssessmentIdSchema,
   WorkspaceSchema,
   type CardVersion,
@@ -31,9 +33,11 @@ export function cardVersionHistory(
   areaId?: string,
   cardId?: string,
 ): readonly CardVersion[] {
+  const placement = reviewPlacement(workspace);
   return [...(workspace.cardVersions ?? [])]
     .filter(
-      (version) => (!areaId || version.areaId === areaId) && (!cardId || version.cardId === cardId),
+      (version) =>
+        (!areaId || placement.areaId(version) === areaId) && (!cardId || version.cardId === cardId),
     )
     .reverse();
 }
@@ -45,6 +49,7 @@ export function captureCardVersion(
   card: Assessment,
   reason: CardVersion["reason"],
   now: Date,
+  movedToAreaId?: LearningArea["id"],
 ): Workspace {
   const versions = workspace.cardVersions ?? [];
   let sequence = versions.length + 1;
@@ -56,6 +61,7 @@ export function captureCardVersion(
     cardId: card.id,
     recordedAt: now.toISOString(),
     reason,
+    ...(movedToAreaId ? { movedToAreaId } : {}),
     card,
     area: { ...area, cards: [] },
   };
@@ -88,25 +94,27 @@ export function restoreCardVersion(
     );
     if (!Number.isFinite(now.getTime()))
       return yield* Effect.fail(failure("The restoration time is invalid."));
+    const placement = reviewPlacement(workspace);
+    const resolvedAreaId = createAreaId(placement.areaId(command));
     const version = workspace.cardVersions?.find(
       (item) =>
         item.id === command.versionId &&
-        item.areaId === command.areaId &&
+        placement.areaId(item) === resolvedAreaId &&
         item.cardId === command.cardId,
     );
-    if (!version || version.card.id !== command.cardId || version.area.id !== command.areaId)
+    if (!version || version.card.id !== command.cardId || version.area.id !== version.areaId)
       return yield* Effect.fail(failure("This card version is no longer available."));
-    const area = workspace.areas.find((item) => item.id === command.areaId);
+    const area = workspace.areas.find((item) => item.id === resolvedAreaId);
     const current = area?.cards.find((item) => item.id === command.cardId);
     if (
       workspace.areas.some(
         (item) =>
-          item.id !== command.areaId && item.cards.some((card) => card.id === command.cardId),
+          item.id !== resolvedAreaId && item.cards.some((card) => card.id === command.cardId),
       )
     )
       return yield* Effect.fail(failure("This card identity belongs to another area."));
     // Remote deletion tombstones are permanent; restore a fresh copy in connected workspaces.
-    const asCopy = cardVersionRestoresAsCopy(workspace, command.areaId, command.cardId);
+    const asCopy = cardVersionRestoresAsCopy(workspace, resolvedAreaId, command.cardId);
     let copySequence = workspace.cardVersions?.length ?? 0;
     const usedCardIds = new Set([
       ...workspace.areas.flatMap((item) => item.cards.map((card) => card.id)),
@@ -125,7 +133,7 @@ export function restoreCardVersion(
     const restoredAreaId =
       asCopy && !area
         ? createAreaId(stableSyncId(`restore-area:${version.areaId}`))
-        : command.areaId;
+        : resolvedAreaId;
     const recoveredArea =
       area ?? (asCopy ? workspace.areas.find((item) => item.id === restoredAreaId) : undefined);
     if (!current && (recoveredArea?.cards.length ?? 0) >= 500)
@@ -150,7 +158,7 @@ export function restoreCardVersion(
         failure("Restoring these learning objectives would exceed the area limit."),
       );
     const retained = workspace.retainedReviewAreas
-      ?.find((item) => item.id === command.areaId)
+      ?.find((item) => item.id === resolvedAreaId)
       ?.cards.find((card) => card.id === command.cardId);
     const freshSchedule = asCopy
       ? yield* Effect.try({
@@ -158,8 +166,18 @@ export function restoreCardVersion(
           catch: () => failure("A fresh schedule could not be created."),
         })
       : undefined;
+    const historicalContent =
+      version.areaId !== resolvedAreaId && current
+        ? {
+            ...version.card,
+            noteId: current.noteId,
+            templateId: current.templateId,
+            siblingId: current.siblingId,
+            importedSchedule: current.importedSchedule,
+          }
+        : version.card;
     const restored: Assessment = {
-      ...version.card,
+      ...(asCopy ? independentCardContent(historicalContent) : historicalContent),
       id: restoredCardId,
       schedule: freshSchedule ?? current?.schedule ?? retained?.schedule ?? version.card.schedule,
     };
@@ -187,16 +205,16 @@ export function restoreCardVersion(
       deletedCards: asCopy
         ? workspace.deletedCards
         : (workspace.deletedCards ?? []).filter(
-            (item) => item.areaId !== command.areaId || item.cardId !== command.cardId,
+            (item) => item.areaId !== resolvedAreaId || item.cardId !== command.cardId,
           ),
       deletedAreas: asCopy
         ? workspace.deletedAreas
-        : (workspace.deletedAreas ?? []).filter((item) => item.areaId !== command.areaId),
+        : (workspace.deletedAreas ?? []).filter((item) => item.areaId !== resolvedAreaId),
       retainedReviewAreas: asCopy
         ? workspace.retainedReviewAreas
         : (workspace.retainedReviewAreas ?? [])
             .map((item) =>
-              item.id === command.areaId
+              item.id === resolvedAreaId
                 ? { ...item, cards: item.cards.filter((card) => card.id !== command.cardId) }
                 : item,
             )

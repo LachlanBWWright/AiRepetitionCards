@@ -1,0 +1,19 @@
+# Scheduler optimization and due-date recalculation
+
+Parameter fitting runs locally over every available effective review event, with no card or review-count sample cap. Complete histories are replayed in deterministic causal order, so the selected cards do not depend on identifiers or input order. Scoring yields between 512-event chunks; abandoning the editor aborts fitting. Runtime grows with history size because every candidate replays the histories.
+
+An optional per-policy **Exclude answers before (UTC)** date excludes older answers from training and holdout scores. Older events remain as warmup evidence for each card's memory state. The latest 20% of eligible event timestamps form the temporal holdout. At least 100 day-separated observations, including 20 holdout and 60 training observations, are required. Same-day learning answers establish memory but are not independent recall observations.
+
+The deterministic coordinate search uses three step sizes (25%, 10%, 2.5%). Candidates are selected using training log loss. A proposal is usable only if holdout log loss improves by more than 0.0001 and holdout RMSE does not increase. Otherwise the starting weights are returned unchanged. This is an experimental local fitter, not Anki's optimizer; fitting all histories does not establish equivalent optimization quality. Calibration buckets, observation counts and complete history counts remain visible in the proposal.
+
+By default, saved scheduling changes affect subsequent answers. The optional per-policy **Recalculate reviewed cards’ due dates** setting applies when effective weights, retention, maximum interval, easy weekdays or time zone change on save. The same rule applies to subjects inheriting named presets. Validation of a settings draft does not reschedule cards.
+
+Recalculation uses the existing stability with the selected FSRS retention/decay parameters, maximum interval and easy weekday policy, anchored to the last real answer. It changes only reviewed cards' due dates; it does not retroactively refit their memory state, alter learning/new cards, fabricate answers or rewrite historical parameter IDs. Changed due dates become append-only scheduling adjustments anchored to the latest answer. Replay preserves them until the next answer consumes them. Increasing retention can make cards immediately overdue.
+
+Regression coverage checks the FSRS reference property that a card with stability 20 has a 20-day interval at 90% retention, interval bounds, parameter-ID replay, deterministic fitting, holdout acceptance, more than 200 card histories, cutoff warmup, opt-in save behavior and unchanged answer history. A real-world cross-implementation optimizer benchmark remains necessary before calling this Anki optimizer parity.
+
+## Independent reference scoring check
+
+The checked-in `fsrs-reference-fixture.ts` is generated with the official [py-fsrs implementation](https://github.com/open-spaced-repetition/py-fsrs), pinned to `fsrs==6.3.0`. Its generator lives in `packages/verification/fixtures/scheduler/generate-fsrs-reference.py` and records the wheel SHA256. It replays 125 daily answers, including repeated failures, and independently calculates holdout log loss/RMSE and final stability/difficulty. TypeScript regression checks compare these values within 0.000001. Fitting uses weights quantized to three decimal places to match the application's serialized parameter IDs; ordinary default-parameter replay uses the unquantized defaults in both implementations.
+
+Regenerating the fixture requires Python with `fsrs==6.3.0` installed, then `python3 packages/verification/fixtures/scheduler/generate-fsrs-reference.py` from the repository root. Normal verification uses the checked-in fixture and needs no Python. This checks the scoring model and replay, not equivalence to the official PyTorch optimizer or Anki's optimization results. Their optimizer dependencies are not application dependencies.

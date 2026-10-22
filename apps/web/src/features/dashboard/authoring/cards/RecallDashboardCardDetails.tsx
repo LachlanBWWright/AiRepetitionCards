@@ -144,7 +144,7 @@ export function RecallDashboardCardDetails(props: Props) {
           <input
             id="card-media"
             type="file"
-            accept="image/jpeg,image/png,image/gif,image/webp,audio/mpeg,audio/ogg,audio/wav"
+            accept="image/jpeg,image/png,image/gif,image/webp,audio/mpeg,audio/ogg,audio/wav,audio/mp4,audio/webm"
             onChange={(event) => {
               props.setMediaFile(event.currentTarget.files?.[0] ?? null);
             }}

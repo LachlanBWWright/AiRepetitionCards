@@ -1,3 +1,4 @@
+import { uncoordinatedMediaStore } from "@/features/workspace/browser-media-store";
 import { createBrowserActivityServices } from "./learning/activity-client";
 import { Effect, Either, Schema } from "effect";
 import { emptyLibraryNotes, LibraryNotesSchema, type LibraryNotesStore } from "@recall/application";
@@ -150,11 +151,16 @@ export function createBrowserLibraryNotesStore(
       }),
       failure,
     ),
-    write: (input) =>
+    write: (input, assets = []) =>
       coordinateLocalWrite(
         Effect.gen(function* () {
           const notes = yield* Schema.decodeUnknown(LibraryNotesSchema)(input).pipe(
             Effect.mapError(failure),
+          );
+          yield* Effect.forEach(
+            assets,
+            (asset) => uncoordinatedMediaStore.put(asset).pipe(Effect.mapError(failure)),
+            { discard: true },
           );
           const serialized = JSON.stringify(notes);
           if (options.durable && serialized.length > maxLocalNotesLength)

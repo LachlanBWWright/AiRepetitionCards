@@ -1,7 +1,7 @@
 import { withNativeOperationStoreLane } from "../../storage/workspace/native-operation-store";
 import { Effect, Either } from "effect";
 import * as Crypto from "expo-crypto";
-import { recordReview, saveWorkspace } from "@recall/application";
+import { localStudyDay, recordReview, saveWorkspace } from "@recall/application";
 import { type ReviewRating } from "@recall/scheduler";
 import type { ReviewEvent } from "@recall/domain";
 import { createEmptyWorkspace } from "../state/workspace-utils";
@@ -10,6 +10,7 @@ import type { createAppWorkspaceActions } from "../actions/AppWorkspaceActions";
 export function createAppReviewActions(
   model: Pick<
     AppCoreState & ReturnType<typeof createAppWorkspaceActions>,
+    | "getReviewElapsedMs"
     | "reviewInProgress"
     | "workspace"
     | "activeArea"
@@ -37,6 +38,7 @@ export function createAppReviewActions(
 ) {
   const {
     reviewInProgress,
+    getReviewElapsedMs,
     workspace,
     activeArea,
     card,
@@ -68,6 +70,7 @@ export function createAppReviewActions(
     const areaId = activeArea.id;
     const cardId = card.id;
     const ratedAt = new Date().toISOString();
+    const elapsedMs = getReviewElapsedMs();
     let sessionEvent: ReviewEvent | null = null;
     const program = commitWorkspaceChange((current) =>
       Effect.gen(function* () {
@@ -82,6 +85,8 @@ export function createAppReviewActions(
           rating,
           eventId,
           ratedAt,
+          elapsedMs,
+          studyDay: localStudyDay(Date.parse(ratedAt)),
         });
         sessionEvent = transition.event;
         return transition.workspace;

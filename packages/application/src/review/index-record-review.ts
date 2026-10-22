@@ -7,14 +7,11 @@ import {
   type ReviewEvent,
   type Workspace,
 } from "@recall/domain";
-import {
-  DEFAULT_SCHEDULER_PARAMETERS,
-  scheduleReview,
-  schedulerParameterSetId,
-  type ReviewRating,
-} from "@recall/scheduler";
+import { scheduleReview, schedulerParameterSetId, type ReviewRating } from "@recall/scheduler";
 import { createSyncedReviewEvent } from "@recall/sync-core";
 import { reviewScheduleHash } from "./review-schedule-hash";
+import { studyQueue, studyCardStatus, type StudyDay } from "./study-queue";
+import { reviewParameters } from "./presets/resolve-settings";
 
 export type RecordReviewFailure =
   | { readonly _tag: "ReviewAreaNotFound"; readonly areaId: string }
@@ -24,6 +21,7 @@ export type RecordReviewFailure =
   | { readonly _tag: "ReviewIdentifierInvalid"; readonly identifier: "area" | "card" | "event" }
   | { readonly _tag: "ReviewEventInvalid" }
   | { readonly _tag: "ReviewElapsedTimeInvalid" }
+  | { readonly _tag: "ReviewCardUnavailable" }
   | { readonly _tag: "ReviewScheduleUnavailable" };
 
 export type RecordReviewInput = {
@@ -34,6 +32,7 @@ export type RecordReviewInput = {
   readonly eventId: unknown;
   readonly ratedAt: string;
   readonly elapsedMs?: unknown;
+  readonly studyDay?: StudyDay;
 };
 
 export type RecordReviewResult = {
@@ -86,6 +85,15 @@ export function recordReview(
     const ratedAtTime = Date.parse(input.ratedAt);
     if (!Number.isFinite(ratedAtTime))
       return yield* Effect.fail({ _tag: "ReviewTimestampInvalid" } as const);
+    if (
+      studyCardStatus(input.workspace, card).suspended ||
+      (input.studyDay &&
+        !studyQueue(input.workspace, area, ratedAtTime, input.studyDay).cards.some(
+          (candidate) => candidate.id === card.id,
+        ))
+    ) {
+      return yield* Effect.fail({ _tag: "ReviewCardUnavailable" } as const);
+    }
 
     const elapsedMs = Schema.decodeUnknownEither(
       Schema.NullOr(
@@ -102,7 +110,7 @@ export function recordReview(
       Effect.mapError(() => ({ _tag: "ReviewScheduleUnavailable" }) as const),
     );
 
-    const parameters = input.workspace.schedulerSettings ?? DEFAULT_SCHEDULER_PARAMETERS;
+    const parameters = reviewParameters(input.workspace, area.id, card.id);
     const decodedEvent = Schema.decodeUnknownEither(ReviewEventSchema)({
       id: eventId.right,
       areaId: area.id,
@@ -130,6 +138,10 @@ export function recordReview(
       workspace: {
         ...input.workspace,
         reviewEvents: [...previousEvents, event],
+        reviewUndoStates: [
+          ...(input.workspace.reviewUndoStates ?? []),
+          { eventId: event.id, schedule: card.schedule },
+        ],
         pendingReviewEventIds: [...pending],
         reviews: Math.max(input.workspace.reviews, previousEvents.length) + 1,
         areas: input.workspace.areas.map((currentArea) =>

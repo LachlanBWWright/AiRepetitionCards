@@ -34,7 +34,7 @@ export function ChatRoom(props: ChatRoomProps) {
     const element = textarea.current;
     if (!element) return;
     element.style.height = "auto";
-    element.style.height = `${Math.min(element.scrollHeight, 192)}px`;
+    element.style.height = `${String(Math.min(element.scrollHeight, 192))}px`;
   }, [props.value]);
   useEffect(() => {
     const element = scroll.current;

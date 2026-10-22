@@ -1,7 +1,7 @@
 import { Effect, Either } from "effect";
 import type { ReviewEvent } from "@recall/domain";
 import { rebuildScheduleEffect, type ReviewRating } from "@recall/scheduler";
-import { recordReview, saveWorkspace } from "@recall/application";
+import { localStudyDay, recordReview, saveWorkspace } from "@recall/application";
 import type { Workspace } from "@/features/workspace/types";
 import { browserReviewWorkspaceStore } from "@/features/workspace/browser-workspace-store";
 import { localSnapshotStale } from "@/features/workspace/local-snapshot-status";
@@ -13,6 +13,7 @@ import type { PendingReview } from "@/features/dashboard/layout/RecallDashboardS
 
 type ReviewContext = {
   readonly rating: ReviewRating;
+  readonly elapsedMs?: number;
   readonly reviewingRef: React.RefObject<boolean>;
   readonly pendingReviewRef: React.RefObject<PendingReview | null>;
   readonly area: Workspace["areas"][number] | undefined;
@@ -47,6 +48,7 @@ function areaWithUpdatedSchedule(
 
 export async function reviewWorkspaceCard({
   rating,
+  elapsedMs,
   reviewingRef,
   pendingReviewRef,
   area,
@@ -108,6 +110,7 @@ export async function reviewWorkspaceCard({
         rating,
         eventId: identity.right,
         ratedAt: new Date().toISOString(),
+        ...(elapsedMs !== undefined ? { elapsedMs } : {}),
         baseSchedule: JSON.stringify(card.schedule),
       };
     }
@@ -136,7 +139,13 @@ export async function reviewWorkspaceCard({
       let candidate: Workspace;
       if (!attempt.event || !attempt.schedule) {
         const transition = Effect.runSync(
-          Effect.either(recordReview({ workspace: current, ...attempt })),
+          Effect.either(
+            recordReview({
+              workspace: current,
+              ...attempt,
+              studyDay: localStudyDay(Date.parse(attempt.ratedAt)),
+            }),
+          ),
         );
         if (Either.isLeft(transition)) return false;
         const schedule = transition.right.workspace.areas

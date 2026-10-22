@@ -21,6 +21,13 @@ export default function configureApp({ config }: ConfigContext): ExpoConfig {
     ...(Either.isRight(project)
       ? { owner: project.right.owner, extra: { eas: { projectId: project.right.projectId } } }
       : {}),
+    plugins: [
+      ...(config.plugins ?? []),
+      [
+        "expo-audio",
+        { microphonePermission: "Allow Recall to record pronunciation for your study cards." },
+      ],
+    ],
     ios: { ...config.ios, bundleIdentifier: "com.recall.study" },
     android: { ...config.android, package: "com.recall.study" },
   };

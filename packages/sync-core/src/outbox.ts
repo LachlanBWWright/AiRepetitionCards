@@ -1,4 +1,6 @@
+import { cardIdentityNormalizer } from "./card-identities";
 import {
+  reviewPlacement,
   createAreaId,
   createAssessmentId,
   createDeviceId,
@@ -10,6 +12,7 @@ import {
   type Workspace,
 } from "@recall/domain";
 import type { SyncPushResponse } from "@recall/contracts";
+import { remapImportedSchedule, remapStudyIdentities } from "./study-identities";
 import { stableSyncId } from "./ids";
 
 function mergedAreaObjectives(
@@ -33,15 +36,6 @@ function mergedAreaObjectives(
         ),
     ).values(),
   ];
-}
-function normalizedCardId(
-  area: Workspace["areas"][number],
-  card: Workspace["areas"][number]["cards"][number],
-) {
-  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(card.id))
-    return card.id;
-  const seed = area.sourceId ?? area.id;
-  return createAssessmentId(stableSyncId(`card:${seed}:${card.sourceId ?? card.id}`));
 }
 
 export function repairReviewSyncConflicts(
@@ -90,6 +84,11 @@ export function repairReviewSyncConflicts(
   });
   return {
     ...workspace,
+    ...remapStudyIdentities(workspace, {
+      area: (id) => id,
+      card: (id) => id,
+      event: (id) => replacements.get(id) ?? id,
+    }),
     syncDeviceId: nextDeviceId,
     reviewEvents,
     reviewConflictIds: [
@@ -133,6 +132,8 @@ export function prepareWorkspaceForSync(workspace: Workspace, createId: () => st
   const scopedKey = (areaId: string, entityId: string) => `${areaId}\u0000${entityId}`;
   const isUuid = (value: string) =>
     /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+  const normalizedEventId = (id: string) =>
+    createReviewEventId(isUuid(id) ? id : stableSyncId(`review:${id}`));
   const areaSeed = (area: Workspace["areas"][number]) => area.sourceId ?? area.id;
   const areaIds = new Map<string, AreaId>(
     identityAreas.map((area) => [
@@ -140,11 +141,11 @@ export function prepareWorkspaceForSync(workspace: Workspace, createId: () => st
       isUuid(area.id) ? area.id : createAreaId(stableSyncId(`area:${areaSeed(area)}`)),
     ]),
   );
+  const placement = reviewPlacement(workspace);
+  const normalizeCardId = cardIdentityNormalizer(workspace, identityAreas);
   const cardIds = new Map(
     identityAreas.flatMap((area) =>
-      area.cards.map(
-        (card) => [scopedKey(area.id, card.id), normalizedCardId(area, card)] as const,
-      ),
+      area.cards.map((card) => [scopedKey(area.id, card.id), normalizeCardId(area, card)] as const),
     ),
   );
   const objectivesByArea = new Map<string, NonNullable<Workspace["areas"][number]["objectives"]>>(
@@ -172,10 +173,25 @@ export function prepareWorkspaceForSync(workspace: Workspace, createId: () => st
       ),
     ),
   );
+  const originalEvents = workspace.reviewEvents ?? [];
+  const eventIds = new Map(originalEvents.map((event) => [event.id, normalizedEventId(event.id)]));
   const normalizeArea = (area: Workspace["areas"][number]) => ({
     ...area,
     id: areaIds.get(area.id) ?? area.id,
     sourceId: area.sourceId ?? (isUuid(area.id) ? undefined : area.id),
+    ...(area.noteLibrary
+      ? {
+          noteLibrary: {
+            ...area.noteLibrary,
+            notes: area.noteLibrary.notes.map((note) => ({
+              ...note,
+              objectiveIds: note.objectiveIds.map(
+                (id) => objectiveIds.get(scopedKey(area.id, id)) ?? id,
+              ),
+            })),
+          },
+        }
+      : {}),
     objectives: (
       area.objectives ??
       objectivesByArea
@@ -191,6 +207,14 @@ export function prepareWorkspaceForSync(workspace: Workspace, createId: () => st
     })),
     cards: area.cards.map((card) => ({
       ...card,
+      ...(card.importedSchedule
+        ? {
+            importedSchedule: remapImportedSchedule(
+              card.importedSchedule,
+              (id) => eventIds.get(createReviewEventId(id)) ?? normalizedEventId(id),
+            ),
+          }
+        : {}),
       id: cardIds.get(scopedKey(area.id, card.id)) ?? card.id,
       sourceId: card.sourceId ?? (isUuid(card.id) ? undefined : card.id),
       objectiveIds: (
@@ -219,19 +243,13 @@ export function prepareWorkspaceForSync(workspace: Workspace, createId: () => st
     workspace.syncDeviceId && isUuid(workspace.syncDeviceId)
       ? workspace.syncDeviceId
       : createDeviceId(createId());
-  const originalEvents = workspace.reviewEvents ?? [];
-  const eventIds = new Map(
-    originalEvents.map((event) => [
-      event.id,
-      isUuid(event.id) ? event.id : createReviewEventId(stableSyncId(`review:${event.id}`)),
-    ]),
-  );
   let sequence = 0;
   const lastEventByCard = new Map<string, ReviewEventId>();
   const reviewEvents = [...originalEvents]
     .sort((left, right) => left.ratedAt.localeCompare(right.ratedAt))
     .map((event) => {
-      const cardId = cardIdMap.get(scopedKey(event.areaId, event.cardId)) ?? event.cardId;
+      const cardId =
+        cardIdMap.get(scopedKey(placement.areaId(event), event.cardId)) ?? event.cardId;
       const eventId = eventIds.get(event.id) ?? event.id;
       sequence = Math.max(sequence, event.deviceId === deviceId ? (event.deviceSequence ?? 0) : 0);
       const normalized: ReviewEvent = {
@@ -255,13 +273,24 @@ export function prepareWorkspaceForSync(workspace: Workspace, createId: () => st
       lastEventByCard.set(cardId, eventId);
       return normalized;
     });
+  const unscopedCardIds = new Map(
+    identityAreas.flatMap((area) =>
+      area.cards.map(
+        (card) => [card.id, cardIds.get(scopedKey(area.id, card.id)) ?? card.id] as const,
+      ),
+    ),
+  );
   const normalizeCardVersion = (version: NonNullable<Workspace["cardVersions"]>[number]) => {
     const normalized = normalizeArea({ ...version.area, cards: [version.card] });
     const card = normalized.cards[0];
+    const movedToAreaId = version.movedToAreaId
+      ? createAreaId(areaIds.get(version.movedToAreaId) ?? version.movedToAreaId)
+      : undefined;
     return card
       ? {
           ...version,
           areaId: normalized.id,
+          ...(movedToAreaId ? { movedToAreaId } : {}),
           cardId: card.id,
           area: { ...normalized, cards: [] },
           card,
@@ -270,6 +299,14 @@ export function prepareWorkspaceForSync(workspace: Workspace, createId: () => st
   };
   return {
     ...workspace,
+    ...remapStudyIdentities(workspace, {
+      area: (id) => areaIds.get(id) ?? id,
+      card: (id, areaId) =>
+        areaId
+          ? (cardIds.get(scopedKey(placement.areaId({ areaId, cardId: id }), id)) ?? id)
+          : (unscopedCardIds.get(createAssessmentId(id)) ?? id),
+      event: (id) => eventIds.get(createReviewEventId(id)) ?? normalizedEventId(id),
+    }),
     areas,
     ...(retainedReviewAreas ? { retainedReviewAreas } : {}),
     ...(workspace.cardVersions
@@ -321,8 +358,9 @@ export function prepareWorkspaceForSync(workspace: Workspace, createId: () => st
     syncDeviceId: deviceId,
     reviewEvents,
     pendingReviewEventIds:
-      workspace.pendingReviewEventIds?.map((id) => eventIds.get(id) ?? id) ??
-      reviewEvents.map((event) => event.id),
+      workspace.pendingReviewEventIds?.map(
+        (id) => eventIds.get(createReviewEventId(id)) ?? normalizedEventId(id),
+      ) ?? reviewEvents.map((event) => event.id),
     syncCursor: workspace.syncCursor ?? "0",
   };
 }

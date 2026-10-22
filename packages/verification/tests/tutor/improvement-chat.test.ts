@@ -5,6 +5,7 @@ import type { TutorActionRequest, TutorActionResponse } from "@recall/ai-core";
 import {
   createTutorApi,
   improvementMessages,
+  improvementOpening,
   sendImprovementMessage,
   type KnowledgeNotebook,
   type TutorApiFailure,
@@ -69,7 +70,13 @@ void test("a first-message card request produces an unapproved proposal without 
   );
   const request = f.requests[0];
   assert.ok(request?.action === "question");
-  assert.deepEqual(request.context.improvement, { goal: "I need cards" });
+  assert.deepEqual(request.context.improvement, {
+    goal: `Explore experience and gaps in ${knowledgeArea().title}\nRecent self-rated reviews: none`,
+  });
+  assert.deepEqual(request.context.history, [
+    { role: "assistant", content: improvementOpening(knowledgeArea()) },
+    { role: "learner", content: "I need cards" },
+  ]);
   assert.equal(request.context.history.at(-1)?.content, "I need cards");
   assert.equal(result.session.pendingQuestion, null);
   assert.equal(result.evidence.length, 0);
@@ -89,12 +96,12 @@ void test("I don't know and make a card stay conversational and never become gra
   const request = f.requests[1];
   assert.ok(request?.action === "question");
   assert.equal(request.context.history.at(-1)?.content, "idk, make a card");
-  assert.equal(request.context.history.length, 3);
+  assert.equal(request.context.history.length, 4);
   assert.equal(result.evidence.length, 0);
   assert.equal(result.proposals.length, 2);
   assert.ok(result.proposals.every((proposal) => proposal.status === "pending"));
   assert.equal(result.session.pendingQuestion, null);
-  assert.equal(improvementMessages(result).length, 4);
+  assert.equal(improvementMessages(result).length, 5);
 });
 void test("a failed AI request keeps the sent message and retry does not duplicate it", async () => {
   const f = harness();
@@ -114,6 +121,19 @@ void test("a failed AI request keeps the sent message and retry does not duplica
         await Effect.runPromise(Effect.either(sendImprovementMessage(input(), dependencies))),
       ),
     );
-    assert.equal(improvementMessages(f.saved()).length, 1);
+    assert.deepEqual(
+      improvementMessages(f.saved()).map(({ role, content }) => ({ role, content })),
+      [
+        { role: "assistant", content: improvementOpening(knowledgeArea()) },
+        { role: "learner", content: "Help me find gaps" },
+      ],
+    );
   }
+  const result = await Effect.runPromise(f.send("Help me find gaps"));
+  assert.equal(improvementMessages(result).length, 3);
+  assert.equal(
+    improvementMessages(result).filter((message) => message.role === "learner").length,
+    1,
+  );
+  assert.equal(result.evidence.length, 0);
 });

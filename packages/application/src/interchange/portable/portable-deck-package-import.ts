@@ -89,7 +89,8 @@ export function importPortableDeckPackage(
     if (
       Object.keys(files).some(
         (path) =>
-          !allowed.has(path) && !/^media\/[a-f0-9]{64}\.(jpg|png|gif|webp|mp3|ogg|wav)$/.test(path),
+          !allowed.has(path) &&
+          !/^media\/[a-f0-9]{64}\.(jpg|png|gif|webp|mp3|ogg|wav|m4a|webm)$/.test(path),
       )
     )
       return yield* Effect.fail(fail("invalid-package"));
@@ -196,18 +197,14 @@ export function importPortableDeckPackage(
           (currentObjectives.size !== objectiveIds.size ||
             [...objectiveIds].some((id) => !currentObjectives.has(id)))) ||
         !cardsMatchCurrent ||
-        value.reviewEvents.some(
-          (event) => event.areaId !== areaResult.right.id || !cardIds.has(event.cardId),
-        ) ||
+        value.reviewEvents.some((event) => !cardIds.has(event.cardId)) ||
         value.reviewEvents.some(
           (event) =>
             event.baseReviewEventId != null &&
             (!eventsById.has(event.baseReviewEventId) ||
               eventsById.get(event.baseReviewEventId)?.cardId !== event.cardId),
         ) ||
-        value.cardVersions.some(
-          (version) => version.areaId !== areaResult.right.id || !cardIds.has(version.cardId),
-        ) ||
+        value.cardVersions.some((version) => !cardIds.has(version.cardId)) ||
         value.activityLibrary.activities.some((item) => item.areaId !== areaResult.right.id) ||
         value.activityLibrary.attempts.some(
           (item) => item.activity.areaId !== areaResult.right.id,

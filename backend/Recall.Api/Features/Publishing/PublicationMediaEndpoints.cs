@@ -118,7 +118,7 @@ public static partial class PublishingEndpoints
         reference = null;
         if (value.ValueKind != JsonValueKind.Object ||
             !TryString(value, "id", out var id) || id != routeId ||
-            !TryString(value, "mimeType", out var mime) || mime is not ("image/jpeg" or "image/png" or "image/gif" or "image/webp" or "audio/mpeg" or "audio/ogg" or "audio/wav") ||
+            !TryString(value, "mimeType", out var mime) || mime is not ("image/jpeg" or "image/png" or "image/gif" or "image/webp" or "audio/mpeg" or "audio/ogg" or "audio/wav" or "audio/mp4" or "audio/webm") ||
             !value.TryGetProperty("byteLength", out var lengthElement) || !lengthElement.TryGetInt32(out var length) || length <= 0 || length > MaximumPublishedMediaBytes)
             return false;
         reference = new MediaReference(id, mime, length);
@@ -127,12 +127,24 @@ public static partial class PublishingEndpoints
 
     private static MediaReference? FindMediaReference(JsonElement content, string mediaId)
     {
-        if (!content.TryGetProperty("cards", out var cards) || cards.ValueKind != JsonValueKind.Array) return null;
-        foreach (var card in cards.EnumerateArray())
+        if (content.TryGetProperty("cards", out var cards) && cards.ValueKind == JsonValueKind.Array)
         {
-            if (!card.TryGetProperty("media", out var media) || media.ValueKind != JsonValueKind.Array) continue;
-            foreach (var item in media.EnumerateArray())
-                if (TryReadMediaReference(item, mediaId, out var reference)) return reference;
+            var reference = FindMediaReferenceInItems(cards, mediaId);
+            if (reference is not null) return reference;
+        }
+        if (content.TryGetProperty("noteLibrary", out var library) && library.ValueKind == JsonValueKind.Object &&
+            library.TryGetProperty("notes", out var notes) && notes.ValueKind == JsonValueKind.Array)
+            return FindMediaReferenceInItems(notes, mediaId);
+        return null;
+    }
+
+    private static MediaReference? FindMediaReferenceInItems(JsonElement items, string mediaId)
+    {
+        foreach (var item in items.EnumerateArray())
+        {
+            if (item.ValueKind != JsonValueKind.Object || !item.TryGetProperty("media", out var media) || media.ValueKind != JsonValueKind.Array) continue;
+            foreach (var attachment in media.EnumerateArray())
+                if (TryReadMediaReference(attachment, mediaId, out var reference)) return reference;
         }
         return null;
     }
@@ -149,6 +161,8 @@ public static partial class PublishingEndpoints
             "image/png" => bytes.AsSpan().StartsWith(new byte[] { 137, 80, 78, 71, 13, 10, 26, 10 }),
             "image/gif" => bytes.AsSpan().StartsWith(Encoding.ASCII.GetBytes("GIF87a")) || bytes.AsSpan().StartsWith(Encoding.ASCII.GetBytes("GIF89a")),
             "image/webp" => bytes.Length >= 12 && Encoding.ASCII.GetString(bytes, 0, 4) == "RIFF" && Encoding.ASCII.GetString(bytes, 8, 4) == "WEBP",
+            "audio/mp4" => Recall.Api.Contracts.MediaContentSignatures.IsMp4Audio(bytes),
+            "audio/webm" => Recall.Api.Contracts.MediaContentSignatures.IsWebmAudio(bytes),
             "audio/wav" => bytes.Length >= 12 && Encoding.ASCII.GetString(bytes, 0, 4) == "RIFF" && Encoding.ASCII.GetString(bytes, 8, 4) == "WAVE",
             "audio/ogg" => bytes.AsSpan().StartsWith(Encoding.ASCII.GetBytes("OggS")),
             "audio/mpeg" => bytes.AsSpan().StartsWith(Encoding.ASCII.GetBytes("ID3")) || bytes.Length >= 2 && bytes[0] == 0xff && (bytes[1] & 0xe0) == 0xe0,

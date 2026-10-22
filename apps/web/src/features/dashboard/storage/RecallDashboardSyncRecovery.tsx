@@ -83,6 +83,8 @@ export function RecallDashboardSyncRecovery({ model }: { readonly model: RecallD
     hasMore,
     uploadDeferred,
     baseline,
+    studyDocument,
+    studyConflict,
   ) => {
     if (localWritesBlocked()) return null;
     const applied = Effect.runSync(
@@ -91,6 +93,8 @@ export function RecallDashboardSyncRecovery({ model }: { readonly model: RecallD
           workspaceRef.current,
           {
             baseline,
+            ...(studyDocument ? { studyDocument } : {}),
+            ...(studyConflict ? { studyConflict } : {}),
             acceptedIds,
             cursor,
             pulledEvents,

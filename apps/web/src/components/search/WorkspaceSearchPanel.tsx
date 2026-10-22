@@ -4,6 +4,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Effect, Either, Fiber, Schema } from "effect";
 import {
   searchWorkspace,
+  validateStudyQuery,
+  isStructuredStudyQuery,
+  CARD_SEARCH_HELP,
   type WorkspaceSearchKind,
   type WorkspaceSearchNotebook,
   type WorkspaceSearchResult,
@@ -80,6 +83,7 @@ export function WorkspaceSearchPanel({
   demoNotebooks,
 }: WorkspaceSearchPanelProps) {
   const [query, setQuery] = useState(initialQuery);
+  const [searchNow] = useState(() => Date.now());
   const [filter, setFilter] = useState<WorkspaceSearchKind | "all">("all");
   const [records, setRecords] = useState<readonly WorkspaceSearchNotebook[]>(demoNotebooks ?? []);
   const [indexedOwner, setIndexedOwner] = useState(ownershipKey);
@@ -162,11 +166,16 @@ export function WorkspaceSearchPanel({
         query,
         {
           limit: 200,
+          now: searchNow,
           ...(filter === "all" ? {} : { kinds: [filter] }),
         },
       ),
-    [workspace, records, demoNotebooks, indexedOwner, ownershipKey, query, filter],
+    [workspace, records, demoNotebooks, indexedOwner, ownershipKey, query, filter, searchNow],
   );
+  const queryValidation = isStructuredStudyQuery(query)
+    ? Effect.runSync(Effect.either(validateStudyQuery(query)))
+    : Either.right(null);
+  const queryError = Either.isLeft(queryValidation) ? queryValidation.left.message : null;
   function open(result: WorkspaceSearchResult) {
     if (demoNotebooks !== undefined) {
       onOpenResult(result);
@@ -231,6 +240,12 @@ export function WorkspaceSearchPanel({
           )}
         </CommandList>
       </Command>
+      <p className="text-xs text-muted-foreground">Card filters: {CARD_SEARCH_HELP}</p>
+      {queryError && (
+        <Alert variant="destructive">
+          <AlertDescription>{queryError}</AlertDescription>
+        </Alert>
+      )}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0">
           <Label htmlFor="workspace-search-kind" className="text-sm font-medium">

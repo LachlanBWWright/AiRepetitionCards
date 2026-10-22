@@ -1,4 +1,11 @@
-import { useEffect } from "react";
+import { occlusionAnswerLabel } from "@recall/application";
+import { ImageOcclusionView } from "@/components/occlusion/ImageOcclusionView";
+import { ReviewSpeech } from "../cards/ReviewSpeech";
+import { CardRichText } from "@/components/cards/CardRichText";
+import { TypedReviewAnswer } from "../cards/TypedReviewAnswer";
+import { useReviewerInteraction } from "../cards/useReviewerInteraction";
+import { ReviewerTimer } from "../cards/ReviewerTimer";
+import { defaultReviewerSettings, type ReviewerSettings } from "@recall/domain";
 import { Effect, Either } from "effect";
 import { previewReviewSchedules, type SchedulerParameters } from "@recall/scheduler";
 import { summarizeStudySession, formatReviewDelay } from "@recall/application";
@@ -34,10 +41,15 @@ type ReviewCardProps = {
   onEdit?: (card: Assessment) => void;
   onDelete?: (card: Assessment) => void;
   onAddCard: () => void;
-  mediaPreviews?: readonly { readonly mimeType: string; readonly url: string }[];
+  mediaPreviews?: readonly {
+    readonly id?: string;
+    readonly mimeType: string;
+    readonly url: string;
+  }[];
   keyboardActive?: boolean;
   disabled?: boolean;
   saving?: boolean;
+  readonly reviewerSettings?: ReviewerSettings | undefined;
 };
 
 const ratings: ReadonlyArray<{ rating: ReviewRating; label: string }> = [
@@ -69,6 +81,7 @@ export function ReviewCard({
   keyboardActive = false,
   disabled = false,
   saving = false,
+  reviewerSettings = defaultReviewerSettings,
 }: ReviewCardProps) {
   const preview =
     card && now
@@ -77,13 +90,21 @@ export function ReviewCard({
         )
       : null;
   const emptyDeck = session?.cardCount === 0;
-  const emptyTitle = !area
-    ? "Your library is empty"
-    : emptyDeck
-      ? "Build your deck"
-      : session && session.reviewed > 0
-        ? `You’re caught up in ${area.title}`
-        : "Already caught up";
+  const deferred =
+    (session?.deferredReviewCount ?? 0) +
+    (session?.deferredNewCount ?? 0) +
+    (session?.buriedCount ?? 0) +
+    (session?.filteredCount ?? 0);
+  const emptyTitle =
+    deferred > 0
+      ? "Scheduled session complete"
+      : !area
+        ? "Your library is empty"
+        : emptyDeck
+          ? "Build your deck"
+          : session && session.reviewed > 0
+            ? `You’re caught up in ${area.title}`
+            : "Already caught up";
   const flaggedAction =
     flaggedCount > 0 && onEditFlagged ? (
       <Button variant="secondary" onClick={onEditFlagged}>
@@ -118,46 +139,30 @@ export function ReviewCard({
         Delete card
       </DropdownMenuItem>
     ) : null;
-  useEffect(() => {
-    if (!keyboardActive || !card || disabled || saving) return;
-    const handleKey = (event: KeyboardEvent) => {
-      if (
-        event.defaultPrevented ||
-        event.isComposing ||
-        event.repeat ||
-        event.altKey ||
-        event.ctrlKey ||
-        event.metaKey ||
-        event.shiftKey
-      )
-        return;
-      if (document.querySelector('[role="dialog"]')) return;
-      if (
-        event.target instanceof Element &&
-        event.target.closest(
-          "input, textarea, select, button, a, audio, video, summary, [contenteditable], [role=dialog], [role=button], [role=slider], [role=spinbutton], [role=combobox], [role=textbox]",
-        )
-      )
-        return;
-      if (!showAnswer && (event.key === " " || event.key === "Enter")) {
-        event.preventDefault();
-        onReveal();
-      } else if (showAnswer) {
-        const rating = ratings[Number(event.key) - 1];
-        if (/^[1-4]$/.test(event.key) && rating) {
-          event.preventDefault();
-          onRate(rating.rating);
-        }
-      }
-    };
-    window.addEventListener("keydown", handleKey);
-    return () => {
-      window.removeEventListener("keydown", handleKey);
-    };
-  }, [keyboardActive, card, showAnswer, onReveal, onRate, disabled, saving]);
+  const controls = useReviewerInteraction({
+    cardId: card?.id,
+    revealed: showAnswer,
+    enabled: keyboardActive && !disabled && !saving,
+    settings: reviewerSettings,
+    onReveal,
+    onRate,
+  });
   const editCard = () => {
     if (card && onEdit) onEdit(card);
   };
+  const inlineMediaUrls = Object.fromEntries(
+    mediaPreviews.flatMap((preview) =>
+      preview.id && preview.id !== card?.imageOcclusion?.imageMediaId
+        ? [[preview.id, preview.url]]
+        : [],
+    ),
+  );
+  const revealKeyShortcuts = keyboardActive
+    ? `Enter ${shortcutLabel(reviewerSettings.shortcuts.reveal)}`
+    : undefined;
+  const revealHint = keyboardActive
+    ? `${shortcutLabel(reviewerSettings.shortcuts.reveal)} / ↵`
+    : "↵";
   return (
     <article className="flex min-h-[262px] flex-col rounded-[11px] border border-[var(--line)] bg-[var(--surface)] px-[17px] pt-[14px]">
       {session && card && (
@@ -208,20 +213,39 @@ export function ReviewCard({
       </div>
       {card ? (
         <>
-          <div className="flex flex-1 flex-col items-center justify-center px-6 py-4 text-center">
+          <ReviewerTimer
+            showTimer={reviewerSettings.showTimer}
+            {...controls}
+            disabled={disabled || saving || !keyboardActive}
+          />
+          <div
+            {...controls.gestureHandlers}
+            className="flex flex-1 flex-col items-center justify-center px-6 py-4 text-center"
+          >
             <span className="text-[8px] font-bold tracking-[1.1px] text-[var(--ink)]">
               {showAnswer ? "ANSWER" : "QUESTION"}
             </span>
-            <p className="mt-[13px] max-w-[435px] whitespace-pre-wrap text-[22px] leading-[1.4] tracking-[-0.35px] [overflow-wrap:anywhere] [font-family:Georgia,serif]">
-              {showAnswer ? card.back : card.front}
-            </p>
+            <CardRichText
+              appearance={card.presentation?.appearance}
+              text={showAnswer ? occlusionAnswerLabel(card.imageOcclusion, card.back) : card.front}
+              mediaUrls={inlineMediaUrls}
+              className="mt-[13px] max-w-[435px] whitespace-pre-wrap text-[22px] leading-[1.4] tracking-[-0.35px] [overflow-wrap:anywhere] [font-family:Georgia,serif]"
+            />
           </div>
+          <ReviewSpeech card={card} revealed={showAnswer} />
+          <TypedReviewAnswer
+            key={card.id}
+            card={card}
+            revealed={showAnswer}
+            disabled={disabled || saving}
+            onReveal={onReveal}
+          />
           {mediaPreviews.length > 0 && (
             <div
               className="mx-auto mb-5 flex max-w-[720px] flex-wrap justify-center gap-3"
               aria-label="Card media"
             >
-              {mediaPreviews.map(renderReviewMediaPreview)}
+              <ReviewMediaList card={card} previews={mediaPreviews} revealed={showAnswer} />
             </div>
           )}
           {showAnswer ? (
@@ -233,6 +257,7 @@ export function ReviewCard({
                 disabled={disabled || saving}
                 keyboardActive={keyboardActive}
                 delays={ratingDelays}
+                shortcuts={reviewerSettings.shortcuts}
                 onRate={onRate}
               />
               <p className="text-xs text-muted-foreground text-center">
@@ -245,9 +270,9 @@ export function ReviewCard({
               className="mb-[17px] self-center rounded-[7px] bg-[var(--primary)] px-[13px] py-[9px] text-[10px] text-white hover:bg-[var(--status-success-bg)]"
               onClick={onReveal}
               disabled={disabled || saving}
-              aria-keyshortcuts={keyboardActive ? "Enter Space" : undefined}
+              aria-keyshortcuts={revealKeyShortcuts}
             >
-              Show answer <span>{keyboardActive ? "Space / ↵" : "↵"}</span>
+              Show answer <span>{revealHint}</span>
             </Button>
           )}
         </>
@@ -261,7 +286,7 @@ export function ReviewCard({
               ? "Create a deck to add cards."
               : emptyDeck
                 ? "Add your first card to start studying."
-                : `${session?.reviewed ? `${String(session.reviewed)} ${session.reviewed === 1 ? "review" : "reviews"} this session · ${String(session.recalled)} recalled. ` : "No cards due right now. "}${session?.nextReviewAt ? `Next review: ${new Date(session.nextReviewAt).toLocaleString()}.` : ""}`
+                : `${deferred > 0 ? `${String(session?.deferredReviewCount ?? 0)} returning cards deferred; ${String(session?.deferredNewCount ?? 0)} new cards deferred by your daily settings; ${String(session?.filteredCount ?? 0)} cards excluded by the study filter; ${String(session?.buriedCount ?? 0)} related cards buried until tomorrow. ` : ""}${session?.reviewed ? `${String(session.reviewed)} ${session.reviewed === 1 ? "review" : "reviews"} this session · ${String(session.recalled)} recalled. ` : "No cards due right now. "}${session?.nextReviewAt ? `Next review: ${new Date(session.nextReviewAt).toLocaleString()}.` : ""}`
           }
           action={
             <div className="flex flex-wrap justify-center gap-2 pb-5">
@@ -282,16 +307,18 @@ function ReviewRatingButtons({
   disabled,
   keyboardActive,
   delays,
+  shortcuts,
   onRate,
 }: {
   readonly disabled: boolean;
   readonly keyboardActive: boolean;
   readonly delays: Partial<Record<ReviewRating, string>>;
+  readonly shortcuts: ReviewerSettings["shortcuts"];
   readonly onRate: (rating: ReviewRating) => void;
 }) {
   return (
     <div className="flex gap-1.5 max-[640px]:w-full max-[640px]:[&>button]:min-w-0 max-[640px]:[&>button]:flex-1">
-      {ratings.map(({ rating, label }, index) => (
+      {ratings.map(({ rating, label }) => (
         <Button
           variant={rating === "again" ? "destructive" : "secondary"}
           className={`min-h-12 min-w-[72px] flex-col rounded-md border border-[var(--line)] bg-[var(--surface)] px-3 py-2 text-sm ${rating === "again" || rating === "hard" ? "text-[var(--status-warning-fg)]" : "text-[var(--status-success-fg)]"}`}
@@ -300,10 +327,10 @@ function ReviewRatingButtons({
           onClick={() => {
             onRate(rating);
           }}
-          aria-keyshortcuts={keyboardActive ? String(index + 1) : undefined}
+          aria-keyshortcuts={keyboardActive ? shortcutLabel(shortcuts[rating]) : undefined}
         >
           {label}
-          {keyboardActive ? ` · ${String(index + 1)}` : ""}
+          {keyboardActive ? ` · ${shortcuts[rating] === " " ? "Space" : shortcuts[rating]}` : ""}
           {delays[rating] && <span className="text-xs font-normal">{delays[rating]}</span>}
         </Button>
       ))}
@@ -330,4 +357,35 @@ function renderReviewMediaPreview(preview: { readonly mimeType: string; readonly
       className="w-[min(100%,420px)]"
     />
   );
+}
+
+function ReviewMediaList({
+  card,
+  previews,
+  revealed,
+}: {
+  readonly card: Assessment;
+  readonly previews: readonly {
+    readonly id?: string;
+    readonly mimeType: string;
+    readonly url: string;
+  }[];
+  readonly revealed: boolean;
+}) {
+  return previews.map((preview) =>
+    card.imageOcclusion && preview.id === card.imageOcclusion.imageMediaId ? (
+      <ImageOcclusionView
+        key={preview.url}
+        image={card.imageOcclusion}
+        url={preview.url}
+        revealed={revealed}
+      />
+    ) : (
+      renderReviewMediaPreview(preview)
+    ),
+  );
+}
+
+function shortcutLabel(key: string) {
+  return key === " " ? "Space" : key;
 }

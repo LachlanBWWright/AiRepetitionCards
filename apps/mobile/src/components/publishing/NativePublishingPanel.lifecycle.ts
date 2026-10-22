@@ -1,3 +1,4 @@
+import { areaMediaReferences } from "@recall/application";
 import { useEffect, useState } from "react";
 import { Effect, Either } from "effect";
 import {
@@ -41,11 +42,7 @@ function availableMediaForArea(
   area: KnowledgeArea,
   mediaStore: NativePublishingPanelProps["mediaStore"],
 ) {
-  const references = [
-    ...new Map(
-      area.cards.flatMap((card) => card.media ?? []).map((item) => [item.id, item]),
-    ).values(),
-  ];
+  const references = areaMediaReferences(area);
   const availableMedia = Effect.all(
     references.map((reference) =>
       mediaStore

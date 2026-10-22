@@ -1,5 +1,10 @@
+import { renderCloze } from "../../authoring/cloze";
+import { importAnkiOcclusion } from "./anki-import-occlusion";
+import { readAnkiPackage } from "./anki-import-package";
+import { preserveAnkiSchedule } from "./anki-import-schedule";
+import { importedAnkiNotes } from "./anki-import-notes";
+import { renderAnkiTemplate } from "./anki-legacy-metadata";
 import { Effect, Either, Schema } from "effect";
-import { unzipSync, type UnzipFileInfo } from "fflate";
 import {
   LearningAreaSchema,
   createAreaId,
@@ -10,18 +15,7 @@ import {
   type MediaReference,
 } from "@recall/domain";
 import { sanitizeField } from "./anki-import-media";
-import { decodePackageDatabaseAndMedia } from "./anki-import-decode";
 import { newSchedule, rebuildSchedule } from "@recall/scheduler";
-import { hasSafeZipExpansion } from "../zip-safety";
-import {
-  MAX_ARCHIVE_BYTES,
-  MAX_DATABASE_BYTES,
-  MAX_EXPANDED_BYTES,
-  MAX_FILES,
-  parsePackageVersion,
-  validArchivePath,
-  ZIP_SIGNATURE,
-} from "./anki-import-archive";
 import type { AnkiSqliteReader } from "./anki-import-contracts";
 
 export { AnkiCollectionSchema } from "./anki-import-contracts";
@@ -37,7 +31,6 @@ export type {
   AnkiSqliteReader,
   AnkiSqliteReaderError,
 } from "./anki-import-contracts";
-import { AnkiCollectionSchema } from "./anki-import-contracts";
 import type { AnkiImportError, AnkiImportProposal } from "./anki-import-contracts";
 
 const MISSING = (reason: AnkiImportError["reason"]): AnkiImportError => ({
@@ -51,7 +44,6 @@ const defaultId = (): string => globalThis.crypto.randomUUID();
  * Stage 1 validates and bounds the archive; stage 2 delegates SQLite decoding to a platform
  * adapter; stage 3 validates, sanitizes and proposes canonical content. The mapping follows
  * Anki's documented distinction between notes, note types, generated cards, and package media.
- * No SQLite implementation is bundled here. `.anki21` is an uncompressed SQLite database.
  * Latest packages declare version 3 in the protobuf `meta` entry, zstd-compress the collection,
  * media manifest, and media files, and encode the manifest as `MediaEntries` protobuf.
  */
@@ -68,120 +60,14 @@ export function importAnkiApkg(
   return Effect.gen(function* () {
     if (!Number.isFinite(options.now.getTime()))
       return yield* Effect.fail(MISSING("invalid-input"));
-    if (!(input instanceof Uint8Array)) return yield* Effect.fail(MISSING("invalid-input"));
-    if (input.byteLength > MAX_ARCHIVE_BYTES) return yield* Effect.fail(MISSING("limits-exceeded"));
-    if (input.length < 4 || ZIP_SIGNATURE.some((byte, index) => input[index] !== byte)) {
-      return yield* Effect.fail(MISSING("unsupported-format"));
-    }
-    // Inspect central-directory sizes before unzipSync inflates any entry. The bounded import
-    // totals below are still checked during extraction because directory metadata is untrusted.
-    const zipEntries = yield* Effect.try({
-      try: () => {
-        const entries: UnzipFileInfo[] = [];
-        unzipSync(input, {
-          filter: (entry) => {
-            if (entries.length <= MAX_FILES) entries.push(entry);
-            return false;
-          },
-        });
-        return entries;
-      },
-      catch: () => MISSING("invalid-archive"),
-    });
-    if (
-      !hasSafeZipExpansion(zipEntries, {
-        maxFiles: MAX_FILES,
-        maxExpandedBytes: MAX_EXPANDED_BYTES,
-      })
-    )
-      return yield* Effect.fail(MISSING("limits-exceeded"));
-    let fileCount = 0;
-    let expandedBytes = 0;
-    const archiveState = { duplicatePath: false };
-    const seenPaths = new Set<string>();
-    const archive = yield* Effect.try({
-      try: () =>
-        unzipSync(input, {
-          filter: (entry) => {
-            fileCount += 1;
-            expandedBytes += entry.originalSize;
-            if (seenPaths.has(entry.name)) archiveState.duplicatePath = true;
-            seenPaths.add(entry.name);
-            return (
-              fileCount <= MAX_FILES &&
-              expandedBytes <= MAX_EXPANDED_BYTES &&
-              validArchivePath(entry.name)
-            );
-          },
-        }),
-      catch: () => MISSING("invalid-archive"),
-    });
-    if (fileCount > MAX_FILES || expandedBytes > MAX_EXPANDED_BYTES)
-      return yield* Effect.fail(MISSING("limits-exceeded"));
-    const names = Object.keys(archive);
-    if (
-      archiveState.duplicatePath ||
-      names.length !== fileCount ||
-      names.some((name) => !validArchivePath(name))
-    )
-      return yield* Effect.fail(MISSING("invalid-archive"));
-    const metadataBytes = archive.meta;
-    const packageVersion = metadataBytes ? parsePackageVersion(metadataBytes) : undefined;
-    if (metadataBytes && (packageVersion === undefined || packageVersion < 1 || packageVersion > 3))
-      return yield* Effect.fail(MISSING("unsupported-format"));
-    // Anki selects by package metadata, not by the presence of compatibility placeholders.
-    // Older packages without metadata use the historical collection.anki21/anki2 detection.
-    const selectedDatabaseEntry =
-      packageVersion === 3
-        ? archive["collection.anki21b"]
-          ? (["collection.anki21b", "anki21b"] as const)
-          : undefined
-        : packageVersion === 2
-          ? archive["collection.anki21"]
-            ? (["collection.anki21", "anki21"] as const)
-            : undefined
-          : packageVersion === 1
-            ? archive["collection.anki2"]
-              ? (["collection.anki2", "legacy-anki2"] as const)
-              : undefined
-            : archive["collection.anki21"]
-              ? (["collection.anki21", "anki21"] as const)
-              : archive["collection.anki2"]
-                ? (["collection.anki2", "legacy-anki2"] as const)
-                : undefined;
-    if (!selectedDatabaseEntry) return yield* Effect.fail(MISSING("unsupported-format"));
-    const [databaseName, databaseFormat] = selectedDatabaseEntry;
-    const databasePayload = archive[databaseName];
-    const mediaIndexBytes = archive.media;
-    if (!databasePayload || !mediaIndexBytes)
-      return yield* Effect.fail(MISSING("unsupported-format"));
-    if (databasePayload.byteLength > MAX_DATABASE_BYTES)
-      return yield* Effect.fail(MISSING("limits-exceeded"));
-    const { database, mediaByName } = yield* decodePackageDatabaseAndMedia({
-      archive,
-      names,
-      databaseFormat,
-      databasePayload,
-      mediaIndexBytes,
-    });
-    const rawCollection = yield* readSqlite(database).pipe(
-      Effect.mapError((error) =>
-        MISSING(
-          error.reason === "unsupported-database"
-            ? "unsupported-format"
-            : error.reason === "limits-exceeded"
-              ? "limits-exceeded"
-              : "invalid-database",
-        ),
-      ),
-    );
-    const decodedCollection = Schema.decodeUnknownEither(AnkiCollectionSchema)(rawCollection);
-    if (Either.isLeft(decodedCollection)) return yield* Effect.fail(MISSING("invalid-database"));
-    const collection = decodedCollection.right;
+    const { collection, mediaByName } = yield* readAnkiPackage(input, readSqlite);
     const noteTypes = new Map(collection.noteTypes.map((noteType) => [noteType.id, noteType]));
     const notes = new Map(collection.notes.map((note) => [note.id, note]));
     if (
       notes.size !== collection.notes.length ||
+      new Set(collection.notes.map((note) => note.guid)).size !== collection.notes.length ||
+      new Set(collection.cards.map((card) => `${String(card.noteId)}:${String(card.ordinal)}`))
+        .size !== collection.cards.length ||
       noteTypes.size !== collection.noteTypes.length ||
       new Set(collection.cards.map((card) => card.id)).size !== collection.cards.length
     )
@@ -190,7 +76,7 @@ export function importAnkiApkg(
     const cards: LearningArea["cards"][number][] = [];
     const cardIdsByAnkiId = new Map<number, LearningArea["cards"][number]["id"]>();
     const usedRefs = new Map<string, MediaReference>();
-    const noteGuids: string[] = [];
+    const noteGuids = new Set<string>();
     const sortedCards = [...collection.cards].sort((left, right) => left.id - right.id);
     for (const card of sortedCards) {
       const note = notes.get(card.noteId);
@@ -201,14 +87,44 @@ export function importAnkiApkg(
       const fieldsByName = new Map(
         noteType.fields.map((name, index) => [name.toLowerCase(), note.fields[index] ?? ""]),
       );
-      if (noteType.kind === "basic") {
-        if (card.ordinal > 1) return yield* Effect.fail(MISSING("unsupported-note-type"));
-        const frontRaw = fieldsByName.get("front");
-        const backRaw = fieldsByName.get("back");
+      if (fieldsByName.has("occlusion") && fieldsByName.has("image")) {
+        const imported = importAnkiOcclusion(fieldsByName, card.ordinal, mediaByName);
+        if (!imported) return yield* Effect.fail(MISSING("unsupported-note-type"));
+        const importedCardId = createAssessmentId((options.createId ?? defaultId)());
+        cardIdsByAnkiId.set(card.id, importedCardId);
+        usedRefs.set(imported.attachment.reference.id, imported.attachment.reference);
+        cards.push({
+          id: importedCardId,
+          sourceId: `anki:${note.guid}:${String(card.ordinal)}`,
+          siblingId: `anki:${note.guid}`,
+          front: imported.front,
+          back: imported.back,
+          objective: "Imported from Anki",
+          objectiveIds: [objectiveId],
+          tags: note.tags,
+          origin: "imported",
+          schedule: newSchedule(options.now),
+          imageOcclusion: imported.image,
+          media: [imported.attachment.reference],
+        });
+      } else if (noteType.kind === "basic") {
+        const template = noteType.templates?.[card.ordinal];
+        const templateFront = template
+          ? renderAnkiTemplate(template.front, fieldsByName)
+          : undefined;
+        const frontRaw = template
+          ? templateFront
+          : fieldsByName.get(card.ordinal === 0 ? "front" : "back");
+        const backRaw =
+          template && templateFront !== undefined
+            ? renderAnkiTemplate(template.back, fieldsByName, templateFront)
+            : fieldsByName.get(card.ordinal === 0 ? "back" : "front");
+        if (!template && card.ordinal > 1)
+          return yield* Effect.fail(MISSING("unsupported-note-type"));
         if (frontRaw === undefined || backRaw === undefined)
           return yield* Effect.fail(MISSING("unsupported-note-type"));
-        const first = sanitizeField(card.ordinal === 0 ? frontRaw : backRaw, mediaByName);
-        const second = sanitizeField(card.ordinal === 0 ? backRaw : frontRaw, mediaByName);
+        const first = sanitizeField(frontRaw, mediaByName);
+        const second = sanitizeField(backRaw, mediaByName);
         if (first === "invalid-media" || second === "invalid-media")
           return yield* Effect.fail(MISSING("invalid-media"));
         if (!first || !second) return yield* Effect.fail(MISSING("invalid-note"));
@@ -218,6 +134,7 @@ export function importAnkiApkg(
         cards.push({
           id: importedCardId,
           sourceId: `anki:${note.guid}:${String(card.ordinal)}`,
+          siblingId: `anki:${note.guid}`,
           front: first.text,
           back: second.text,
           objective: "Imported from Anki",
@@ -235,16 +152,11 @@ export function importAnkiApkg(
         const textRaw = fieldsByName.get("text");
         if (textRaw === undefined) return yield* Effect.fail(MISSING("unsupported-note-type"));
         if (card.ordinal > 19) return yield* Effect.fail(MISSING("unsupported-note-type"));
-        const match = /\{\{c(\d+)::([\s\S]*?)(?:::[\s\S]*?)?\}\}/g;
-        const clozeNumbers = [...textRaw.matchAll(match)].map((entry) => Number(entry[1]));
-        if (!clozeNumbers.includes(card.ordinal + 1))
-          return yield* Effect.fail(MISSING("invalid-note"));
-        const frontHtml = textRaw.replace(match, (full, number: string, answer: string) =>
-          Number(number) === card.ordinal + 1 ? "[…]" : answer,
+        const rendered = yield* renderCloze(textRaw, card.ordinal + 1).pipe(
+          Effect.mapError(() => MISSING("invalid-note")),
         );
-        const backHtml = textRaw.replace(match, (_full, _number: string, answer: string) => answer);
-        const front = sanitizeField(frontHtml, mediaByName);
-        const back = sanitizeField(backHtml, mediaByName);
+        const front = sanitizeField(rendered.front, mediaByName);
+        const back = sanitizeField(rendered.back, mediaByName);
         if (front === "invalid-media" || back === "invalid-media")
           return yield* Effect.fail(MISSING("invalid-media"));
         if (!front || !back) return yield* Effect.fail(MISSING("invalid-note"));
@@ -254,6 +166,7 @@ export function importAnkiApkg(
         cards.push({
           id: importedCardId,
           sourceId: `anki:${note.guid}:${String(card.ordinal)}`,
+          siblingId: `anki:${note.guid}`,
           front: front.text,
           back: back.text,
           objective: "Imported from Anki",
@@ -268,7 +181,7 @@ export function importAnkiApkg(
           ],
         });
       }
-      if (!noteGuids.includes(note.guid)) noteGuids.push(note.guid);
+      noteGuids.add(note.guid);
     }
     if (cards.length === 0) return yield* Effect.fail(MISSING("invalid-note"));
     const areaId = createAreaId((options.createId ?? defaultId)());
@@ -301,6 +214,7 @@ export function importAnkiApkg(
         areaId,
         cardId,
         ratedAt: reviewedAt,
+        ...(review.elapsedMs !== undefined ? { elapsedMs: review.elapsedMs } : {}),
         rating: (["again", "again", "hard", "good", "easy"] as const)[review.ease] ?? "again",
         schedulerFamily: "fsrs",
         schedulerVersion: "anki-import-v1",
@@ -316,7 +230,13 @@ export function importAnkiApkg(
       cardReviews.push(event);
       reviewsByCard.set(event.cardId, cardReviews);
     }
+    const originalByCard = new Map(
+      collection.cards.map((row) => [cardIdsByAnkiId.get(row.id), row.scheduling]),
+    );
     const scheduledCards = yield* Effect.forEach(cards, (card) => {
+      const original = originalByCard.get(card.id);
+      const preserved = preserveAnkiSchedule(card, original, reviewsByCard.get(card.id) ?? []);
+      if (preserved) return Effect.succeed(preserved);
       const cardReviews = reviewsByCard.get(card.id);
       return cardReviews
         ? rebuildSchedule(cardReviews).pipe(
@@ -341,7 +261,7 @@ export function importAnkiApkg(
       objectives: [
         { id: objectiveId, title: "Imported from Anki", description: null, prerequisiteIds: [] },
       ],
-      cards: scheduledCards,
+      ...importedAnkiNotes(collection, scheduledCards, cardIdsByAnkiId, objectiveId, mediaByName),
       tags: [],
       licence: null,
     };
@@ -355,7 +275,22 @@ export function importAnkiApkg(
       }),
       reviewEvents,
       excludedReviewCount,
-      provenance: { format: "anki-apkg", deckNames: collection.deckNames, noteGuids },
+      suspendedCardIds: collection.cards
+        .filter((card) => card.scheduling?.suspended)
+        .flatMap((card) => {
+          const id = cardIdsByAnkiId.get(card.id);
+          return id ? [id] : [];
+        }),
+      warnings: [
+        "Matching Anki GUIDs and templates update existing content while preserving local scheduling and history. Ambiguous matches across areas are rejected.",
+        "Static field templates are converted to safe text; styling and executable templates are not retained.",
+        "Supported review and timestamp learning schedules retain due dates and intervals. Day-learning and suspended schedules are retained. Buried cards become available again; filtered queues rebuild from history. FSRS memory is retained when present, otherwise approximated from interval.",
+      ],
+      provenance: {
+        format: "anki-apkg",
+        deckNames: collection.deckNames,
+        noteGuids: [...noteGuids],
+      },
     };
   });
 }

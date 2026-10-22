@@ -44,6 +44,8 @@ declare global {
         readonly onOpen: (callback: () => void) => () => void;
       };
       readonly workspace: {
+        readonly checkIntegrity: () => Promise<unknown>;
+        readonly checkpoints: () => Promise<unknown>;
         readonly read: () => Promise<unknown>;
         readonly write: (serializedWorkspace: string) => Promise<unknown>;
         readonly clear: () => Promise<unknown>;

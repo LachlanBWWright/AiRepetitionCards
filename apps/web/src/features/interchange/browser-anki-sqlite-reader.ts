@@ -1,3 +1,5 @@
+import { ankiSqliteAssetPath } from "./browser-anki-sqlite-assets";
+import { decodeAnkiTemplates, decodeAnkiScheduling } from "@recall/application";
 import initSqlJs, { type SqlJsStatic } from "sql.js";
 import { Effect, Either } from "effect";
 import {
@@ -7,13 +9,14 @@ import {
   type AnkiSqliteReaderError,
 } from "@recall/application";
 
-const databaseLimit = 500;
+const databaseLimit = 50_000;
 const SQLITE_HEADER = "SQLite format 3\u0000";
 
 type LegacyModel = {
   readonly id: number;
   readonly name: string;
   readonly type: number;
+  readonly templates: ReturnType<typeof decodeAnkiTemplates>;
   readonly flds: readonly { readonly name: string }[];
 };
 type LegacyDeck = { readonly id: number; readonly name: string };
@@ -54,6 +57,7 @@ function decodeModels(raw: string): readonly LegacyModel[] | undefined {
       id: Number(key),
       name: model.name,
       type: model.type,
+      templates: decodeAnkiTemplates(model.tmpls),
       flds: fieldNames.map((name) => ({ name })),
     });
   }
@@ -81,10 +85,7 @@ function values(
 let sqlitePromise: Promise<SqlJsStatic> | undefined;
 function loadSqlite(): Promise<SqlJsStatic> {
   sqlitePromise ??= initSqlJs({
-    locateFile: (file) =>
-      file.endsWith(".wasm")
-        ? `${process.env.NEXT_PUBLIC_RECALL_ASSET_BASE ?? "/"}vendor/sql-wasm.wasm`
-        : file,
+    locateFile: ankiSqliteAssetPath,
   });
   return sqlitePromise;
 }
@@ -114,11 +115,17 @@ function readCollection(
       if (!tables.has("revlog")) return Either.right([]);
       const rows = values(
         database,
-        "SELECT id, cid, ease, type FROM revlog ORDER BY id LIMIT 10001",
+        "SELECT id, cid, ease, type, time FROM revlog ORDER BY id LIMIT 250001",
       );
-      if (rows.length > 10_000) return invalid("limits-exceeded");
+      if (rows.length > 250_000) return invalid("limits-exceeded");
       return Either.right(
-        rows.map(([reviewedAt, cardId, ease, type]) => ({ cardId, reviewedAt, ease, type })),
+        rows.map(([reviewedAt, cardId, ease, type, elapsedMs]) => ({
+          cardId,
+          reviewedAt,
+          ease,
+          type,
+          elapsedMs,
+        })),
       );
     };
     if (tables.has("notetypes") && tables.has("fields") && tables.has("decks")) {
@@ -132,7 +139,7 @@ function readCollection(
         id,
         name,
       }));
-      const notes = values(database, "SELECT id, guid, mid, flds, tags FROM notes LIMIT 501").map(
+      const notes = values(database, "SELECT id, guid, mid, flds, tags FROM notes LIMIT 50001").map(
         ([id, guid, noteTypeId, fieldsValue, tags]) => ({
           id,
           guid,
@@ -141,14 +148,32 @@ function readCollection(
           tags,
         }),
       );
+      const created = tables.has("col")
+        ? values(database, "SELECT crt FROM col LIMIT 1")[0]?.[0]
+        : undefined;
       const cards = values(
         database,
-        "SELECT id, nid, ord, did FROM cards ORDER BY id LIMIT 501",
-      ).map(([id, noteId, ordinal, deckId]) => ({ id, noteId, ordinal, deckId }));
+        "SELECT id, nid, ord, did, due, ivl, reps, lapses, type, queue, data, odid FROM cards ORDER BY id LIMIT 50001",
+      ).map(([id, noteId, ordinal, deckId, due, ivl, reps, lapses, type, queue, data, odid]) => ({
+        id,
+        noteId,
+        ordinal,
+        deckId,
+        scheduling: decodeAnkiScheduling(
+          { due, ivl, reps, lapses, type, queue, data, odid },
+          created,
+        ),
+      }));
+      const templates = tables.has("templates")
+        ? values(database, "SELECT ntid, ord, name, config FROM templates LIMIT 50001").map(
+            ([noteTypeId, ordinal, name, config]) => ({ noteTypeId, ordinal, name, config }),
+          )
+        : [];
       const reviews = reviewsFromRevlog();
       if (Either.isLeft(reviews)) return invalid(reviews.left.reason);
       return decodeAnkiV18Collection({
         noteTypes,
+        templates,
         fields,
         decks,
         notes,
@@ -156,7 +181,7 @@ function readCollection(
         reviews: reviews.right,
       });
     }
-    const [collection] = values(database, "SELECT models, decks FROM col LIMIT 1");
+    const [collection] = values(database, "SELECT models, decks, crt FROM col LIMIT 1");
     if (!collection || typeof collection[0] !== "string" || typeof collection[1] !== "string") {
       return invalid("unsupported-database");
     }
@@ -166,8 +191,8 @@ function readCollection(
 
     const cardRows = values(
       database,
-      "SELECT c.id, c.nid, c.ord, c.did, n.guid, n.mid, n.flds, n.tags " +
-        "FROM cards c INNER JOIN notes n ON n.id = c.nid ORDER BY c.id LIMIT 501",
+      "SELECT c.id, c.nid, c.ord, c.did, n.guid, n.mid, n.flds, n.tags, c.due, c.ivl, c.reps, c.lapses, c.type, c.queue, c.data, c.odid " +
+        "FROM cards c INNER JOIN notes n ON n.id = c.nid ORDER BY c.id LIMIT 50001",
     );
     const reviews = reviewsFromRevlog();
     if (Either.isLeft(reviews)) return invalid(reviews.left.reason);
@@ -184,7 +209,7 @@ function readCollection(
         tags: readonly string[];
       }
     >();
-    const cards: { id: number; noteId: number; ordinal: number }[] = [];
+    const cards: AnkiCollection["cards"][number][] = [];
     const deckNames = new Set<string>();
     for (const row of cardRows) {
       const [rawCardId, rawNoteId, rawOrdinal, rawDeckId, rawGuid, rawModelId, rawFields, rawTags] =
@@ -213,7 +238,24 @@ function readCollection(
           tags: rawTags.trim().split(/\s+/).filter(Boolean),
         });
       }
-      cards.push({ id: rawCardId, noteId: rawNoteId, ordinal: rawOrdinal });
+      cards.push({
+        id: rawCardId,
+        noteId: rawNoteId,
+        ordinal: rawOrdinal,
+        scheduling: decodeAnkiScheduling(
+          {
+            due: row[8],
+            ivl: row[9],
+            reps: row[10],
+            lapses: row[11],
+            type: row[12],
+            queue: row[13],
+            data: row[14],
+            odid: row[15],
+          },
+          collection[2],
+        ),
+      });
       const deckName = deckById.get(rawDeckId);
       if (deckName) deckNames.add(deckName);
     }
@@ -229,6 +271,7 @@ function readCollection(
               ? ("cloze" as const)
               : ("unsupported" as const),
         fields: model.flds.map((field) => field.name),
+        templates: model.templates,
       })),
       notes: [...notes.values()],
       cards,

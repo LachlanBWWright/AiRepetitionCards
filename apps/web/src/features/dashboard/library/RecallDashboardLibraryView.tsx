@@ -15,6 +15,7 @@ import { DeletedCardRecovery } from "@/components/knowledge/library/recovery/Del
 import { SchedulerSettings } from "@/components/knowledge/settings/SchedulerSettings";
 import type { SchedulerSettings as SchedulerPreferences } from "@recall/domain";
 import { RecallDashboardInsightsSummary } from "@/features/dashboard/review/RecallDashboardInsightsSummary";
+import { StudyStatisticsPanel } from "../review/StudyStatisticsPanel";
 import { RecallDashboardLibraryToolbar } from "./RecallDashboardLibraryToolbar";
 import { RecallDashboardResumeADraft } from "../authoring/drafts/RecallDashboardResumeADraft";
 import { RecallDashboardDeckToolbar } from "./RecallDashboardDeckToolbar";
@@ -174,6 +175,7 @@ export function RecallDashboardLibraryView({ model }: { readonly model: RecallDa
             reviewHistory={reviewHistory}
             totalReviewEvents={workspace.reviewEvents?.length ?? 0}
           />
+          <StudyStatisticsPanel workspace={workspace} now={now.getTime()} />
           <DeletedCardRecovery
             workspace={workspace}
             onRestoreVersion={restoreVersion}

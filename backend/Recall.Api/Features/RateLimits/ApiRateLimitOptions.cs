@@ -8,6 +8,7 @@ public enum ApiRateLimitScope
 {
     ReviewSync,
     WorkspaceSync,
+    StudyPages,
     TutorRead,
     TutorWrite,
     AccountOperations,
@@ -25,6 +26,7 @@ public sealed record ApiRateLimitPolicy(int Requests, TimeSpan Window)
         policy = scope switch
         {
             ApiRateLimitScope.ReviewSync => new(120, TimeSpan.FromMinutes(1)),
+            ApiRateLimitScope.StudyPages => new(120, TimeSpan.FromMinutes(1)),
             ApiRateLimitScope.WorkspaceSync => new(30, TimeSpan.FromMinutes(1)),
             ApiRateLimitScope.TutorRead => new(60, TimeSpan.FromMinutes(1)),
             ApiRateLimitScope.TutorWrite => new(20, TimeSpan.FromMinutes(1)),
@@ -45,6 +47,7 @@ internal static class ApiRateLimitScopeCompatibility
     public static string ContractName(ApiRateLimitScope scope) => scope switch
     {
         ApiRateLimitScope.ReviewSync or ApiRateLimitScope.PrivateMediaRead or ApiRateLimitScope.PrivateMediaWrite or ApiRateLimitScope.PublicPublicationRead => "review-sync",
+        ApiRateLimitScope.StudyPages => "study-pages",
         ApiRateLimitScope.WorkspaceSync or ApiRateLimitScope.AccountOperations or ApiRateLimitScope.PublicationWrite => "workspace-sync",
         ApiRateLimitScope.TutorRead or ApiRateLimitScope.PrivacyPolicyRead => "tutor-read",
         ApiRateLimitScope.TutorWrite => "tutor-write",

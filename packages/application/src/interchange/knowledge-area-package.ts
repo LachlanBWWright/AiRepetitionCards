@@ -1,3 +1,5 @@
+import { areaMediaReferences } from "../workspace/media/media-references";
+import { isMp4AudioContainer, isWebmAudioContainer } from "./audio-signatures";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { zipSync, unzipSync, type UnzipFileInfo } from "fflate";
 import { Effect, Either, Schema } from "effect";
@@ -65,6 +67,10 @@ export function isSupportedMediaContent(
       return ascii(0, 6) === "GIF87a" || ascii(0, 6) === "GIF89a";
     case "image/webp":
       return bytes.length >= 12 && ascii(0, 4) === "RIFF" && ascii(8, 4) === "WEBP";
+    case "audio/mp4":
+      return isMp4AudioContainer(bytes);
+    case "audio/webm":
+      return isWebmAudioContainer(bytes);
     case "audio/wav":
       return bytes.length >= 12 && ascii(0, 4) === "RIFF" && ascii(8, 4) === "WAVE";
     case "audio/ogg":
@@ -112,17 +118,13 @@ function mediaPath(reference: MediaReference): string {
     "audio/mpeg": "mp3",
     "audio/ogg": "ogg",
     "audio/wav": "wav",
+    "audio/mp4": "m4a",
+    "audio/webm": "webm",
   };
   return `media/${reference.id}.${extensionByMime[reference.mimeType]}`;
 }
 
-function referencedMedia(document: KnowledgeArea): readonly MediaReference[] {
-  const unique = new Map<string, MediaReference>();
-  for (const card of document.cards) {
-    for (const reference of card.media ?? []) unique.set(reference.id, reference);
-  }
-  return [...unique.values()];
-}
+const referencedMedia = areaMediaReferences;
 
 export function exportKnowledgeAreaPackage(
   document: KnowledgeArea,
@@ -229,7 +231,7 @@ export function importKnowledgeAreaPackage(
               !duplicate &&
               validPath(path) &&
               (allowedStaticPaths.has(path) ||
-                /^media\/[a-f0-9]{64}\.(jpg|png|gif|webp|mp3|ogg|wav)$/.test(path))
+                /^media\/[a-f0-9]{64}\.(jpg|png|gif|webp|mp3|ogg|wav|m4a|webm)$/.test(path))
             );
           },
         }),

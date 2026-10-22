@@ -1,3 +1,4 @@
+import { detachDeletedNoteOwner } from "../notes/ownership";
 import { captureCardVersion } from "../card-history";
 import { retainReviewDeletionContent } from "../review/review-deletion-retention";
 import { AreaIdSchema, WorkspaceSchema, type LearningArea, type Workspace } from "@recall/domain";
@@ -107,6 +108,10 @@ export function deleteLearningArea(
       removedArea,
       removedArea.cards.map((card) => card.id),
     ).pipe(Effect.mapError(() => ({ _tag: "AreaWorkspaceInvalid" }) as const));
-    return { removedArea, requiresSync: true, workspace: retainedWorkspace };
+    return {
+      removedArea,
+      requiresSync: true,
+      workspace: detachDeletedNoteOwner(retainedWorkspace, areaId),
+    };
   });
 }

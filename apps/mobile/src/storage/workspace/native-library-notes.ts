@@ -22,6 +22,8 @@ export function createNativeLibraryNotesStore(
 ): LibraryNotesStore {
   return {
     scope,
+    persistenceLocation: () => "native",
+    persistenceStatus: () => "saved-locally",
     read: Effect.suspend(() => {
       if (!mayWrite()) return Effect.fail(failure());
       return Effect.tryPromise({

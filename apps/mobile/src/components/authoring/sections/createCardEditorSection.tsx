@@ -11,6 +11,8 @@ import type { NativeWorkspaceAuthoringController } from "../useNativeWorkspaceAu
 export function createCardEditorSection(
   input: Pick<
     NativeWorkspaceAuthoringController,
+    | "mediaStore"
+    | "createId"
     | "locked"
     | "pending"
     | "picking"
@@ -31,6 +33,8 @@ export function createCardEditorSection(
   >,
 ) {
   const {
+    mediaStore,
+    createId,
     locked,
     pending,
     picking,
@@ -67,6 +71,8 @@ export function createCardEditorSection(
     : undefined;
   const props: ComponentProps<typeof NativeWorkspaceCardEditor> = {
     editor,
+    ...(mediaStore ? { mediaStore } : {}),
+    createId,
     locked,
     field,
     setEditor,

@@ -1,6 +1,9 @@
 import { sha256 } from "@noble/hashes/sha2.js";
 import { Schema } from "effect";
 import {
+  ReviewCorrectionSchema,
+  ReviewUndoStateSchema,
+  ScheduleAdjustmentSchema,
   ActivityLibrarySchema,
   MediaReferenceSchema,
   ReviewEventSchema,
@@ -23,6 +26,9 @@ export const PrivateHistorySchema = Schema.Struct({
   version: Schema.Literal(1),
   currentArea: LearningAreaSchema,
   reviewEvents: Schema.Array(ReviewEventSchema),
+  reviewCorrections: Schema.optional(Schema.Array(ReviewCorrectionSchema)),
+  reviewUndoStates: Schema.optional(Schema.Array(ReviewUndoStateSchema)),
+  scheduleAdjustments: Schema.optional(Schema.Array(ScheduleAdjustmentSchema)),
   cardVersions: Schema.Array(CardVersionSchema),
   activityLibrary: ActivityLibrarySchema,
 });
@@ -40,6 +46,9 @@ export type PortableDeckPackageFailure = {
 export type PortableDeckPrivateHistoryInput = {
   readonly currentArea: typeof LearningAreaSchema.Type;
   readonly reviewEvents?: readonly ReviewEvent[];
+  readonly reviewCorrections?: Workspace["reviewCorrections"];
+  readonly reviewUndoStates?: Workspace["reviewUndoStates"];
+  readonly scheduleAdjustments?: Workspace["scheduleAdjustments"];
   readonly cardVersions?: readonly (typeof CardVersionSchema.Type)[];
   readonly activityLibrary?: ActivityLibrary;
 };
@@ -94,6 +103,8 @@ export const pathFor = (reference: MediaReference) => {
     "audio/mpeg": "mp3",
     "audio/ogg": "ogg",
     "audio/wav": "wav",
+    "audio/mp4": "m4a",
+    "audio/webm": "webm",
   };
   return `media/${reference.id}.${extensions[reference.mimeType]}`;
 };
@@ -103,7 +114,11 @@ export const referencedMedia = (
 ) => {
   const map = new Map<string, MediaReference>();
   let mismatch = false;
-  for (const card of [...area.cards, ...versions.map((version) => version.card)]) {
+  for (const card of [
+    ...area.cards,
+    ...(area.noteLibrary?.notes ?? []),
+    ...versions.flatMap((version) => [version.card, ...(version.area.noteLibrary?.notes ?? [])]),
+  ]) {
     for (const item of card.media ?? []) {
       const previous = map.get(item.id);
       if (

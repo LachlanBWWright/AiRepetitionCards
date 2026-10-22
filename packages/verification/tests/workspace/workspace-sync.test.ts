@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { test } from "node:test";
 import { Effect, Either } from "effect";
-import { MediaIdSchema } from "@recall/domain";
+import { createAreaId, createAssessmentId, createObjectiveId, MediaIdSchema } from "@recall/domain";
 import { syncWorkspace } from "@recall/application";
 import { decode, owner, server, uuid, workspace } from "./workspace-sync-fixtures.js";
 
@@ -64,4 +64,60 @@ await test("an account change at the mutation boundary rejects upload after bind
   assert.equal(remote.documents.size, 0);
   assert.equal(remote.reviews.size, 0);
   assert.equal(local.pendingReviewEventIds?.length, 1);
+});
+
+await test("editing a newly uploaded subject after a later batch fails requires conflict resolution", () => {
+  const remote = server();
+  const initial = workspace([]);
+  const first = initial.areas[0];
+  assert.ok(first);
+  const second = {
+    ...first,
+    id: createAreaId(uuid(30)),
+    objectives: first.objectives?.map((objective) => ({
+      ...objective,
+      id: createObjectiveId(uuid(31)),
+    })),
+    cards: first.cards.map((card) => ({
+      ...card,
+      id: createAssessmentId(uuid(32)),
+      objectiveIds: [createObjectiveId(uuid(31))],
+    })),
+  };
+  const local = {
+    ...initial,
+    areas: [first, second].map((area) => ({ ...area, description: "a".repeat(3_000_000) })),
+  };
+  const input = remote.input(local);
+  let posts = 0;
+  const failed = Effect.runSync(
+    Effect.either(
+      syncWorkspace({
+        ...input,
+        transport: (request) => {
+          if (request.path === "/api/v1/workspace" && request.method === "POST" && ++posts === 2)
+            return Effect.fail({ _tag: "WorkspaceSyncTransportFailure" as const });
+          return input.transport(request);
+        },
+      }),
+    ),
+  );
+  assert.ok(Either.isLeft(failed));
+  assert.equal(remote.documents.size, 1);
+  const checkpoint = remote.getCheckpoint();
+  assert.ok(checkpoint);
+  const edited = {
+    ...checkpoint,
+    areas: checkpoint.areas.map((area) =>
+      area.id === first.id ? { ...area, title: "Edited after failed upload" } : area,
+    ),
+  };
+  const result = Effect.runSync(syncWorkspace(remote.input(edited)));
+  assert.equal(result._tag, "ContentConflict");
+  assert.equal(edited.areas[0]?.title, "Edited after failed upload");
+  assert.equal(
+    remote.documents.size,
+    1,
+    "retry must not overwrite the server before resolving the divergence",
+  );
 });

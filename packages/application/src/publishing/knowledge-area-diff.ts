@@ -1,3 +1,4 @@
+import { cardNoteSignature, canonicalNoteValue } from "./deck-note-updates";
 import { Effect, Either, Schema } from "effect";
 import {
   KnowledgeAreaSchema,
@@ -24,7 +25,15 @@ export type KnowledgeAreaDiffFailure =
   | { readonly _tag: "KnowledgeAreaDiffInvalidCloze"; readonly side: "baseline" | "candidate" };
 
 export type KnowledgeAreaMetadataField =
-  "title" | "description" | "language" | "difficulty" | "ai" | "tags" | "licence" | "attribution";
+  | "title"
+  | "description"
+  | "language"
+  | "difficulty"
+  | "ai"
+  | "tags"
+  | "licence"
+  | "attribution"
+  | "noteLibrary";
 
 export type KnowledgeAreaMetadataChange = {
   readonly field: KnowledgeAreaMetadataField;
@@ -55,6 +64,7 @@ const metadataFields: readonly KnowledgeAreaMetadataField[] = [
   "tags",
   "licence",
   "attribution",
+  "noteLibrary",
 ];
 
 const stableJson = (value: unknown): string => {
@@ -132,6 +142,7 @@ const canonicalCards = (
   cards: readonly PortableCard[],
   stableObjectiveIds: ReadonlyMap<string, string>,
   side: "baseline" | "candidate",
+  area: KnowledgeArea,
 ): Effect.Effect<readonly CanonicalCard[], KnowledgeAreaDiffFailure> =>
   Effect.gen(function* () {
     const result: CanonicalCard[] = [];
@@ -140,7 +151,8 @@ const canonicalCards = (
         result.push({
           key: stableEntityId(card),
           card,
-          content: stableEntityContent(card, stableObjectiveIds),
+          content:
+            stableEntityContent(card, stableObjectiveIds) + cardNoteSignature(area, card.noteId),
         });
         continue;
       }
@@ -160,7 +172,7 @@ const canonicalCards = (
           },
           stableObjectiveIds,
         );
-        result.push({ key, card, content });
+        result.push({ key, card, content: content + cardNoteSignature(area, card.noteId) });
       }
     }
     return result;
@@ -305,16 +317,35 @@ export const diffKnowledgeAreas = (input: {
       new Map(area.objectives.map((objective) => [objective.id, stableEntityId(objective)]));
     const baselineObjectiveIds = stableObjectiveIds(baseline);
     const candidateObjectiveIds = stableObjectiveIds(candidate);
-    const baselineCards = yield* canonicalCards(baseline.cards, baselineObjectiveIds, "baseline");
+    const baselineCards = yield* canonicalCards(
+      baseline.cards,
+      baselineObjectiveIds,
+      "baseline",
+      baseline,
+    );
     const candidateCards = yield* canonicalCards(
       candidate.cards,
       candidateObjectiveIds,
       "candidate",
+      candidate,
     );
 
-    const metadata = metadataFields.flatMap((field) => {
+    const metadata = metadataFields.flatMap<KnowledgeAreaMetadataChange>((field) => {
       const before = baseline[field];
       const after = candidate[field];
+      if (field === "noteLibrary") {
+        const normalized = (area: KnowledgeArea, ids: ReadonlyMap<string, string>) => ({
+          ...area.noteLibrary,
+          notes: area.noteLibrary?.notes.map((note) => ({
+            ...note,
+            objectiveIds: note.objectiveIds.map((id) => ids.get(id) ?? id),
+          })),
+        });
+        return canonicalNoteValue(normalized(baseline, baselineObjectiveIds)) ===
+          canonicalNoteValue(normalized(candidate, candidateObjectiveIds))
+          ? []
+          : [{ field, before, after }];
+      }
       return stableJson(before) === stableJson(after) ? [] : [{ field, before, after }];
     });
 

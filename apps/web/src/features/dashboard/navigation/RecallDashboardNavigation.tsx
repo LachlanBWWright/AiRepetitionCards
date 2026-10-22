@@ -10,7 +10,7 @@ import {
   SidebarMenuItem,
 } from "@recall/ui-web/components/sidebar";
 import { DashboardView } from "./dashboard-navigation";
-import { dueNow } from "../layout/RecallDashboardSupport";
+import { studySubjectTree, studyQueue, localStudyDay } from "@recall/application";
 import type { RecallDashboardModel } from "../state/useRecallDashboardController";
 export function RecallDashboardNavigation({ model }: { readonly model: RecallDashboardModel }) {
   const disabled = model.reviewSaving || model.reviewSaveFailed;
@@ -55,8 +55,14 @@ export function RecallDashboardNavigation({ model }: { readonly model: RecallDas
 function SubjectNavigationMenu({ model }: { readonly model: RecallDashboardModel }) {
   return (
     <SidebarMenu>
-      {model.workspace.areas.map((area) => (
-        <SubjectNavigationRow key={area.id} model={model} area={area} />
+      {studySubjectTree(model.workspace).map(({ area, depth, hasChildren }) => (
+        <SubjectNavigationRow
+          key={area.id}
+          model={model}
+          area={area}
+          depth={depth}
+          hasChildren={hasChildren}
+        />
       ))}
     </SidebarMenu>
   );
@@ -64,7 +70,11 @@ function SubjectNavigationMenu({ model }: { readonly model: RecallDashboardModel
 function SubjectNavigationRow({
   model,
   area,
+  depth,
+  hasChildren,
 }: {
+  readonly depth: number;
+  readonly hasChildren: boolean;
   readonly model: RecallDashboardModel;
   readonly area: RecallDashboardModel["workspace"]["areas"][number];
 }) {
@@ -72,7 +82,7 @@ function SubjectNavigationRow({
     model.selectedId === area.id &&
     !(model.activeView === DashboardView.Today && !model.practiceId);
   return (
-    <SidebarMenuItem>
+    <SidebarMenuItem style={{ paddingLeft: Math.min(depth, 12) * 10 }}>
       <SidebarMenuButton
         tooltip={area.title}
         isActive={active}
@@ -86,10 +96,28 @@ function SubjectNavigationRow({
           className="inline-flex size-5 shrink-0 items-center justify-center rounded-full text-[9px] font-semibold text-background"
           style={{ backgroundColor: area.color }}
         >
-          {area.cards.filter((card) => dueNow(card, model.now)).length}
+          {
+            studyQueue(
+              model.workspace,
+              area,
+              model.now.getTime(),
+              localStudyDay(model.now.getTime()),
+            ).cards.length
+          }
         </span>
         <span className="truncate group-data-[state=collapsed]/sidebar:hidden">{area.title}</span>
       </SidebarMenuButton>
+      {hasChildren && (
+        <SidebarMenuButton
+          tooltip={`Study ${area.title} and descendants`}
+          disabled={model.reviewSaving || model.reviewSaveFailed}
+          onClick={() => {
+            model.startPractice(`scope:${area.id}`);
+          }}
+        >
+          <span className="text-xs">Study {area.title} and descendants</span>
+        </SidebarMenuButton>
+      )}
     </SidebarMenuItem>
   );
 }

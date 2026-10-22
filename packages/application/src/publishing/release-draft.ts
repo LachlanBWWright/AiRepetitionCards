@@ -83,6 +83,10 @@ export function previewRelease(baseline: unknown, candidate: unknown) {
   return diffKnowledgeAreas({ baseline, candidate }).pipe(
     Effect.map((diff): ReleasePreview => {
       const warnings: string[] = [];
+      if (diff.metadata.some((change) => change.field === "noteLibrary"))
+        warnings.push(
+          "Shared note/template updates must include every generated card in each affected family. Changes without generated cards require a fresh personal copy.",
+        );
       const removedCards = diff.cards.removed.length;
       const changedCards = diff.cards.changed.length;
       const removedActivities = diff.activities.removed.length;

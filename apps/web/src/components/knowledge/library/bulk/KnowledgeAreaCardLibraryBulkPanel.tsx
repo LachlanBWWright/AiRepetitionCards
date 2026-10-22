@@ -58,7 +58,7 @@ export function KnowledgeAreaCardLibraryBulkPanel({
         : "Delete selected cards";
   const description =
     bulkAction === "move"
-      ? "Cards receive fresh schedules in the destination. Original reviews stay in Deleted cards; matching objectives are linked by title. Attachments and tags are retained."
+      ? "Scheduling and review history move with the cards. Matching objectives are linked by title; attachments and tags are retained."
       : bulkAction === "delete"
         ? "Review history is preserved. Recover these cards from Deleted cards."
         : "New tags are added without changing schedules or review history.";

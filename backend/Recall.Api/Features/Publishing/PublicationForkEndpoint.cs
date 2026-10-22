@@ -132,6 +132,7 @@ public static partial class PublishingEndpoints
             sourceDocument["licence"] = forkLicense;
             sourceDocument["objectives"] = forkObjectives;
             sourceDocument["cards"] = forkCards;
+            if (!RemapForkNoteObjectives(sourceDocument, objectiveIds)) return Error("source-version-invalid", 502);
             if (sourceDocument["activities"] is JsonArray activities)
             {
                 var activityIds = new Dictionary<string, string>(StringComparer.Ordinal);
@@ -261,7 +262,7 @@ public static partial class PublishingEndpoints
     // version, so the fork boundary mirrors the current 1.0.0 schema decoder by stripping unknown keys.
     private static void NormalizeForkDocument(JsonObject document, JsonArray objectives, JsonArray cards)
     {
-        KeepOnly(document, "schemaVersion", "id", "sourceId", "title", "description", "language", "difficulty", "objectives", "ai", "cards", "tags", "licence", "attribution", "forkedFromVersionId", "activities");
+        KeepOnly(document, "schemaVersion", "id", "sourceId", "title", "description", "language", "difficulty", "objectives", "ai", "cards", "tags", "licence", "attribution", "forkedFromVersionId", "activities", "noteLibrary");
         foreach (var objective in objectives.OfType<JsonObject>())
             KeepOnly(objective, "id", "title", "description", "prerequisiteIds", "sourceId");
         if (document["ai"] is JsonObject ai)
@@ -269,13 +270,30 @@ public static partial class PublishingEndpoints
         foreach (var card in cards.OfType<JsonObject>())
         {
             if (card["kind"]?.GetValue<string>() == "basic")
-                KeepOnly(card, "kind", "id", "front", "back", "objectiveIds", "media", "tags", "origin", "sourceId");
+                KeepOnly(card, "kind", "id", "front", "back", "objectiveIds", "media", "tags", "origin", "sourceId", "noteId", "templateId", "presentation", "imageOcclusion");
             else
-                KeepOnly(card, "kind", "id", "text", "deletionIndex", "objectiveIds", "media", "tags", "origin", "sourceId");
+                KeepOnly(card, "kind", "id", "text", "deletionIndex", "objectiveIds", "media", "tags", "origin", "sourceId", "noteId", "templateId", "presentation", "imageOcclusion");
         }
         if (document["activities"] is JsonArray activities)
             foreach (var activity in activities.OfType<JsonObject>())
                 KeepOnly(activity, "id", "sourceId", "areaId", "title", "pluginId", "pluginVersion", "revision", "objectiveIds", "fallback", "payload", "archived");
+    }
+
+    private static bool RemapForkNoteObjectives(JsonObject document, IReadOnlyDictionary<string, string> objectives)
+    {
+        if (document["noteLibrary"] is null) return true;
+        if (document["noteLibrary"] is not JsonObject library || library["notes"] is not JsonArray notes) return false;
+        foreach (var note in notes.OfType<JsonObject>())
+        {
+            if (note["objectiveIds"] is not JsonArray ids) return false;
+            for (var index = 0; index < ids.Count; index++)
+            {
+                if (ids[index] is not JsonValue value || !value.TryGetValue<string>(out var oldId) ||
+                    !objectives.TryGetValue(oldId, out var newId)) return false;
+                ids[index] = newId;
+            }
+        }
+        return true;
     }
 
     private static void RemapBuiltinCardReferences(JsonNode node, IReadOnlyDictionary<string, string> cardIds)

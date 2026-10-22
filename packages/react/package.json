@@ -1,0 +1,31 @@
+{
+  "name": "@recall/react",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./activities/*": "./src/activities/*.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit --project tsconfig.json",
+    "lint": "eslint --max-warnings=0 --config eslint.config.mjs src"
+  },
+  "dependencies": {
+    "@recall/application": "workspace:*",
+    "@recall/domain": "workspace:*",
+    "@recall/local-store": "workspace:*",
+    "@recall/scheduler": "workspace:*",
+    "effect": "^3.22.2"
+  },
+  "peerDependencies": {
+    "react": "^19.2.0"
+  },
+  "devDependencies": {
+    "@types/react": "~19.2.0",
+    "react": "19.2.8",
+    "typescript": "5.9.3",
+    "eslint": "^9.39.5",
+    "eslint-plugin-react-hooks": "7.1.1"
+  }
+}

@@ -1,3 +1,5 @@
+import { withWorkspaceCheckpoints } from "@recall/local-store";
+import { browserWorkspaceCheckpoints } from "./workspace-checkpoints";
 import { Effect } from "effect";
 import type { WorkspaceStore } from "@recall/local-store";
 
@@ -5,7 +7,7 @@ import type { WorkspaceStore } from "@recall/local-store";
 // Account data is persisted by the authenticated sync API, never by browser storage.
 let snapshot: string | null = null;
 
-export const volatileWorkspaceStore: WorkspaceStore = {
+const rawStore: WorkspaceStore = {
   read: Effect.sync(() => snapshot),
   write: (serializedWorkspace) =>
     Effect.sync(() => {
@@ -15,3 +17,9 @@ export const volatileWorkspaceStore: WorkspaceStore = {
     snapshot = null;
   }),
 };
+
+export const volatileWorkspaceStore = withWorkspaceCheckpoints(
+  rawStore,
+  browserWorkspaceCheckpoints,
+  () => new Date(),
+);

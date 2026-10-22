@@ -15,6 +15,10 @@ const supportedMimeTypes = [
   "audio/mpeg",
   "audio/ogg",
   "audio/wav",
+  "audio/mp4",
+  "audio/m4a",
+  "audio/x-m4a",
+  "audio/webm",
 ];
 
 export type NativeMediaPickerFailure = {
@@ -56,10 +60,17 @@ export function pickNativeMedia(): Effect.Effect<
       return yield* Effect.fail(
         failure("file-unavailable", "The selected attachment is unavailable. Choose it again."),
       );
-    const mimeType = Schema.decodeUnknownEither(MediaMimeTypeSchema)(asset.mimeType);
+    const mimeType = Schema.decodeUnknownEither(MediaMimeTypeSchema)(
+      asset.mimeType === "audio/m4a" || asset.mimeType === "audio/x-m4a"
+        ? "audio/mp4"
+        : asset.mimeType,
+    );
     if (Either.isLeft(mimeType))
       return yield* Effect.fail(
-        failure("unsupported-type", "Choose a JPEG, PNG, GIF, WebP, MP3, OGG or WAV attachment."),
+        failure(
+          "unsupported-type",
+          "Choose a JPEG, PNG, GIF, WebP, MP3, OGG, WAV, M4A or WebM attachment.",
+        ),
       );
     if (
       asset.size !== undefined &&

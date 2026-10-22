@@ -1,3 +1,4 @@
+import { decodeAnkiTemplates, decodeAnkiScheduling } from "@recall/application";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -12,7 +13,7 @@ import type {
 import { decodeAnkiV18Collection } from "@recall/application";
 
 const maxDatabaseBytes = 80_000_000;
-const maxRows = 500;
+const maxRows = 50_000;
 const sqliteHeader = new TextEncoder().encode("SQLite format 3\0");
 
 type LegacyModel = {
@@ -20,6 +21,7 @@ type LegacyModel = {
   readonly name: string;
   readonly kind: number;
   readonly fields: readonly string[];
+  readonly templates: ReturnType<typeof decodeAnkiTemplates>;
 };
 type LegacyDeck = { readonly id: number; readonly name: string };
 type SqlRow = Record<string, unknown>;
@@ -62,7 +64,13 @@ function legacyModels(raw: string): readonly LegacyModel[] | undefined {
       if (!field || typeof field.name !== "string") return undefined;
       fields.push(field.name);
     }
-    result.push({ id: Number(key), name: model.name, kind: model.type, fields });
+    result.push({
+      id: Number(key),
+      name: model.name,
+      kind: model.type,
+      fields,
+      templates: decodeAnkiTemplates(model.tmpls),
+    });
   }
   return result;
 }
@@ -99,20 +107,38 @@ function readCollection(path: string): Either.Either<AnkiCollection, AnkiSqliteR
     const tables = new Set(
       readRows(
         database,
-        "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('col', 'notes', 'cards', 'notetypes', 'fields', 'decks', 'revlog')",
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('col', 'notes', 'cards', 'notetypes', 'fields', 'decks', 'revlog', 'templates')",
       ).flatMap((row) => (typeof row.name === "string" ? [row.name] : [])),
     );
     if (tables.has("notetypes") && tables.has("fields") && tables.has("decks")) {
       const noteTypes = readRows(database, "SELECT id, name, config FROM notetypes LIMIT 501");
       const fields = readRows(database, "SELECT ntid, ord, name FROM fields LIMIT 50001");
       const decks = readRows(database, "SELECT id, name FROM decks LIMIT 2001");
-      const notes = readRows(database, "SELECT id, guid, mid, flds, tags FROM notes LIMIT 501");
-      const cards = readRows(database, "SELECT id, nid, ord, did FROM cards ORDER BY id LIMIT 501");
+      const notes = readRows(database, "SELECT id, guid, mid, flds, tags FROM notes LIMIT 50001");
+      const cards = readRows(
+        database,
+        "SELECT id, nid, ord, did, due, ivl, reps, lapses, type, queue, data, odid FROM cards ORDER BY id LIMIT 50001",
+      );
+      const created = tables.has("col")
+        ? readRows(database, "SELECT crt FROM col LIMIT 1")[0]?.crt
+        : undefined;
       const reviews = tables.has("revlog")
-        ? readRows(database, "SELECT id, cid, ease, type FROM revlog ORDER BY id LIMIT 10001")
+        ? readRows(
+            database,
+            "SELECT id, cid, ease, type, time FROM revlog ORDER BY id LIMIT 250001",
+          )
         : [];
-      if (reviews.length > 10_000) return Either.left(failure("limits-exceeded"));
+      if (reviews.length > 250_000) return Either.left(failure("limits-exceeded"));
+      const templates = tables.has("templates")
+        ? readRows(database, "SELECT ntid, ord, name, config FROM templates LIMIT 50001")
+        : [];
       return decodeAnkiV18Collection({
+        templates: templates.map((row) => ({
+          noteTypeId: row.ntid,
+          ordinal: row.ord,
+          name: row.name,
+          config: row.config,
+        })),
         noteTypes: noteTypes.map((row) => ({ id: row.id, name: row.name, config: row.config })),
         fields: fields.map((row) => ({ noteTypeId: row.ntid, ordinal: row.ord, name: row.name })),
         decks: decks.map((row) => ({ id: row.id, name: row.name })),
@@ -128,19 +154,21 @@ function readCollection(path: string): Either.Either<AnkiCollection, AnkiSqliteR
           noteId: row.nid,
           ordinal: row.ord,
           deckId: row.did,
+          scheduling: decodeAnkiScheduling(row, created),
         })),
         reviews: reviews.map((row) => ({
           cardId: row.cid,
           reviewedAt: row.id,
           ease: row.ease,
           type: row.type,
+          elapsedMs: row.time,
         })),
       });
     }
     if (!["col", "notes", "cards"].every((name) => tables.has(name))) {
       return Either.left(failure("unsupported-database"));
     }
-    const [collection] = readRows(database, "SELECT models, decks FROM col LIMIT 1");
+    const [collection] = readRows(database, "SELECT models, decks, crt FROM col LIMIT 1");
     if (
       !collection ||
       typeof collection.models !== "string" ||
@@ -158,14 +186,14 @@ function readCollection(path: string): Either.Either<AnkiCollection, AnkiSqliteR
     const rows = readRows(
       database,
       "SELECT c.id AS card_id, c.nid AS note_id, c.ord AS ordinal, c.did AS deck_id, " +
-        "n.guid AS guid, n.mid AS model_id, n.flds AS fields, n.tags AS tags " +
-        "FROM cards c INNER JOIN notes n ON n.id = c.nid ORDER BY c.id LIMIT 501",
+        "n.guid AS guid, n.mid AS model_id, n.flds AS fields, n.tags AS tags, c.due, c.ivl, c.reps, c.lapses, c.type, c.queue, c.data, c.odid " +
+        "FROM cards c INNER JOIN notes n ON n.id = c.nid ORDER BY c.id LIMIT 50001",
     );
     if (rows.length > maxRows) return Either.left(failure("limits-exceeded"));
     const reviewRows = tables.has("revlog")
-      ? readRows(database, "SELECT id, cid, ease, type FROM revlog ORDER BY id LIMIT 10001")
+      ? readRows(database, "SELECT id, cid, ease, type, time FROM revlog ORDER BY id LIMIT 250001")
       : [];
-    if (reviewRows.length > 10_000) return Either.left(failure("limits-exceeded"));
+    if (reviewRows.length > 250_000) return Either.left(failure("limits-exceeded"));
     const reviews: NonNullable<AnkiCollection["reviews"]>[number][] = [];
     for (const review of reviewRows) {
       if (
@@ -180,6 +208,7 @@ function readCollection(path: string): Either.Either<AnkiCollection, AnkiSqliteR
         reviewedAt: review.id,
         ease: review.ease,
         type: review.type,
+        ...(typeof review.time === "number" ? { elapsedMs: review.time } : {}),
       });
     }
     const modelById = new Map(models.map((model) => [model.id, model]));
@@ -215,7 +244,12 @@ function readCollection(path: string): Either.Either<AnkiCollection, AnkiSqliteR
           tags: tags.trim().split(/\s+/).filter(Boolean),
         });
       }
-      cards.push({ id: card_id, noteId: note_id, ordinal });
+      cards.push({
+        id: card_id,
+        noteId: note_id,
+        ordinal,
+        scheduling: decodeAnkiScheduling(row, collection.crt),
+      });
       const deckName = deckById.get(deck_id);
       if (deckName) deckNames.add(deckName);
     }
@@ -224,6 +258,7 @@ function readCollection(path: string): Either.Either<AnkiCollection, AnkiSqliteR
       name: model.name,
       kind: model.kind === 0 ? "basic" : model.kind === 1 ? "cloze" : "unsupported",
       fields: model.fields,
+      templates: model.templates,
     }));
     return Either.right({
       deckNames: [...deckNames],

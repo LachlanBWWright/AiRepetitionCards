@@ -1,3 +1,4 @@
+import { areaMediaReferences } from "@recall/application";
 import { Effect } from "effect";
 import type { KnowledgeArea } from "@recall/domain";
 import type { PublishedMediaGateway, PublishingApi, KnowledgeAreaDiff } from "@recall/application";
@@ -51,8 +52,7 @@ type Props = {
 };
 
 function attachmentCount(area: KnowledgeArea): number {
-  return new Set(area.cards.flatMap((card) => card.media?.map((reference) => reference.id) ?? []))
-    .size;
+  return areaMediaReferences(area).length;
 }
 
 function upstreamUpdateMessage(update: UpstreamUpdateState): string {

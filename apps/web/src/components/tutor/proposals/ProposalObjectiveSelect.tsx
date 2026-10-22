@@ -28,7 +28,9 @@ export function ProposalObjectiveSelect({
       <Select
         value={value ?? "none"}
         disabled={disabled}
-        onValueChange={(next) => onChange(next === "none" ? null : next)}
+        onValueChange={(next) => {
+          onChange(next === "none" ? null : next);
+        }}
       >
         <SelectTrigger id={id} className="w-full">
           <SelectValue />

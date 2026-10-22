@@ -1,3 +1,8 @@
+import {
+  decodeAnkiTemplates,
+  decodeAnkiScheduling,
+  type AnkiCollection,
+} from "@recall/application";
 import { Effect, Either } from "effect";
 import * as SQLite from "expo-sqlite";
 import {
@@ -6,8 +11,8 @@ import {
   type AnkiSqliteReaderError,
 } from "@recall/application";
 
-const maxNotes = 500;
-const maxCards = 500;
+const maxNotes = 50_000;
+const maxCards = 50_000;
 const maxNoteTypes = 500;
 const maxDecks = 500;
 
@@ -16,32 +21,12 @@ type NoteTypeRecord = {
   readonly name: string;
   readonly kind: "basic" | "cloze" | "unsupported";
   readonly fields: readonly string[];
+  readonly templates?: ReturnType<typeof decodeAnkiTemplates>;
 };
 type Decode<T> =
   | { readonly _tag: "Success"; readonly value: T }
   | { readonly _tag: "Failure"; readonly reason: AnkiSqliteReaderError["reason"] };
-type AnkiCollectionData = {
-  readonly deckNames: readonly string[];
-  readonly noteTypes: readonly NoteTypeRecord[];
-  readonly notes: readonly {
-    readonly id: number;
-    readonly guid: string;
-    readonly noteTypeId: number;
-    readonly fields: readonly string[];
-    readonly tags: readonly string[];
-  }[];
-  readonly cards: readonly {
-    readonly id: number;
-    readonly noteId: number;
-    readonly ordinal: number;
-  }[];
-  readonly reviews?: readonly {
-    readonly cardId: number;
-    readonly reviewedAt: number;
-    readonly ease: number;
-    readonly type: number;
-  }[];
-};
+type AnkiCollectionData = AnkiCollection;
 
 function readerError(reason: AnkiSqliteReaderError["reason"]): AnkiSqliteReaderError {
   return { _tag: "AnkiSqliteReaderError", reason };
@@ -89,7 +74,13 @@ function readNoteTypes(input: unknown): Decode<readonly NoteTypeRecord[]> {
       fields.push(name);
     }
     const kind = model.type === 1 ? "cloze" : model.type === 0 ? "basic" : "unsupported";
-    noteTypes.push({ id: Number(key), name: model.name, kind, fields });
+    noteTypes.push({
+      id: Number(key),
+      name: model.name,
+      kind,
+      fields,
+      templates: decodeAnkiTemplates(model.tmpls),
+    });
   }
   return { _tag: "Success", value: noteTypes };
 }
@@ -132,15 +123,17 @@ export const readAnkiSqliteDatabase: AnkiSqliteReader = (databaseBytes) =>
           const rows = await database?.getAllAsync<{
             readonly id: number;
             readonly cid: number;
+            readonly time: number;
             readonly ease: number;
             readonly type: number;
-          }>("SELECT id, cid, ease, type FROM revlog ORDER BY id LIMIT 10001");
-          if (!rows || rows.length > 10_000) return null;
+          }>("SELECT id, cid, ease, type, time FROM revlog ORDER BY id LIMIT 250001");
+          if (!rows || rows.length > 250_000) return null;
           return rows.map((row) => ({
             cardId: row.cid,
             reviewedAt: row.id,
             ease: row.ease,
             type: row.type,
+            elapsedMs: row.time,
           }));
         };
         if (tableNames.has("notetypes") && tableNames.has("fields") && tableNames.has("decks")) {
@@ -164,16 +157,43 @@ export const readAnkiSqliteDatabase: AnkiSqliteReader = (databaseBytes) =>
             readonly mid: number;
             readonly flds: string;
             readonly tags: string;
-          }>("SELECT id, guid, mid, flds, tags FROM notes LIMIT 501");
+          }>("SELECT id, guid, mid, flds, tags FROM notes LIMIT 50001");
           const cards = await database.getAllAsync<{
             readonly id: number;
             readonly nid: number;
             readonly ord: number;
             readonly did: number;
-          }>("SELECT id, nid, ord, did FROM cards ORDER BY id LIMIT 501");
+            readonly due: unknown;
+            readonly ivl: unknown;
+            readonly reps: unknown;
+            readonly lapses: unknown;
+            readonly type: unknown;
+            readonly queue: unknown;
+            readonly data: unknown;
+            readonly odid: unknown;
+          }>(
+            "SELECT id, nid, ord, did, due, ivl, reps, lapses, type, queue, data, odid FROM cards ORDER BY id LIMIT 50001",
+          );
+          const created = tableNames.has("col")
+            ? await database.getFirstAsync<{ readonly crt: unknown }>("SELECT crt FROM col LIMIT 1")
+            : undefined;
           const reviews = await readReviews();
           if (reviews === null) return failure("limits-exceeded");
+          const templates = tableNames.has("templates")
+            ? await database.getAllAsync<{
+                readonly ntid: unknown;
+                readonly ord: unknown;
+                readonly name: unknown;
+                readonly config: unknown;
+              }>("SELECT ntid, ord, name, config FROM templates LIMIT 50001")
+            : [];
           const decoded = decodeAnkiV18Collection({
+            templates: templates.map((row) => ({
+              noteTypeId: row.ntid,
+              ordinal: row.ord,
+              name: row.name,
+              config: row.config,
+            })),
             noteTypes: noteTypes.map((row) => ({ id: row.id, name: row.name, config: row.config })),
             fields: fields.map((row) => ({
               noteTypeId: row.ntid,
@@ -193,6 +213,7 @@ export const readAnkiSqliteDatabase: AnkiSqliteReader = (databaseBytes) =>
               noteId: row.nid,
               ordinal: row.ord,
               deckId: row.did,
+              scheduling: decodeAnkiScheduling(row, created?.crt),
             })),
             reviews,
           });
@@ -217,7 +238,18 @@ export const readAnkiSqliteDatabase: AnkiSqliteReader = (databaseBytes) =>
           readonly id: number;
           readonly nid: number;
           readonly ord: number;
-        }>("SELECT id, nid, ord FROM cards LIMIT ?", maxCards + 1);
+          readonly due: number;
+          readonly ivl: number;
+          readonly reps: number;
+          readonly lapses: number;
+          readonly type: number;
+          readonly queue: number;
+          readonly data: unknown;
+          readonly odid: unknown;
+        }>(
+          "SELECT id, nid, ord, due, ivl, reps, lapses, type, queue, data, odid FROM cards LIMIT ?",
+          maxCards + 1,
+        );
         const reviews = await readReviews();
         if (reviews === null) return failure("limits-exceeded");
         if (noteRows.length > maxNotes || cardRows.length > maxCards) {
@@ -227,7 +259,8 @@ export const readAnkiSqliteDatabase: AnkiSqliteReader = (databaseBytes) =>
         const collection = await database.getFirstAsync<{
           readonly models: string;
           readonly decks: string;
-        }>("SELECT models, decks FROM col LIMIT 1");
+          readonly crt: number;
+        }>("SELECT models, decks, crt FROM col LIMIT 1");
         if (!collection) return failure("unsupported-database");
         const noteTypes = readNoteTypes(collection.models);
         if (noteTypes._tag === "Failure") return noteTypes;
@@ -245,7 +278,12 @@ export const readAnkiSqliteDatabase: AnkiSqliteReader = (databaseBytes) =>
               fields: note.flds.split("\u001f"),
               tags: note.tags.trim().split(/\s+/).filter(Boolean),
             })),
-            cards: cardRows.map((card) => ({ id: card.id, noteId: card.nid, ordinal: card.ord })),
+            cards: cardRows.map((card) => ({
+              id: card.id,
+              noteId: card.nid,
+              ordinal: card.ord,
+              scheduling: decodeAnkiScheduling(card, collection.crt),
+            })),
             reviews,
           },
         };

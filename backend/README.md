@@ -70,3 +70,13 @@ credentials above to also exercise publishing routes. Use `--port` to override i
 See [the contract bridge](../docs/dotnet-contract-bridge.md) for generation and parity commands.
 The Supabase integration workflow also runs automatically for relevant pull requests and
 main-branch changes, using disposable local services and the real publishing HTTP verifier.
+
+## Authenticated study acceptance
+
+After applying the ordered migrations and building Release, run
+`python3 backend/scripts/verify-api.py --study --local-supabase --port 5020`.
+It captures only the running loopback Supabase configuration, starts an isolated API,
+checks authenticated content and paged study sync, linked-family atomicity and reviewed-card moves,
+and removes its scoped fixtures. Credentials are never printed. Add `--publishing` to run the
+existing publishing acceptance in the same API process. Omit `--local-supabase` and supply the
+explicit `RECALL_INTEGRATION_SUPABASE_*` variables to choose another loopback test stack.

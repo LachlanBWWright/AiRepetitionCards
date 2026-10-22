@@ -104,6 +104,8 @@ public static partial class ContractBoundaryValidator
             !OptionalActivityDefinitions(document))
             return ContractValidationResult.Invalid("invalid-knowledge-area");
 
+        if (!AuthoredMetadataValidator.Validate(document)) return ContractValidationResult.Invalid("invalid-authored-metadata");
+
         var objectives = document.GetProperty("objectives");
         if (objectives.GetArrayLength() > 200 || !ValidObjectives(objectives, out var objectiveIds))
             return ContractValidationResult.Invalid("invalid-knowledge-area-objectives");
@@ -139,6 +141,8 @@ public static partial class ContractBoundaryValidator
                           (card.TryGetProperty("deletionIndex", out var index) &&
                            (index.ValueKind != JsonValueKind.Number || !index.TryGetInt32(out var n) || n is < 1 or > 20)))
                 return ContractValidationResult.Invalid("invalid-knowledge-area-card-content");
+            if (!isBasic && !AuthoredMetadataValidator.ValidCloze(card.GetProperty("text").GetString(), card.TryGetProperty("deletionIndex", out var selected) ? selected.GetInt32() : null))
+                return ContractValidationResult.Invalid("invalid-cloze-content");
         }
 
         return ContractValidationResult.Valid;
@@ -217,7 +221,7 @@ public static partial class ContractBoundaryValidator
     private static bool ValidMedia(JsonElement media) => IsObject(media) &&
         Has(media, "id", JsonValueKind.String) && MediaId.IsMatch(media.GetProperty("id").GetString() ?? "") &&
         Has(media, "mimeType", JsonValueKind.String) && media.GetProperty("mimeType").GetString() is
-            "image/jpeg" or "image/png" or "image/gif" or "image/webp" or "audio/mpeg" or "audio/ogg" or "audio/wav" &&
+            "image/jpeg" or "image/png" or "image/gif" or "image/webp" or "audio/mpeg" or "audio/ogg" or "audio/wav" or "audio/mp4" or "audio/webm" &&
         Has(media, "byteLength", JsonValueKind.Number) && media.GetProperty("byteLength").TryGetInt32(out var length) &&
         length is > 0 and <= 20_000_000;
     private static bool ValidObjectives(JsonElement objectives, out HashSet<string> ids)

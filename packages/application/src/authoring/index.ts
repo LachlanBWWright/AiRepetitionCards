@@ -1,4 +1,10 @@
-export { expandCloze, renderCloze, renderClozeCard, MAX_CLOZE_TEXT_LENGTH } from "./cloze";
+export {
+  expandCloze,
+  renderCloze,
+  renderClozeCard,
+  clozeAnswerText,
+  MAX_CLOZE_TEXT_LENGTH,
+} from "./cloze";
 
 export type { ClozeFailure, RenderedCloze } from "./cloze";
 
@@ -53,3 +59,11 @@ export type {
 } from "./library-notes";
 
 export * from "./deck-quality";
+
+export * from "./rich-content";
+
+export * from "./image-occlusion";
+
+export * from "../notes";
+
+export * from "./reconcile-occlusion";

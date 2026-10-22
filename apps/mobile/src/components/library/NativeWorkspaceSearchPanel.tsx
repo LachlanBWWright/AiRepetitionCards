@@ -1,10 +1,13 @@
 import { NativeButton } from "../ui/NativeButton";
 import { useEffect, useState } from "react";
 import { Pressable, Text, View } from "react-native";
-import { Effect, Fiber } from "effect";
+import { Effect, Either, Fiber } from "effect";
 import { NativeTextField } from "../ui/NativeTextField";
 import {
   searchWorkspace,
+  validateStudyQuery,
+  isStructuredStudyQuery,
+  CARD_SEARCH_HELP,
   type WorkspaceSearchKind,
   type WorkspaceSearchNotebook,
   type WorkspaceSearchResult,
@@ -69,6 +72,7 @@ export function NativeWorkspaceSearchPanel({
   initialNotebooks,
 }: NativeWorkspaceSearchPanelProps) {
   const [query, setQuery] = useState(initialQuery);
+  const [searchNow] = useState(() => Date.now());
   const [kind, setKind] = useState<WorkspaceSearchKind | null>(null);
   const [index, setIndex] = useState<{
     readonly workspace: Workspace | null;
@@ -105,10 +109,15 @@ export function NativeWorkspaceSearchPanel({
   const notebooks = initialNotebooks ?? (index.workspace === workspace ? index.notebooks : []);
   const results = workspace
     ? searchWorkspace(workspace, notebooks, query, {
+        now: searchNow,
         limit: 100,
         ...(kind ? { kinds: [kind] } : {}),
       })
     : [];
+  const queryValidation = isStructuredStudyQuery(query)
+    ? Effect.runSync(Effect.either(validateStudyQuery(query)))
+    : Either.right(null);
+  const queryError = Either.isLeft(queryValidation) ? queryValidation.left.message : null;
   return (
     <View className={"gap-[12px]"} testID="native-workspace-search">
       <Text className={"text-[20px] font-semibold text-recall-ink"}>Search</Text>
@@ -119,6 +128,12 @@ export function NativeWorkspaceSearchPanel({
         maxLength={500}
         onChangeText={setQuery}
       />
+      <Text className="text-xs text-recall-muted">Card filters: {CARD_SEARCH_HELP}</Text>
+      {queryError && (
+        <Text accessibilityRole="alert" className="text-sm text-recall-muted">
+          {queryError}
+        </Text>
+      )}
       <View className={"flex-row flex-wrap gap-[6px]"}>
         {[null, ...(Object.keys(labels) as WorkspaceSearchKind[])].map((value) => (
           <KindFilterButton

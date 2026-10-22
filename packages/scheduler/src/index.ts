@@ -11,19 +11,22 @@ import type { AssessmentSchedule } from "@recall/domain";
 import type { ReviewEvent } from "@recall/domain";
 import { orderReviewEvents } from "@recall/sync-core";
 import { Effect } from "effect";
+import { applyEasyDays } from "./configuration/easy-days";
 
-export type SchedulerParameters = {
-  readonly requestRetention: number;
-};
-
-export const DEFAULT_SCHEDULER_PARAMETERS: SchedulerParameters = Object.freeze({
-  requestRetention: 0.9,
-});
-
-export type UnknownSchedulerParameterSetError = {
-  readonly _tag: "UnknownSchedulerParameterSetError";
-  readonly parameterSetId: string;
-};
+import {
+  DEFAULT_SCHEDULER_PARAMETERS,
+  schedulerParametersFromId,
+  canonicalSchedulerWeights,
+  type SchedulerParameters,
+  type UnknownSchedulerParameterSetError,
+} from "./parameters";
+export * from "./parameters";
+export {
+  fitSchedulerParameters,
+  type ParameterFitFailure,
+  type ParameterFitProposal,
+  type ParameterFitOptions,
+} from "./fit-parameters";
 
 export type SchedulerReplayUnavailable = {
   readonly _tag: "SchedulerReplayUnavailable";
@@ -32,25 +35,6 @@ export type SchedulerReplayUnavailable = {
 };
 
 export type SchedulerReplayFailure = UnknownSchedulerParameterSetError | SchedulerReplayUnavailable;
-
-// The version fixes the default weights and learning steps used in historical replay.
-const parameterSetPrefix = "ts-fsrs-5.4.2-default-r";
-
-export function schedulerParameterSetId(parameters: SchedulerParameters): string {
-  return `${parameterSetPrefix}${String(Math.round(parameters.requestRetention * 10_000))}`;
-}
-
-export function schedulerParametersFromId(
-  id: string | null | undefined,
-): Effect.Effect<SchedulerParameters, UnknownSchedulerParameterSetError> {
-  if (id === null || id === undefined) return Effect.succeed(DEFAULT_SCHEDULER_PARAMETERS);
-  const suffix = id.startsWith(parameterSetPrefix) ? id.slice(parameterSetPrefix.length) : "";
-  const retentionUnits = Number(suffix);
-  if (/^\d{4}$/.test(suffix) && retentionUnits >= 7000 && retentionUnits <= 9700) {
-    return Effect.succeed({ requestRetention: retentionUnits / 10_000 });
-  }
-  return Effect.fail({ _tag: "UnknownSchedulerParameterSetError", parameterSetId: id });
-}
 
 export type ReviewRating = "again" | "hard" | "good" | "easy";
 
@@ -128,15 +112,43 @@ export function scheduleReview(
   const scheduler = fsrs({
     request_retention: Math.round(parameters.requestRetention * 10_000) / 10_000,
     enable_fuzz: false,
+    ...(parameters.weights ? { w: [...canonicalSchedulerWeights(parameters.weights)] } : {}),
+    ...(parameters.learningSteps
+      ? {
+          learning_steps: parameters.learningSteps.map(
+            (minutes) => `${String(minutes)}m` as `${number}m`,
+          ),
+        }
+      : {}),
+    ...(parameters.relearningSteps
+      ? {
+          relearning_steps: parameters.relearningSteps.map(
+            (minutes) => `${String(minutes)}m` as `${number}m`,
+          ),
+        }
+      : {}),
+    ...(parameters.maximumInterval !== undefined
+      ? { maximum_interval: parameters.maximumInterval }
+      : {}),
   });
+  const resetAt = parameters.resetAt ? Date.parse(parameters.resetAt) : -Infinity;
+  const base =
+    schedule.last_review && Date.parse(schedule.last_review) < resetAt
+      ? newSchedule(new Date(resetAt))
+      : schedule;
   // Causal order can disagree with device/server timestamps after clock correction.
   // Clamp only the derived scheduling time; callers retain the original event evidence.
-  const reviewAt =
-    typeof schedule.last_review === "string"
-      ? new Date(Math.max(now.getTime(), Date.parse(schedule.last_review)))
-      : now;
-  return storeSchedule(
-    scheduler.next(schedulerInput(schedule), reviewAt, ratingValue[rating]).card,
+  const reviewAt = new Date(
+    Math.max(
+      now.getTime(),
+      resetAt,
+      typeof base.last_review === "string" ? Date.parse(base.last_review) : -Infinity,
+    ),
+  );
+  return applyEasyDays(
+    storeSchedule(scheduler.next(schedulerInput(base), reviewAt, ratingValue[rating]).card),
+    reviewAt,
+    parameters,
   );
 }
 
@@ -163,6 +175,7 @@ export function previewReviewSchedules(
 export function rebuildScheduleEffect(
   events: readonly ReviewEvent[],
   initialReviewAt?: Date,
+  initialSchedule?: AssessmentSchedule,
 ): Effect.Effect<AssessmentSchedule, SchedulerReplayFailure> {
   return Effect.gen(function* () {
     if (initialReviewAt && !Number.isFinite(initialReviewAt.getTime())) {
@@ -194,13 +207,15 @@ export function rebuildScheduleEffect(
         reason: "missing-initial-timestamp",
       } as const);
     }
-    let schedule = yield* Effect.try({
-      try: () => newSchedule(initialTimestamp),
-      catch: (): SchedulerReplayUnavailable => ({
-        _tag: "SchedulerReplayUnavailable",
-        reason: "vendor-failure",
-      }),
-    });
+    let schedule =
+      initialSchedule ??
+      (yield* Effect.try({
+        try: () => newSchedule(initialTimestamp),
+        catch: (): SchedulerReplayUnavailable => ({
+          _tag: "SchedulerReplayUnavailable",
+          reason: "vendor-failure",
+        }),
+      }));
     for (const event of ordered) {
       const parameters = yield* schedulerParametersFromId(event.schedulerParameterSetId);
       const previousSchedule = schedule;
@@ -224,3 +239,29 @@ export function rebuildScheduleEffect(
 }
 
 export const rebuildSchedule = rebuildScheduleEffect;
+
+/** Recall probability is derived from card state; callers supply the clock. */
+export function recallProbability(
+  schedule: AssessmentSchedule,
+  now: Date,
+  parameters: SchedulerParameters = DEFAULT_SCHEDULER_PARAMETERS,
+): number | null {
+  if (!schedule.last_review || schedule.stability <= 0) return null;
+  return Effect.runSync(
+    Effect.try({
+      try: () =>
+        fsrs({
+          enable_fuzz: false,
+          ...(parameters.weights ? { w: [...canonicalSchedulerWeights(parameters.weights)] } : {}),
+        }).get_retrievability(schedulerInput(schedule), now, false),
+      catch: () => ({ _tag: "RecallProbabilityUnavailable" }) as const,
+    }).pipe(
+      Effect.match({
+        onFailure: () => null,
+        onSuccess: (probability) => (Number.isFinite(probability) ? probability : null),
+      }),
+    ),
+  );
+}
+
+export { rescheduleDueDate } from "./reschedule-due";

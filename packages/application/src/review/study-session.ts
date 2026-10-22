@@ -1,22 +1,28 @@
 import type { LearningArea, ReviewEvent } from "@recall/domain";
+import type { studyQueue } from "./study-queue";
 
 /** Session evidence includes only reviews recorded by this client in the current session. */
 export function summarizeStudySession(
   area: LearningArea,
   events: readonly ReviewEvent[],
   now: number,
+  queue?: ReturnType<typeof studyQueue>,
 ) {
   const reviews = [
     ...new Map(
       events.filter((event) => event.areaId === area.id).map((event) => [event.id, event]),
     ).values(),
   ];
-  const due = area.cards.filter((card) => Date.parse(card.schedule.due) <= now);
+  const due = queue?.cards ?? area.cards.filter((card) => Date.parse(card.schedule.due) <= now);
   const future = area.cards
     .map((card) => Date.parse(card.schedule.due))
     .filter((date) => Number.isFinite(date) && date > now);
   return {
     cardCount: area.cards.length,
+    deferredReviewCount: queue?.deferredReviewCount ?? 0,
+    deferredNewCount: queue?.deferredNewCount ?? 0,
+    buriedCount: queue?.buriedCount ?? 0,
+    filteredCount: queue?.filteredCount ?? 0,
     reviewed: reviews.length,
     recalled: reviews.filter((event) => event.rating !== "again").length,
     remaining: due.length,

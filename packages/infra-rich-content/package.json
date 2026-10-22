@@ -1,0 +1,19 @@
+{
+  "name": "@recall/infra-rich-content",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/public.d.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "dependencies": {
+    "effect": "^3.22.2",
+    "mathjax-full": "3.2.2"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit --project tsconfig.json"
+  }
+}

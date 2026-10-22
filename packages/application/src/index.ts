@@ -11,3 +11,5 @@ export * from "./notebook";
 export * from "./materials";
 export * from "./activities";
 export * from "./subjects";
+
+export * from "./card-history";

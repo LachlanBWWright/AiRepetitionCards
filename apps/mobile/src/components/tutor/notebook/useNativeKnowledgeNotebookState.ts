@@ -186,7 +186,7 @@ export function useNativeKnowledgeNotebookState(props: NativeKnowledgeNotebookPr
     return () => {
       active = false;
     };
-  }, [area.id, storageNamespace]);
+  }, [area.id, storageNamespace, sessionOnly]);
 
   const save = useCallback(
     async (next: KnowledgeNotebook): Promise<boolean> => {

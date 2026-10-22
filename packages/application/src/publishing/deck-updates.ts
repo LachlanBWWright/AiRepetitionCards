@@ -1,3 +1,4 @@
+import { mergeDeckNoteLibrary } from "./deck-note-updates";
 import { Effect, Either, Schema } from "effect";
 import {
   KnowledgeAreaSchema,
@@ -16,6 +17,7 @@ export type DeckUpdateFailure =
       readonly _tag: "DeckUpdateFailure";
       readonly reason: "local-conflict";
       readonly sourceIds: readonly string[];
+      readonly message?: string;
     };
 export type DeckUpdateInput = {
   readonly baseline: unknown;
@@ -357,15 +359,37 @@ export function applySelectedDeckUpdate(
     generatedIds.some((id) => reservedIds.has(id))
   )
     return Effect.fail({ _tag: "DeckUpdateFailure", reason: "invalid-input" });
-  const decoded = Schema.decodeUnknownEither(KnowledgeAreaSchema)({
-    ...local,
-    objectives,
+  return mergeDeckNoteLibrary({
+    base,
+    local,
+    remote,
     cards: updatedCards,
-    ...(remote.activities === undefined && local.activities === undefined
-      ? {}
-      : { activities: updatedActivities }),
-  });
-  return Either.isLeft(decoded)
-    ? Effect.fail({ _tag: "DeckUpdateFailure", reason: "invalid-input" })
-    : Effect.succeed({ area: decoded.right, locallyModifiedSourceIds: [...modified].sort() });
+    objectives,
+    selected,
+    confirmed,
+    objectiveIdByRemoteId: new Map(
+      remote.objectives.map((item) => [
+        item.id,
+        objectiveIdByIdentity.get(identity(item)) ?? item.id,
+      ]),
+    ),
+  }).pipe(
+    Effect.flatMap(({ noteLibrary, modified: noteModified }) => {
+      const decoded = Schema.decodeUnknownEither(KnowledgeAreaSchema)({
+        ...local,
+        objectives,
+        cards: updatedCards,
+        ...(noteLibrary ? { noteLibrary } : {}),
+        ...(remote.activities === undefined && local.activities === undefined
+          ? {}
+          : { activities: updatedActivities }),
+      });
+      return Either.isLeft(decoded)
+        ? Effect.fail({ _tag: "DeckUpdateFailure", reason: "invalid-input" } as const)
+        : Effect.succeed({
+            area: decoded.right,
+            locallyModifiedSourceIds: [...new Set([...modified, ...noteModified])].sort(),
+          });
+    }),
+  );
 }

@@ -1,3 +1,4 @@
+import { areaMediaReferences } from "@recall/application";
 import { Effect, Either } from "effect";
 import {
   pendingPublicationForkOperation,
@@ -80,13 +81,7 @@ export async function runKnowledgeAreaPublishingForkWorkflow({
         result.left.code === "fork-operation-conflict",
     );
   } else {
-    const references = [
-      ...new Map(
-        result.right.document.cards
-          .flatMap((card) => card.media ?? [])
-          .map((item) => [item.id, item]),
-      ).values(),
-    ];
+    const references = areaMediaReferences(result.right.document);
     const assets: StoredMediaAsset[] = [];
     for (const reference of references) {
       const downloaded = await Effect.runPromise(

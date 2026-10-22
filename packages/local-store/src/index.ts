@@ -8,6 +8,8 @@ export type LocalStoreFailure = {
 };
 
 export type WorkspaceStore = {
+  readonly checkIntegrity?: Effect.Effect<void, LocalStoreFailure>;
+  readonly checkpoints?: import("./workspace-checkpoints").WorkspaceCheckpointStore;
   readonly read: Effect.Effect<string | null, LocalStoreFailure>;
   readonly write: (serializedWorkspace: string) => Effect.Effect<void, LocalStoreFailure>;
   readonly clear: Effect.Effect<void, LocalStoreFailure>;
@@ -41,3 +43,13 @@ export type MediaStore = {
   readonly delete: (id: MediaId) => Effect.Effect<void, MediaStoreFailure>;
   readonly list: Effect.Effect<readonly MediaReference[], MediaStoreFailure>;
 };
+
+export {
+  WorkspaceCheckpointSchema,
+  WorkspaceCheckpointsSchema,
+  retainedWorkspaceCheckpoints,
+  withWorkspaceCheckpoints,
+} from "./workspace-checkpoints";
+export type { WorkspaceCheckpoint, WorkspaceCheckpointStore } from "./workspace-checkpoints";
+
+export * from "./workspace-chunks";

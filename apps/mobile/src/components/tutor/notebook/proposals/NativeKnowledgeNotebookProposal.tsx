@@ -58,7 +58,9 @@ export function NativeKnowledgeNotebookProposal({
         onAccept={() => {
           void resolveProposal("accepted");
         }}
-        onEdit={() => setEditing(true)}
+        onEdit={() => {
+          setEditing(true);
+        }}
         onDiscard={() => {
           void resolveProposal("discarded");
         }}
@@ -67,14 +69,21 @@ export function NativeKnowledgeNotebookProposal({
           matches={duplicateMatches}
           acknowledged={duplicateAcknowledgement === duplicateKey}
           disabled={busy || !!unsaved || !mayWrite()}
-          onChange={(value) => setDuplicateAcknowledgement(value ? duplicateKey : null)}
+          onChange={(value) => {
+            setDuplicateAcknowledgement(value ? duplicateKey : null);
+          }}
         />
       </NativeProposedCardPreview>
     );
   return (
     <View className={section === NotebookSection.ReviewSuggestions ? "gap-[11px]" : "hidden"}>
       {preview && editing && (
-        <NativeButton label="Done editing" onPress={() => setEditing(false)} />
+        <NativeButton
+          label="Done editing"
+          onPress={() => {
+            setEditing(false);
+          }}
+        />
       )}
       {!pendingProposal ? (
         <Text className={"text-recall-muted text-[11px] leading-[16px]"}>

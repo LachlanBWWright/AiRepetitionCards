@@ -3,7 +3,7 @@ import { Button as ShadcnButton } from "./components/button";
 export { buttonVariants } from "./components/button";
 
 export type ButtonVariant =
-  "primary" | "secondary" | "danger" | "default" | "destructive" | "outline" | "link";
+  "primary" | "secondary" | "danger" | "default" | "destructive" | "outline" | "link" | "ghost";
 export type ButtonSize = "small" | "medium" | "large" | "icon" | "lg" | "sm" | "default";
 export type ButtonProps = Omit<ComponentProps<typeof ShadcnButton>, "variant" | "size"> & {
   readonly variant?: ButtonVariant;
@@ -19,6 +19,7 @@ export function Button({ variant = "primary", size = "medium", ...props }: Butto
     destructive: "destructive",
     outline: "outline",
     link: "link",
+    ghost: "ghost",
   } as const;
   const shadcnSize = {
     small: "sm",

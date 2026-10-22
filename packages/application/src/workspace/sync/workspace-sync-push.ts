@@ -1,3 +1,6 @@
+import { deletingContentProvisions } from "./deleting-content-provisions";
+import { workspaceContentBatches } from "./content-batches";
+import { areaMediaReferences } from "../media/media-references";
 import { Effect, Either, Schema } from "effect";
 import {
   SyncPushResponseSchema,
@@ -7,6 +10,7 @@ import {
   type SyncReviewOperation,
 } from "@recall/contracts";
 import {
+  reviewPlacement,
   createAreaId,
   createAssessmentId,
   type AreaId,
@@ -145,6 +149,25 @@ export function pushWorkspaceChanges(options: PushInput) {
         ...(prepared.deletedAreas ?? []).map((item) => item.areaId),
         ...before.deletedAreaIds,
       ]);
+      // A prior batch may have reached the server before a later request failed. Without
+      // a recorded base hash, a subsequent local edit cannot safely adopt that remote copy.
+      for (const remote of before.areas) {
+        const local = localById.get(remote.document.id);
+        if (
+          !local ||
+          prepared.syncContentHashes?.[remote.document.id] ||
+          deletedAreas.has(local.id)
+        )
+          continue;
+        const document = yield* toKnowledgeArea(local, true, true).pipe(
+          Effect.mapError(() => failure("content")),
+        );
+        if (
+          local.color !== remote.color ||
+          stableContent(document) !== stableContent(remote.document)
+        )
+          return yield* conflictResult(input, prepared, before);
+      }
       const existing = yield* Effect.forEach(
         before.areas.filter(
           (area) => !deletedAreas.has(area.document.id) && !stagedIds.has(area.document.id),
@@ -175,15 +198,24 @@ export function pushWorkspaceChanges(options: PushInput) {
             })),
           ),
       );
-      const contentAreas = [...existing, ...added, ...provisions];
+      const contentAreas = [
+        ...existing,
+        ...added,
+        ...provisions,
+        ...deletingContentProvisions(before, deletedAreas),
+      ];
       const expectedDeletionDocuments = new Map(
         before.areas.map((area) => [area.document.id, area.document]),
       );
-      const initiallyDeletedCards = new Set(safeCardTombstones.map((item) => item.cardId));
+      const initiallyDeletedCards = new Set(
+        safeCardTombstones.map((item) => `${item.areaId}:${item.cardId}`),
+      );
       for (const area of contentAreas)
         expectedDeletionDocuments.set(area.document.id, {
           ...area.document,
-          cards: area.document.cards.filter((card) => !initiallyDeletedCards.has(card.id)),
+          cards: area.document.cards.filter(
+            (card) => !initiallyDeletedCards.has(`${area.document.id}:${card.id}`),
+          ),
         });
       const hasDeletionConflict = (snapshot: Snapshot) =>
         (prepared.deletedAreas ?? []).some((item) => {
@@ -195,28 +227,34 @@ export function pushWorkspaceChanges(options: PushInput) {
             (expected === undefined || stableContent(remote.document) !== stableContent(expected))
           );
         });
+      const batches = yield* workspaceContentBatches(
+        {
+          schemaVersion: 1,
+          areas: contentAreas,
+          tombstones: safeCardTombstones,
+        },
+        before.areas.map((area) => area.document),
+      );
       yield* syncWorkspaceMedia(
         input.mediaStore,
         mediaGateway,
-        contentAreas.flatMap((area) => area.document.cards.flatMap((card) => card.media ?? [])),
+        contentAreas.flatMap((area) => areaMediaReferences(area.document)),
       ).pipe(
         Effect.mapError((error) =>
           failure(error.reason === "account-changed" ? "account-changed" : "media"),
         ),
       );
-      const contentResponse = yield* request({
-        path: "/api/v1/workspace",
-        method: "POST",
-        body: { schemaVersion: 1, areas: contentAreas, tombstones: safeCardTombstones },
-      });
-      if (contentResponse.status === 409) return yield* conflictResult(input, prepared, before);
-      if (
-        !successful(contentResponse) ||
-        Either.isLeft(
-          Schema.decodeUnknownEither(WorkspaceContentPushResponseSchema)(contentResponse.body),
+      for (const body of batches) {
+        const contentResponse = yield* request({ path: "/api/v1/workspace", method: "POST", body });
+        if (contentResponse.status === 409) return yield* conflictResult(input, prepared, before);
+        if (
+          !successful(contentResponse) ||
+          Either.isLeft(
+            Schema.decodeUnknownEither(WorkspaceContentPushResponseSchema)(contentResponse.body),
+          )
         )
-      )
-        return yield* Effect.fail(failure("content"));
+          return yield* Effect.fail(failure("content"));
+      }
 
       const pushResponse = yield* request({
         path: "/api/v1/sync",
@@ -255,9 +293,11 @@ export function pushWorkspaceChanges(options: PushInput) {
         for (const event of receipt) {
           const requested = reviewBatch.find((item) => item.id === event.id);
           if (!requested) return yield* Effect.fail(failure("reviews"));
-          const canonical = yield* reconcileCanonicalReview(requested, event).pipe(
-            Effect.mapError(() => failure("reviews")),
-          );
+          const canonical = yield* reconcileCanonicalReview(
+            requested,
+            event,
+            reviewPlacement(prepared).areaId(requested),
+          ).pipe(Effect.mapError(() => failure("reviews")));
           canonicalAcceptedEvents.push(canonical);
         }
       }
@@ -280,31 +320,34 @@ export function pushWorkspaceChanges(options: PushInput) {
         return yield* conflictResult(input, prepared, currentSnapshot);
       if (newlySafe.length > 0) {
         const areaIds = new Set(newlySafe.map((item) => item.areaId));
-        const response = yield* request({
-          path: "/api/v1/workspace",
-          method: "POST",
-          body: {
-            schemaVersion: 1,
-            areas: currentSnapshot.areas
-              .filter((area) => areaIds.has(createAreaId(area.document.id)))
-              .map((area) => ({ ...area, baseContentHash: area.contentHash })),
-            tombstones: newlySafe,
-          },
+        const deletionBatches = yield* workspaceContentBatches({
+          schemaVersion: 1,
+          areas: currentSnapshot.areas.map((area) => ({
+            ...area,
+            baseContentHash: area.contentHash,
+          })),
+          tombstones: newlySafe,
         });
-        if (response.status === 409) return yield* conflictResult(input, prepared, currentSnapshot);
-        if (
-          !successful(response) ||
-          Either.isLeft(
-            Schema.decodeUnknownEither(WorkspaceContentPushResponseSchema)(response.body),
+        for (const body of deletionBatches) {
+          const response = yield* request({ path: "/api/v1/workspace", method: "POST", body });
+          if (response.status === 409)
+            return yield* conflictResult(input, prepared, currentSnapshot);
+          if (
+            !successful(response) ||
+            Either.isLeft(
+              Schema.decodeUnknownEither(WorkspaceContentPushResponseSchema)(response.body),
+            )
           )
-        )
-          return yield* Effect.fail(failure("content"));
-        const tombstoned = new Set(newlySafe.map((item) => item.cardId));
+            return yield* Effect.fail(failure("content"));
+        }
+        const tombstoned = new Set(newlySafe.map((item) => `${item.areaId}:${item.cardId}`));
         for (const area of currentSnapshot.areas)
           if (areaIds.has(createAreaId(area.document.id)))
             expectedDeletionDocuments.set(area.document.id, {
               ...area.document,
-              cards: area.document.cards.filter((card) => !tombstoned.has(card.id)),
+              cards: area.document.cards.filter(
+                (card) => !tombstoned.has(`${area.document.id}:${card.id}`),
+              ),
             });
         confirmedCardIds.push(...newlySafe.map((item) => item.cardId));
         currentSnapshot = yield* request({ path: "/api/v1/workspace", method: "GET" }).pipe(

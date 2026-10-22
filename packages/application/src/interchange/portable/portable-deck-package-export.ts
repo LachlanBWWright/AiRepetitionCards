@@ -47,10 +47,19 @@ export function exportPortableDeckPackage(
         ))
     )
       return yield* Effect.fail(fail("invalid-package"));
-    const privateEvents = (privateHistory?.reviewEvents ?? []).filter(
-      (event) => event.areaId === area.id && area.cards.some((card) => card.id === event.cardId),
+    const privateEvents = (privateHistory?.reviewEvents ?? []).filter((event) =>
+      area.cards.some((card) => card.id === event.cardId),
     );
     const privateEventIds = new Set(privateEvents.map((event) => event.id));
+    const corrections = privateHistory?.reviewCorrections?.filter((item) =>
+      privateEventIds.has(item.eventId),
+    );
+    const undoStates = privateHistory?.reviewUndoStates?.filter((item) =>
+      privateEventIds.has(item.eventId),
+    );
+    const adjustments = privateHistory?.scheduleAdjustments?.filter((item) =>
+      area.cards.some((card) => card.id === item.cardId),
+    );
     const historyInput = privateHistory
       ? {
           version: 1 as const,
@@ -58,6 +67,9 @@ export function exportPortableDeckPackage(
             validatedCurrentArea && Either.isRight(validatedCurrentArea)
               ? validatedCurrentArea.right
               : privateHistory.currentArea,
+          ...(corrections ? { reviewCorrections: corrections } : {}),
+          ...(undoStates ? { reviewUndoStates: undoStates } : {}),
+          ...(adjustments ? { scheduleAdjustments: adjustments } : {}),
           reviewEvents: privateEvents.map((event) => ({
             id: event.id,
             areaId: event.areaId,
@@ -83,9 +95,8 @@ export function exportPortableDeckPackage(
               ? { previousStateHash: event.previousStateHash }
               : {}),
           })),
-          cardVersions: [...(privateHistory.cardVersions ?? [])].filter(
-            (version) =>
-              version.areaId === area.id && area.cards.some((card) => card.id === version.cardId),
+          cardVersions: [...(privateHistory.cardVersions ?? [])].filter((version) =>
+            area.cards.some((card) => card.id === version.cardId),
           ),
           activityLibrary: {
             version: 1 as const,

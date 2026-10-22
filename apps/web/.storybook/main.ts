@@ -1,3 +1,4 @@
+import { svgParserEsm } from "./svg-parser-esm";
 import type { StorybookConfig } from "@storybook/react-vite";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -38,6 +39,8 @@ const config: StorybookConfig = {
           "react-dom/client",
           "react-native-web",
           "sql.js",
+          // This linked adapter contains MathJax CommonJS modules; prebundle them for browser ESM.
+          "@recall/infra-rich-content",
         ],
         noDiscovery: true,
       },
@@ -58,6 +61,7 @@ const config: StorybookConfig = {
         dedupe: ["react", "react-dom", "react-native-web"],
       },
       plugins: [
+        svgParserEsm(),
         {
           name: "storybook-rn-primitives-jsx",
           enforce: "pre",
@@ -77,6 +81,10 @@ const config: StorybookConfig = {
     merged.resolve = {
       ...merged.resolve,
       alias: [
+        {
+          find: /^expo-crypto$/,
+          replacement: fileURLToPath(new URL("./ExpoCryptoMock.ts", import.meta.url)),
+        },
         { find: /^@\//, replacement: `${path.resolve(configDirectory, "../src")}/` },
         {
           find: /^next\/link$/,

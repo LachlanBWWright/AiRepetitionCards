@@ -6,13 +6,14 @@ import type { NativeWorkspaceAuthoringController } from "../useNativeWorkspaceAu
 export function createSimpleEditorsSection(
   input: Pick<
     NativeWorkspaceAuthoringController,
-    "locked" | "pending" | "editor" | "setEditor" | "setMessage" | "submit"
+    "workspace" | "locked" | "pending" | "editor" | "setEditor" | "setMessage" | "submit"
   >,
 ) {
-  const { locked, pending, editor, setEditor, setMessage, submit } = input;
+  const { workspace, locked, pending, editor, setEditor, setMessage, submit } = input;
   const field = createNativeWorkspaceField(editor, locked);
   const props: ComponentProps<typeof NativeWorkspaceSimpleEditors> = {
     editor,
+    workspace,
     locked,
     pending,
     field,

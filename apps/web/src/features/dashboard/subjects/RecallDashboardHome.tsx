@@ -1,6 +1,6 @@
 import { useState } from "react";
 import {
-  summarizeSubjects,
+  summarizeStudySubjects,
   subjectSortOptions,
   isSubjectSort,
   type SubjectSort,
@@ -21,9 +21,8 @@ import type { RecallDashboardModel } from "../state/useRecallDashboardController
 export function RecallDashboardHome({ model }: { readonly model: RecallDashboardModel }) {
   const [sort, setSort] = useState<SubjectSort>("daily");
   const [search, setSearch] = useState("");
-  const rows = summarizeSubjects(
-    model.workspace.areas,
-    model.workspace.reviewEvents ?? [],
+  const rows = summarizeStudySubjects(
+    model.workspace,
     model.now.getTime(),
     sort,
     model.deepPracticeRecommendations.map((item) => item.activity.areaId),

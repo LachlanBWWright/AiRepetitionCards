@@ -91,8 +91,11 @@ export function LocalChatGPTTutor(
     [connectionId],
   );
   const [state, setState] = useState<LocalChatGPTState | null>(null);
-  const [usage, setUsage] = useState<TutorTokenUsage | null>(null);
-  const onUsage = useCallback((next: TutorTokenUsage) => setUsage(next), []);
+  const [lastUsage, setLastUsage] = useState<{
+    readonly profile: string;
+    readonly areaId: string;
+    readonly usage: TutorTokenUsage;
+  } | null>(null);
   const [models, setModels] = useState<typeof Models.Type>([]);
   const { model } = useSyncExternalStore(subscribeSelection, readSelection, () => defaultSelection);
   const [busy, setBusy] = useState(false);
@@ -102,6 +105,16 @@ export function LocalChatGPTTutor(
   const [welcome, setWelcome] = useState<string | null>(null);
   const profile = state?.activeClientId ?? "";
   const areaId = props.settingsOnly ? "" : props.knowledgeArea.id;
+  const onUsage = useCallback(
+    (usage: TutorTokenUsage) => {
+      setLastUsage({ profile, areaId, usage });
+    },
+    [profile, areaId],
+  );
+  const usage =
+    lastUsage?.profile === profile && lastUsage.areaId === areaId && lastUsage.usage.model === model
+      ? lastUsage.usage
+      : null;
   const bridge = typeof window === "undefined" ? undefined : window.recallDesktop?.chatgpt;
   // Desktop has one AI provider. Route to it even while reconnecting or signed out,
   // so requests never silently fall back to the Recall service.
@@ -111,9 +124,6 @@ export function LocalChatGPTTutor(
     () => createLocalChatGptTutor(profile, model, areaId, onUsage),
     [profile, model, areaId, onUsage],
   );
-  useEffect(() => {
-    setUsage(null);
-  }, [profile, model, areaId]);
   const refresh = useCallback(
     () =>
       Effect.gen(function* () {

@@ -14,10 +14,11 @@ function timestamp(value: string): number | null {
   return canonical === null ? null : Date.parse(canonical);
 }
 
-/** Server effective time is derived metadata; immutable review evidence must still match. */
+/** Server area is current placement and time is derived metadata; immutable evidence must match. */
 export function reconcileCanonicalReview(
   localInput: unknown,
   serverInput: unknown,
+  currentAreaId?: string,
 ): Effect.Effect<ReviewEvent, ReviewCanonicalReconciliationFailure> {
   return Effect.gen(function* () {
     const local = yield* Schema.decodeUnknown(ReviewEventSchema)(localInput).pipe(
@@ -33,8 +34,8 @@ export function reconcileCanonicalReview(
     const effective = timestamp(server.effectiveReviewedAt ?? server.ratedAt);
     if (
       local.id !== server.id ||
-      local.areaId !== server.areaId ||
       local.cardId !== server.cardId ||
+      (server.areaId !== local.areaId && server.areaId !== currentAreaId) ||
       local.rating !== server.rating ||
       local.deviceId !== server.deviceId ||
       local.deviceSequence !== server.deviceSequence ||

@@ -140,9 +140,15 @@ export function KnowledgeNotebookSuggestions({
         acceptDisabled={
           busy || unsaved || (duplicates.matches.length > 0 && !duplicates.acknowledged)
         }
-        onChange={(next) => editProposal(entry.id, next)}
-        onAccept={() => resolve(entry, "accepted")}
-        onDiscard={() => resolve(entry, "discarded")}
+        onChange={(next) => {
+          editProposal(entry.id, next);
+        }}
+        onAccept={() => {
+          resolve(entry, "accepted");
+        }}
+        onDiscard={() => {
+          resolve(entry, "discarded");
+        }}
         editorTools={
           <CardAssistancePanel
             proposal={draft}
@@ -181,31 +187,24 @@ export function KnowledgeNotebookSuggestions({
       </ProposedCardPreview>
     );
   }
+  const proposingDisabled =
+    networkDisabled ||
+    notebook?.session.phase === "idle" ||
+    pendingQuestion != null ||
+    !hasReinforcementGaps;
   return (
     <TabsContent value="suggestions" forceMount className="data-[state=inactive]:hidden">
       {notebook ? (
         <>
           <div className="space-y-4">
-            {!chat && (
-              <div className="space-y-1">
-                <h3 className="text-lg font-semibold">Review suggestions</h3>
-                <p className="text-sm text-muted-foreground">
-                  Check suggested cards before adding them to your library.
-                </p>
-              </div>
-            )}
+            {!chat && <ReviewSuggestionsHeading />}
             {pendingProposals.length === 0 && <p>No suggestions to review.</p>}
             {!chat && (
               <Button
                 type="button"
                 variant="secondary"
                 size="small"
-                disabled={
-                  networkDisabled ||
-                  notebook.session.phase === "idle" ||
-                  pendingQuestion != null ||
-                  !hasReinforcementGaps
-                }
+                disabled={proposingDisabled}
                 onClick={proposeGaps}
               >
                 Generate cards for gaps
@@ -237,5 +236,16 @@ export function KnowledgeNotebookSuggestions({
       )}
       {additionalSuggestions}
     </TabsContent>
+  );
+}
+
+function ReviewSuggestionsHeading() {
+  return (
+    <div className="space-y-1">
+      <h3 className="text-lg font-semibold">Review suggestions</h3>
+      <p className="text-sm text-muted-foreground">
+        Check suggested cards before adding them to your library.
+      </p>
+    </div>
   );
 }

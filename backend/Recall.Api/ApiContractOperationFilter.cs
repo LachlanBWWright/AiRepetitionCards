@@ -285,7 +285,7 @@ public sealed class ApiContractOperationFilter : IOperationFilter
         return ErrorSchema();
     }
 
-    private static readonly string[] MediaMimeTypes = ["image/jpeg", "image/png", "image/gif", "image/webp", "audio/mpeg", "audio/ogg", "audio/wav"];
+    private static readonly string[] MediaMimeTypes = ["image/jpeg", "image/png", "image/gif", "image/webp", "audio/mpeg", "audio/ogg", "audio/wav", "audio/mp4", "audio/webm"];
 
     private static string[] SuccessCodes(string path, string method) => path switch
     {

@@ -1,4 +1,5 @@
 import { Effect, Either, Schema } from "effect";
+import { readAccountStudyDocument } from "./study-export";
 import { ActivityLibrarySchema } from "@recall/domain";
 import type { RecallSupabaseClient } from "../client";
 
@@ -217,6 +218,8 @@ export function readAccountExportRows(
           ])
         : [[], []];
       if (!isComplete([cardRevisions, cardObjectives])) return { _tag: "ReadFailure" } as const;
+      const studySettings = await readAccountStudyDocument(client);
+      if (!studySettings) return { _tag: "ReadFailure" } as const;
       const profileRows = Schema.decodeUnknownEither(Schema.Array(Schema.Unknown))(profiles);
       if (Either.isLeft(profileRows)) return { _tag: "ReadFailure" } as const;
 
@@ -240,6 +243,7 @@ export function readAccountExportRows(
             aiObservations: observations,
             generatedCardProposals: proposals,
             aiUsage: usage,
+            studySettings,
             learningActivities: activitySnapshot.right.library,
           },
         },

@@ -34,6 +34,8 @@ foreach (var entry in manifest.RootElement.EnumerateArray())
         failures.Add($"{file}: C# boundary validation disagrees with expected validity ({semantic.ErrorCode})");
     count++;
 }
+failures.AddRange(AuthoredMetadataChecks.Run());
+failures.AddRange(PublishingMetadataChecks.Run());
 if (count < 15) failures.Add("The shared contract corpus is incomplete.");
 foreach (var failure in failures) Console.Error.WriteLine(failure);
 Console.WriteLine($"Shared contract fixtures: {count} checked, {failures.Count} failures.");

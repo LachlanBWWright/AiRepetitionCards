@@ -141,6 +141,7 @@ export function AppLibraryPanel({ model }: { readonly model: AppModel }) {
         </View>
       )}
       <NativeWorkspaceAuthoringPanel
+        mediaStore={model.mediaStore}
         hideAreaPicker
         {...(model.createSubjectRequest > 0 ? { initialEditor: "create-area" as const } : {})}
         flaggedOnly={onlyFlagged}
@@ -148,6 +149,24 @@ export function AppLibraryPanel({ model }: { readonly model: AppModel }) {
         notes={libraryNotes.notes}
         notesLoaded={libraryNotes.loaded}
         onFlushDraft={libraryNotes.flush}
+        onRetainNoteDraft={(draft, assets) => {
+          libraryNotes.update(
+            (notes) => ({
+              ...notes,
+              noteDrafts: [
+                ...(notes.noteDrafts ?? []).filter((entry) => entry.key !== draft.key),
+                draft,
+              ],
+            }),
+            assets,
+          );
+        }}
+        onDiscardNoteDraft={(key) => {
+          libraryNotes.update((notes) => ({
+            ...notes,
+            noteDrafts: (notes.noteDrafts ?? []).filter((entry) => entry.key !== key),
+          }));
+        }}
         onRetainDraft={(draft, assets) => {
           libraryNotes.update((notes) => retainLibraryDraft(notes, draft), assets);
         }}

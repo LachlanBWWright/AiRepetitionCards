@@ -78,6 +78,7 @@ export class NativeModule {
   readonly kind = "NativeModule";
 }
 export class CodedError extends Error {}
+export class UnavailabilityError extends Error {}
 export const Platform = { OS: "web" } as const;
 export const requireOptionalNativeModule = () => {
   return null;

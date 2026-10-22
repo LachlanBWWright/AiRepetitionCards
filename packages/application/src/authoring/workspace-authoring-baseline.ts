@@ -20,6 +20,50 @@ export function workspaceAuthoringBaseline(
   workspace: Workspace,
   command: WorkspaceAuthoringCommand,
 ): string | undefined {
+  if (
+    command.kind === "restore-workspace-checkpoint" ||
+    command.kind === "repair-collection-references"
+  )
+    return JSON.stringify(canonical(workspace));
+  if (command.kind === "save-note")
+    return JSON.stringify(
+      canonical(workspace.areas.map((area) => ({ ...area, cards: area.cards.map(authoredCard) }))),
+    );
+  if (command.kind === "maintain-collection-media")
+    return JSON.stringify(
+      canonical({
+        areas: workspace.areas,
+        retained: workspace.retainedReviewAreas,
+        versions: workspace.cardVersions,
+        trash: workspace.mediaTrash,
+      }),
+    );
+  if (command.kind === "resolve-study-settings")
+    return JSON.stringify(
+      canonical({
+        conflict: workspace.studySettingsConflict,
+        settings: workspace.schedulerSettings,
+      }),
+    );
+  if (command.kind === "rate-filtered-card")
+    return JSON.stringify(
+      canonical({
+        owner: workspace.syncOwnerId,
+        events: workspace.reviewEvents,
+        corrections: workspace.reviewCorrections,
+        adjustments: workspace.scheduleAdjustments,
+        settings: workspace.schedulerSettings,
+      }),
+    );
+  if (command.kind === "undo-review")
+    return JSON.stringify(
+      canonical({
+        owner: workspace.syncOwnerId,
+        events: workspace.reviewEvents,
+        corrections: workspace.reviewCorrections,
+        adjustments: workspace.scheduleAdjustments,
+      }),
+    );
   if (command.kind === "update-scheduler-settings")
     return JSON.stringify(canonical(workspace.schedulerSettings ?? { requestRetention: 0.9 }));
   if (
@@ -30,7 +74,17 @@ export function workspaceAuthoringBaseline(
     return undefined;
   const areaId = command.kind === "save-area" ? command.id : command.areaId;
   const area = workspace.areas.find((item) => item.id === areaId);
+  if (command.kind === "administer-cards")
+    return JSON.stringify(
+      canonical({
+        owner: workspace.syncOwnerId ?? null,
+        cards: area?.cards.filter((card) => command.cardIds.includes(card.id)),
+        adjustments: workspace.scheduleAdjustments ?? [],
+        settings: workspace.schedulerSettings ?? null,
+      }),
+    );
   if (
+    command.kind === "replace-card-fields" ||
     command.kind === "bulk-tag-cards" ||
     command.kind === "bulk-delete-cards" ||
     command.kind === "bulk-move-cards"
@@ -77,6 +131,8 @@ export function workspaceAuthoringBaseline(
     command.kind === "replace-card"
   ) {
     const card = area.cards.find((item) => item.id === command.cardId);
+    if (command.kind === "update-card" && card?.cloze)
+      return JSON.stringify(canonical({ ...area, cards: area.cards.map(authoredCard) }));
     return JSON.stringify(
       canonical({ card: card ? authoredCard(card) : null, objectives: area.objectives ?? [] }),
     );

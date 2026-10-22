@@ -1,3 +1,4 @@
+import { workspaceMediaReferences } from "../workspace/media/media-references";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { unzipSync, zipSync, type UnzipFileInfo } from "fflate";
 import { Effect, Either, Schema } from "effect";
@@ -61,16 +62,14 @@ function safePath(path: string): boolean {
 }
 
 function referencesIn(workspace: Workspace): readonly MediaReference[] {
-  const references = new Map<string, MediaReference>();
-  for (const area of [...workspace.areas, ...(workspace.retainedReviewAreas ?? [])]) {
-    for (const card of area.cards) {
-      for (const reference of card.media ?? []) references.set(reference.id, reference);
-    }
-  }
-  for (const version of workspace.cardVersions ?? []) {
-    for (const reference of version.card.media ?? []) references.set(reference.id, reference);
-  }
-  return [...references.values()];
+  return [
+    ...new Map(
+      [
+        ...workspaceMediaReferences(workspace),
+        ...(workspace.mediaTrash?.map((item) => item.reference) ?? []),
+      ].map((reference) => [reference.id, reference]),
+    ).values(),
+  ];
 }
 
 function pathFor(reference: MediaReference): string {
@@ -82,6 +81,8 @@ function pathFor(reference: MediaReference): string {
     "audio/mpeg": "mp3",
     "audio/ogg": "ogg",
     "audio/wav": "wav",
+    "audio/mp4": "m4a",
+    "audio/webm": "webm",
   };
   return `media/${reference.id}.${extension[reference.mimeType]}`;
 }
@@ -183,7 +184,7 @@ export function importWorkspaceBackupPackage(
             const allowed =
               safePath(path) &&
               (StaticFiles.has(path) ||
-                /^media\/[a-f0-9]{64}\.(jpg|png|gif|webp|mp3|ogg|wav)$/.test(path));
+                /^media\/[a-f0-9]{64}\.(jpg|png|gif|webp|mp3|ogg|wav|m4a|webm)$/.test(path));
             if (
               duplicatePath ||
               !allowed ||

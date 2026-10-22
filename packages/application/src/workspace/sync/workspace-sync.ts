@@ -1,3 +1,4 @@
+import { detachDeletedNoteOwner } from "../../notes/ownership";
 import { Effect } from "effect";
 import type { SyncPushResponse } from "@recall/contracts";
 import type { AreaId, AssessmentId, LearningArea, ReviewEvent, Workspace } from "@recall/domain";
@@ -25,6 +26,8 @@ export type WorkspaceSyncFailure = {
     | "content"
     | "media"
     | "reviews"
+    | "study-conflict"
+    | "study-settings"
     | "replay"
     | "account-mismatch"
     | "owner-adoption-required"
@@ -36,6 +39,8 @@ export type WorkspaceSyncFailure = {
 export type WorkspaceSyncCheckpointFailure = { readonly _tag: "WorkspaceSyncCheckpointFailure" };
 export type WorkspaceSyncChanges = {
   readonly baseline: Workspace;
+  readonly studyDocument?: import("@recall/domain").StudySyncDocument;
+  readonly studyConflict?: Workspace["studySettingsConflict"];
   readonly acceptedIds: readonly string[];
   readonly cursor: string;
   readonly hasMore: boolean;
@@ -151,10 +156,10 @@ export function applyWorkspaceContentConflict(
       const retainedCardIds = previous.cards
         .filter(
           (card) =>
+            !approvedCards.has(card.id) &&
             !approved?.cards.some((item) => item.id === card.id) &&
             workspace.reviewEvents?.some(
-              (event) =>
-                event.areaId === previous.id && event.cardId === card.id && pending.has(event.id),
+              (event) => event.cardId === card.id && pending.has(event.id),
             ),
         )
         .map((card) => card.id);
@@ -170,6 +175,8 @@ export function applyWorkspaceContentConflict(
         retainedCardIds,
       ).pipe(Effect.mapError(() => failure("deleted-review-content-missing")));
     }
+    for (const areaId of preview.deletedAreaIds)
+      candidate = detachDeletedNoteOwner(candidate, areaId);
     return yield* rebuildWorkspaceSchedules(candidate).pipe(
       Effect.mapError(() => failure("replay")),
     );

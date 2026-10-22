@@ -1,4 +1,5 @@
 import test from "node:test";
+import { MAX_CHAT_CONTEXT_MESSAGES } from "@recall/ai-core";
 import {
   assert,
   Contracts,
@@ -169,12 +170,21 @@ codec(
   ],
 );
 codec(
-  "tutor state response bounds chronological history",
+  "tutor state response accepts complete chat history within the transport bound",
   TutorSessionStateResponseSchema,
   [
     {
       schemaVersion: 1,
-      state: { sessionId: first, history: [], evaluation: null, proposal: null, quiz: null },
+      state: {
+        sessionId: first,
+        history: Array.from({ length: MAX_CHAT_CONTEXT_MESSAGES }, (_, index) => ({
+          role: index % 2 === 0 ? "assistant" : "learner",
+          content: `Message ${String(index)}`,
+        })),
+        evaluation: null,
+        proposal: null,
+        quiz: null,
+      },
     },
   ],
   [
@@ -182,7 +192,10 @@ codec(
       schemaVersion: 1,
       state: {
         sessionId: first,
-        history: Array.from({ length: 41 }, () => ({ role: "assistant", content: "q" })),
+        history: Array.from({ length: MAX_CHAT_CONTEXT_MESSAGES + 1 }, () => ({
+          role: "assistant",
+          content: "q",
+        })),
         evaluation: null,
         proposal: null,
         quiz: null,

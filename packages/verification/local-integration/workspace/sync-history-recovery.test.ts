@@ -1,3 +1,4 @@
+import { studyServerFixture } from "./study-server-fixture";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createHash } from "node:crypto";
@@ -63,6 +64,7 @@ function edit(workspace: Workspace, back: string): Workspace {
 function server() {
   let areas: WorkspaceSnapshot["areas"] = [];
   const posts: WorkspaceSyncRequest[] = [];
+  const study = studyServerFixture();
   const input = (
     workspace: Workspace,
     checkpoint: WorkspaceSyncInput["checkpoint"],
@@ -80,7 +82,12 @@ function server() {
     mediaGatewayForOwner: () => ({ upload: () => Effect.void, read: () => Effect.succeed(null) }),
     transport: (request) =>
       Effect.sync(() => {
-        if (request.method === "POST") posts.push(request);
+        if (request.method === "POST") {
+          assert.equal(request.headers?.["x-recall-workspace-owner"], owner);
+          posts.push(request);
+        }
+        const studyResponse = study.handle(request);
+        if (studyResponse) return studyResponse;
         if (request.path === "/api/v1/workspace" && request.method === "GET")
           return {
             status: 200,
@@ -123,7 +130,7 @@ function server() {
         assert.fail(`Unexpected request ${request.path}`);
       }),
   });
-  return { input, posts };
+  return { input, posts, study };
 }
 
 await test("a blocked ownership checkpoint uploads the latest edit and its history only after durable release", async () => {
@@ -143,7 +150,22 @@ await test("a blocked ownership checkpoint uploads the latest edit and its histo
   );
   await Effect.runPromise(Deferred.await(entered));
   assert.equal(remote.posts.length, 0);
-  const latest = { ...edit(old, "Edited while checkpoint was blocked"), syncOwnerId: owner };
+  const latest = {
+    ...edit(old, "Edited while checkpoint was blocked"),
+    syncOwnerId: owner,
+    schedulerSettings: { requestRetention: 0.95, dailyReviewLimit: 11 },
+    scheduleAdjustments: [
+      {
+        id: "set-due",
+        areaId,
+        cardId,
+        afterReviewEventId: null,
+        recordedAt: now.toISOString(),
+        kind: "due" as const,
+        due: "2026-10-21T00:00:00.000Z",
+      },
+    ],
+  };
   await Effect.runPromise(Deferred.succeed(release, latest));
   const result = await operation;
   assert.equal(result._tag, "Synced");
@@ -161,6 +183,10 @@ await test("a blocked ownership checkpoint uploads the latest edit and its histo
   assert.equal(pushedCard.back, "Edited while checkpoint was blocked");
   assert.ok(!JSON.stringify(pushed.right).includes("cardVersions"));
   assert.equal(old.cardVersions, undefined);
+  assert.equal(remote.study.snapshot().revision, 1);
+  assert.deepEqual(remote.study.snapshot().document.settings, latest.schedulerSettings);
+  assert.deepEqual(result.workspace.scheduleAdjustments, latest.scheduleAdjustments);
+  assert.equal(result.workspace.areas[0].cards[0].schedule.due, "2026-10-21T00:00:00.000Z");
 });
 
 await test("an account switch while the checkpoint is blocked prevents every cloud mutation", async () => {
@@ -209,4 +235,40 @@ await test("an old completed sync cannot overwrite a later edit or erase its ver
   assert.ok(Either.isLeft(rejected));
   assert.equal(rejected.left.reason, "account-mismatch");
   assert.deepEqual(switched.cardVersions, latest.cardVersions);
+});
+
+await test("study backend rejects stale revisions and replacement or deletion of immutable evidence", () => {
+  const remote = studyServerFixture();
+  const adjustment = {
+    id: "manual-due",
+    areaId,
+    cardId,
+    afterReviewEventId: null,
+    recordedAt: now.toISOString(),
+    kind: "due" as const,
+    due: "2026-10-21T00:00:00.000Z",
+  };
+  const document = { ...remote.snapshot().document, adjustments: [adjustment] };
+  const post = (revision: number, value: unknown) =>
+    remote.handle({
+      path: "/api/v1/workspace/study",
+      method: "POST",
+      body: { revision, document: value },
+    });
+  assert.equal(post(0, document)?.status, 200);
+  assert.equal(post(0, document)?.status, 409);
+  assert.equal(post(1, { ...document, adjustments: [] })?.status, 409);
+  assert.equal(
+    post(1, { ...document, adjustments: [{ ...adjustment, due: "2026-10-22T00:00:00.000Z" }] })
+      ?.status,
+    409,
+  );
+  assert.equal(remote.snapshot().revision, 1);
+  assert.deepEqual(remote.snapshot().document, document);
+  assert.equal(
+    post(1, { ...document, settings: { requestRetention: 0.92, dailyReviewLimit: 20 } })?.status,
+    200,
+  );
+  assert.equal(remote.snapshot().revision, 2);
+  assert.deepEqual(remote.snapshot().document.adjustments, [adjustment]);
 });

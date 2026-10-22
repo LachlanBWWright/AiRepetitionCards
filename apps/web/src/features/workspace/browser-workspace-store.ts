@@ -1,3 +1,4 @@
+import { browserWorkspaceCheckpoints } from "./workspace-checkpoints";
 import { Effect } from "effect";
 import type { LocalStoreFailure, WorkspaceStore } from "@recall/local-store";
 import { volatileWorkspaceStore } from "./volatile-workspace-store";
@@ -40,6 +41,25 @@ function desktopCommand(
 }
 
 export const uncoordinatedWorkspaceStore: WorkspaceStore = {
+  checkIntegrity: Effect.suspend(() => {
+    const desktop = window.recallDesktop;
+    return desktop
+      ? Effect.tryPromise({
+          try: () => desktop.workspace.checkIntegrity(),
+          catch: () => storageFailure("read"),
+        }).pipe(
+          Effect.flatMap((reply) =>
+            typeof reply === "object" &&
+            reply !== null &&
+            "_tag" in reply &&
+            reply._tag === "Success"
+              ? Effect.void
+              : Effect.fail(storageFailure("read")),
+          ),
+        )
+      : Effect.void;
+  }),
+  checkpoints: browserWorkspaceCheckpoints,
   read: Effect.suspend(() => {
     const desktopWorkspace = window.recallDesktop?.workspace;
     return desktopWorkspace

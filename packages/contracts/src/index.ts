@@ -111,7 +111,7 @@ export const SyncReviewOperationSchema = Schema.Struct({
   elapsedMs: Schema.NullOr(Schema.Number.pipe(Schema.int(), Schema.nonNegative())),
   schedulerFamily: Schema.Literal("fsrs"),
   schedulerVersion: Schema.String.pipe(Schema.minLength(1), Schema.maxLength(80)),
-  schedulerParameterSetId: Schema.NullOr(Schema.String.pipe(Schema.maxLength(80))),
+  schedulerParameterSetId: Schema.NullOr(Schema.String.pipe(Schema.maxLength(2048))),
   previousStateHash: Schema.NullOr(Schema.String.pipe(Schema.pattern(/^[a-f0-9]{64}$/i))),
 });
 
@@ -140,7 +140,9 @@ const SyncReviewPayloadSchema = Schema.Struct({
   reviewedAtDevice: Schema.optional(TimestampSchema),
   effectiveReviewedAt: Schema.optional(TimestampSchema),
   elapsedMs: Schema.optional(Schema.NullOr(Schema.Number.pipe(Schema.int(), Schema.nonNegative()))),
-  schedulerParameterSetId: Schema.optional(Schema.NullOr(Schema.String.pipe(Schema.maxLength(80)))),
+  schedulerParameterSetId: Schema.optional(
+    Schema.NullOr(Schema.String.pipe(Schema.maxLength(2048))),
+  ),
   previousStateHash: Schema.optional(
     Schema.NullOr(Schema.String.pipe(Schema.pattern(/^[a-f0-9]{64}$/i))),
   ),
@@ -264,3 +266,7 @@ export * from "./tutor-privacy";
 export * from "./workspace-review-identities";
 export * from "./api-rate-limit";
 export * from "./deck-sharing";
+
+export * from "./workspace-study";
+
+export * from "./workspace-study-pages";

@@ -34,7 +34,7 @@ export default defineConfig(({ mode }) => {
     renderer: {
       root: resolve(appDirectory, "src/renderer"),
       publicDir: resolve(appDirectory, "public"),
-      resolve: { alias: { "@": webSource } },
+      resolve: { alias: { "@": webSource }, dedupe: ["react", "react-dom"] },
       plugins: [react()],
       css: { postcss: resolve(appDirectory, "../web/postcss.config.mjs") },
       define: publicEnvironment,

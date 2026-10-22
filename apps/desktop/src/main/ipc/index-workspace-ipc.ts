@@ -1,16 +1,13 @@
+import {
+  readDesktopWorkspaceSnapshot,
+  writeDesktopWorkspaceSnapshot,
+} from "./workspace-snapshot-chunks";
+import { registerCheckpointIpc, captureDesktopCheckpoint } from "./workspace-checkpoint-ipc";
 import { Buffer } from "node:buffer";
 import { ipcMain, type IpcMainInvokeEvent } from "electron";
 import { Effect, Either, Schema } from "effect";
-import { parseWorkspaceJson } from "@recall/domain";
-import type { Workspace } from "@recall/domain";
+import { parseWorkspaceJson, MAX_LOCAL_WORKSPACE_BYTES } from "@recall/domain";
 import type { DatabaseSync } from "node:sqlite";
-
-const WorkspaceWriteLimit = 5_000_000;
-const WorkspaceUpsertSql = `INSERT INTO local_workspace (id, serialized_workspace, updated_at)
-VALUES (1, ?, ?)
-ON CONFLICT(id) DO UPDATE SET
-  serialized_workspace = excluded.serialized_workspace,
-  updated_at = excluded.updated_at`;
 
 type DesktopReply<T> =
   { readonly _tag: "Success"; readonly value: T } | { readonly _tag: "Failure" };
@@ -24,30 +21,25 @@ export function registerWorkspaceIpc(
   trustedSender: (event: IpcMainInvokeEvent) => boolean,
   clearReminders: () => Promise<boolean>,
 ): void {
+  database.exec(
+    "CREATE TABLE IF NOT EXISTS local_workspace_chunks(part INTEGER PRIMARY KEY,payload TEXT NOT NULL)",
+  );
+  registerCheckpointIpc(database, trustedSender);
   ipcMain.handle("workspace:read", (event): DesktopReply<string | null> => {
     if (!trustedSender(event)) return failure();
     const result = Effect.runSync(
       Effect.either(
         Effect.try({
           try: () => {
-            const row: unknown = database
-              .prepare("SELECT serialized_workspace FROM local_workspace WHERE id = 1")
-              .get();
-            if (
-              typeof row === "object" &&
-              row !== null &&
-              "serialized_workspace" in row &&
-              typeof row.serialized_workspace === "string"
-            ) {
-              return row.serialized_workspace;
-            }
-            return null;
+            return readDesktopWorkspaceSnapshot(database);
           },
           catch: () => ({ _tag: "WorkspaceReadFailure" }) as const,
         }),
       ),
     );
-    return Either.isRight(result) ? { _tag: "Success", value: result.right } : failure();
+    return Either.isRight(result) && result.right !== undefined
+      ? { _tag: "Success", value: result.right }
+      : failure();
   });
 
   ipcMain.handle("workspace:write", async (event, input: unknown): Promise<DesktopReply<void>> => {
@@ -55,7 +47,7 @@ export function registerWorkspaceIpc(
     const serialized = Schema.decodeUnknownEither(Schema.String)(input);
     if (
       Either.isLeft(serialized) ||
-      Buffer.byteLength(serialized.right, "utf8") > WorkspaceWriteLimit
+      Buffer.byteLength(serialized.right, "utf8") > MAX_LOCAL_WORKSPACE_BYTES
     ) {
       return failure();
     }
@@ -63,13 +55,13 @@ export function registerWorkspaceIpc(
     if (Either.isLeft(decoded)) return failure();
     const write = Effect.try({
       try: () => {
-        database
-          .prepare(WorkspaceUpsertSql)
-          .run(JSON.stringify(decoded.right satisfies Workspace), new Date().toISOString());
+        if (!captureDesktopCheckpoint(database, serialized.right, new Date())) return false;
+        return writeDesktopWorkspaceSnapshot(database, serialized.right);
       },
       catch: () => ({ _tag: "WorkspaceWriteFailure" }) as const,
     });
-    return Either.isRight(Effect.runSync(Effect.either(write)))
+    const result = Effect.runSync(Effect.either(write));
+    return Either.isRight(result) && result.right
       ? { _tag: "Success", value: undefined }
       : failure();
   });
@@ -81,7 +73,10 @@ export function registerWorkspaceIpc(
       Effect.either(
         Effect.try({
           try: () => {
+            database.prepare("DELETE FROM workspace_checkpoints").run();
+            database.prepare("DELETE FROM workspace_checkpoint_chunks").run();
             database.prepare("DELETE FROM local_workspace WHERE id = 1").run();
+            database.prepare("DELETE FROM local_workspace_chunks").run();
           },
           catch: () => ({ _tag: "WorkspaceClearFailure" }) as const,
         }),

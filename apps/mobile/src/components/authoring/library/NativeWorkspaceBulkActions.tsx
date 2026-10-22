@@ -39,7 +39,7 @@ function bulkActionTitle(action: NativeWorkspaceBulkAction): string {
 
 function bulkActionDescription(action: NativeWorkspaceBulkAction): string {
   if (action === "move")
-    return "Cards receive fresh schedules in the destination. Original reviews stay in Deleted cards. Matching objectives are linked by title; tags and attachments are retained.";
+    return "Scheduling and review history move with the cards. Matching objectives are linked by title; tags and attachments are retained.";
   if (action === "delete") return "History is preserved. Recover cards from Deleted cards.";
   return "Tags are added without changing review schedules.";
 }

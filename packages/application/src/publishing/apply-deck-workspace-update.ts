@@ -54,7 +54,9 @@ function mergeWorkspaceArea(
   const beforeById = new Map(current.cards.map((card) => [card.id, card]));
   const proposedCards: Assessment[] = proposed.cards.map((card) => {
     const before = beforeById.get(card.id);
-    return before ? { ...card, schedule: before.schedule } : card;
+    return before
+      ? { ...card, schedule: before.schedule, importedSchedule: before.importedSchedule }
+      : card;
   });
   let next = workspace;
   const retainedReviewAreas = [...(workspace.retainedReviewAreas ?? [])];

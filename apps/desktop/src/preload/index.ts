@@ -58,6 +58,8 @@ contextBridge.exposeInMainWorld("recallDesktop", {
     },
   },
   workspace: {
+    checkIntegrity: (): Promise<unknown> => ipcRenderer.invoke("workspace:integrity"),
+    checkpoints: (): Promise<unknown> => ipcRenderer.invoke("workspace:checkpoints"),
     read: (): Promise<DesktopReply<string | null>> => ipcRenderer.invoke("workspace:read"),
     write: (serializedWorkspace: string): Promise<DesktopReply<void>> =>
       ipcRenderer.invoke("workspace:write", serializedWorkspace),

@@ -1,4 +1,4 @@
-import type { ChatModelSelection } from "../chat/ChatModelPicker";
+import type { ChatModelSelection } from "../chat/chat-model-selection";
 import type { ReactNode } from "react";
 import type {
   CardDuplicateCandidate,

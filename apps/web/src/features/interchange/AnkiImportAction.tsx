@@ -10,7 +10,12 @@ import { readAnkiSqliteInBrowser } from "./browser-anki-sqlite-reader";
 import { readAnkiSqliteOnDesktop } from "./desktop-anki-sqlite-reader";
 import { isDesktopRuntime } from "@/lib/desktop-api";
 
-type ImportFailure = AnkiImportError["reason"] | "read-failed" | "save-failed";
+type ImportFailure =
+  | AnkiImportError["reason"]
+  | "read-failed"
+  | "save-failed"
+  | "ambiguous-matches"
+  | "partial-note-family";
 export type AnkiImportState =
   | { readonly _tag: "closed" }
   | { readonly _tag: "ready" }
@@ -27,7 +32,7 @@ type Props = {
 
 function titleFromFileName(fileName: string): string {
   return fileName
-    .replace(/\.apkg$/i, "")
+    .replace(/\.(?:apkg|colpkg)$/i, "")
     .replace(/[_-]+/g, " ")
     .trim()
     .slice(0, 80);
@@ -82,7 +87,15 @@ export function AnkiImportAction({ color, onAccept, initialState }: Props) {
     setState({ _tag: "saving" });
     const result = await Effect.runPromise(Effect.either(onAccept(proposal)));
     if (Either.isLeft(result)) {
-      setState({ _tag: "error", reason: "save-failed" });
+      const error = result.left;
+      const reason =
+        typeof error === "object" &&
+        error !== null &&
+        "reason" in error &&
+        (error.reason === "ambiguous-matches" || error.reason === "partial-note-family")
+          ? error.reason
+          : "save-failed";
+      setState({ _tag: "error", reason });
       return;
     }
     setState({ _tag: "closed" });
@@ -103,7 +116,7 @@ export function AnkiImportAction({ color, onAccept, initialState }: Props) {
         ref={inputRef}
         className="sr-only"
         type="file"
-        accept=".apkg,application/zip"
+        accept=".apkg,.colpkg,application/zip"
         aria-label="Choose Anki deck package"
         onChange={(event) => {
           const file = event.currentTarget.files?.[0];

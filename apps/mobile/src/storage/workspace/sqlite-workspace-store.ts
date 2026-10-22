@@ -1,18 +1,18 @@
+import {
+  readNativeWorkspaceSnapshot,
+  writeNativeWorkspaceSnapshot,
+} from "./sqlite-snapshot-chunks";
+import { withWorkspaceCheckpoints } from "@recall/local-store";
+import { sqliteCheckpoints } from "./sqlite-checkpoints";
 import { Effect } from "effect";
 import * as SQLite from "expo-sqlite";
 import type { LocalStoreFailure, WorkspaceStore } from "@recall/local-store";
 import type { MediaId } from "@recall/domain";
-import { MediaReferenceSchema } from "@recall/domain";
+import { MediaReferenceSchema, MAX_LOCAL_WORKSPACE_BYTES } from "@recall/domain";
 import { Either, Schema } from "effect";
 import type { MediaStore, MediaStoreFailure, StoredMediaAsset } from "@recall/local-store";
 
 const databaseName = "recall.db";
-
-const writeWorkspaceSql = `INSERT INTO workspace_snapshot (id, serialized_workspace, updated_at)
-  VALUES (1, ?, ?)
-  ON CONFLICT(id) DO UPDATE SET
-    serialized_workspace = excluded.serialized_workspace,
-    updated_at = excluded.updated_at`;
 
 function failure(operation: LocalStoreFailure["operation"]): LocalStoreFailure {
   return { _tag: "LocalStoreFailure", operation };
@@ -24,6 +24,9 @@ export function openSqliteWorkspaceStore(): Effect.Effect<WorkspaceStore, LocalS
       const database = await SQLite.openDatabaseAsync(databaseName);
       await database.execAsync(`
         PRAGMA journal_mode = WAL;
+        CREATE TABLE IF NOT EXISTS workspace_snapshot_chunks(part INTEGER PRIMARY KEY,payload TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS workspace_checkpoints (id INTEGER PRIMARY KEY CHECK(id = 1), entries TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS workspace_checkpoint_chunks (part INTEGER PRIMARY KEY, payload TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS workspace_snapshot (
           id INTEGER PRIMARY KEY CHECK (id = 1),
           serialized_workspace TEXT NOT NULL,
@@ -31,7 +34,11 @@ export function openSqliteWorkspaceStore(): Effect.Effect<WorkspaceStore, LocalS
         );
       `);
 
-      return createWorkspaceStore(database);
+      return withWorkspaceCheckpoints(
+        createWorkspaceStore(database),
+        sqliteCheckpoints(database),
+        () => new Date(),
+      );
     },
     catch: () => failure("read"),
   });
@@ -132,25 +139,41 @@ export function openSqliteMediaStore(): Effect.Effect<MediaStore, MediaStoreFail
 
 function createWorkspaceStore(database: SQLite.SQLiteDatabase): WorkspaceStore {
   return {
+    checkIntegrity: Effect.tryPromise({
+      try: () => database.getAllAsync<{ quick_check: string }>("PRAGMA quick_check"),
+      catch: () => failure("read"),
+    }).pipe(
+      Effect.flatMap((rows) =>
+        rows.length === 1 && rows[0]?.quick_check === "ok"
+          ? Effect.void
+          : Effect.fail(failure("read")),
+      ),
+    ),
     read: Effect.tryPromise({
       try: async () => {
-        const row = await database.getFirstAsync<{ serialized_workspace: string }>(
-          "SELECT serialized_workspace FROM workspace_snapshot WHERE id = 1",
-        );
-        return row?.serialized_workspace ?? null;
+        return readNativeWorkspaceSnapshot(database);
       },
       catch: () => failure("read"),
-    }),
+    }).pipe(
+      Effect.flatMap((value) =>
+        value === undefined ? Effect.fail(failure("read")) : Effect.succeed(value),
+      ),
+    ),
     write: (serializedWorkspace) =>
-      Effect.tryPromise({
-        try: async () => {
-          await database.runAsync(writeWorkspaceSql, serializedWorkspace, new Date().toISOString());
-        },
-        catch: () => failure("write"),
-      }),
+      new TextEncoder().encode(serializedWorkspace).byteLength > MAX_LOCAL_WORKSPACE_BYTES
+        ? Effect.fail(failure("write"))
+        : Effect.tryPromise({
+            try: async () => {
+              await writeNativeWorkspaceSnapshot(database, serializedWorkspace);
+            },
+            catch: () => failure("write"),
+          }),
     clear: Effect.tryPromise({
       try: async () => {
-        await database.runAsync("DELETE FROM workspace_snapshot WHERE id = 1");
+        await database.withExclusiveTransactionAsync(async (transaction) => {
+          await transaction.runAsync("DELETE FROM workspace_snapshot WHERE id = 1");
+          await transaction.runAsync("DELETE FROM workspace_snapshot_chunks");
+        });
       },
       catch: () => failure("clear"),
     }),

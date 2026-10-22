@@ -20,6 +20,7 @@ export function workspaceHasRemoteSyncMetadata(workspace: Workspace): boolean {
     (workspace.deletedAreas ?? []).some((area) => area.synced === true) ||
     (workspace.syncContentConflictAreaIds ?? []).length > 0 ||
     (workspace.reviewConflictIds ?? []).length > 0 ||
+    workspace.syncStudyBaseline !== undefined ||
     acceptedHistory
   );
 }

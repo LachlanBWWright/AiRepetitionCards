@@ -5,3 +5,5 @@ export * from "./learning-diagnostics";
 export * from "./activity-services";
 
 export * from "./plugin-tooling";
+
+export { createLearningActivity } from "./workflows/create-learning-activity";

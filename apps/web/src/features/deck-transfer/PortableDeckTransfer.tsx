@@ -1,4 +1,8 @@
 "use client";
+import { AnkiExportAction } from "../interchange/AnkiExportAction";
+
+import { reviewEventsInArea } from "@recall/domain";
+import { privateDeckHistory } from "@recall/application";
 
 import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import { Effect, Either, Schema } from "effect";
@@ -88,18 +92,7 @@ export function PortableDeckTransfer({
         setStatus("This deck cannot be packaged yet.");
         return;
       }
-      const history = includePrivate
-        ? {
-            currentArea: selectedArea,
-            reviewEvents: (workspace.reviewEvents ?? []).filter(
-              (event) => event.areaId === selectedArea.id,
-            ),
-            cardVersions: (workspace.cardVersions ?? []).filter(
-              (version) => version.areaId === selectedArea.id,
-            ),
-            ...(workspace.activityLibrary ? { activityLibrary: workspace.activityLibrary } : {}),
-          }
-        : undefined;
+      const history = includePrivate ? privateDeckHistory(workspace, selectedArea) : undefined;
       const result = await Effect.runPromise(
         Effect.either(exportPortableDeckPackage(document, mediaStore, history)),
       );
@@ -227,6 +220,14 @@ export function PortableDeckTransfer({
           onChange={(event) => void readFile(event.currentTarget.files?.[0])}
         />
       </div>
+      <AnkiExportAction
+        area={area}
+        mediaStore={mediaStore}
+        includeScheduling={includePrivate}
+        reviewEvents={reviewEventsInArea(workspace, area?.id)}
+        suspendedCardIds={workspace.schedulerSettings?.suspendedCardIds ?? []}
+        disabled={busy || disabled}
+      />
       {preview ? (
         <div className="mt-4 rounded-lg border border-recall-line p-3" aria-live="polite">
           <p className="font-medium text-recall-ink">Review import: {preview.filename}</p>

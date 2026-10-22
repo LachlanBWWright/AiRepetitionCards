@@ -1,7 +1,7 @@
-import { useMemo } from "react";
+import { useReviewTiming } from "@recall/react";
+import { useMemo, useCallback } from "react";
 import { Effect, Either, Schema } from "effect";
-import { toKnowledgeArea } from "@recall/application";
-import { dueNow } from "./workspace-utils";
+import { studySessionArea, studyQueue, localStudyDay, toKnowledgeArea } from "@recall/application";
 import { supabaseAuthClient } from "../../storage/auth/supabase-auth";
 import { makeNativeDeckSharingApi } from "../../storage/publishing/native-deck-sharing-api";
 import { createNativeActivityServices } from "../../storage/workspace/native-activity-services";
@@ -25,6 +25,7 @@ export function useAppServices(
     | "now"
     | "mediaStore"
     | "mediaRevision"
+    | "setShowAnswer"
   >,
 ) {
   const {
@@ -40,6 +41,7 @@ export function useAppServices(
     now,
     mediaStore,
     mediaRevision,
+    setShowAnswer,
   } = base;
   const hostedTutorApi = useMemo(() => {
     const apiUrl = process.env.EXPO_PUBLIC_RECALL_API_URL ?? "";
@@ -112,8 +114,9 @@ export function useAppServices(
       owner,
     );
   }, [accountUserId]);
-  const activeArea =
-    workspace?.areas.find((area) => area.id === activeAreaId) ?? workspace?.areas[0];
+  const activeArea = workspace
+    ? (studySessionArea(workspace, activeAreaId ?? "", now) ?? workspace.areas[0])
+    : undefined;
   const activeTutorAreaId = activeArea?.id ?? null;
   const chatGPTClientId = chatGPT.status.activeClientId;
   const chatGPTReady = chatGPT.status.accounts.some(
@@ -179,10 +182,18 @@ export function useAppServices(
       )
     : null;
   const dueCards = useMemo(
-    () => activeArea?.cards.filter((card) => dueNow(card, now)) ?? [],
-    [activeArea, now],
+    () =>
+      activeArea && workspace
+        ? studyQueue(workspace, activeArea, now, localStudyDay(now)).cards
+        : [],
+    [activeArea, workspace, now],
   );
   const card = dueCards[0];
+  const hideReviewAnswer = useCallback(() => {
+    setShowAnswer(false);
+  }, [setShowAnswer]);
+  const getReviewElapsedMs = useReviewTiming(card?.id, hideReviewAnswer, Date.now);
+
   const [mediaUris, setMediaUris] = useNativeCardMedia(mediaStore, card, mediaRevision);
   return {
     hostedTutorApi,
@@ -201,6 +212,7 @@ export function useAppServices(
     activePublishingArea,
     dueCards,
     card,
+    getReviewElapsedMs,
     mediaUris,
     setMediaUris,
   } as const;

@@ -4,14 +4,22 @@ import type {
   CardContent,
   LibraryDraft,
   LibraryNotes,
+  NoteAuthoringDraft,
   WorkspaceSearchResult,
 } from "@recall/application";
-import type { Assessment, LearningArea, Workspace } from "@recall/domain";
-import type { StoredMediaAsset } from "@recall/local-store";
+import type { Assessment, LearningArea, Workspace, SchedulerSettings } from "@recall/domain";
+import type { MediaStore, StoredMediaAsset } from "@recall/local-store";
 import type { makeNativeTutorApi } from "../../storage/ai/native-tutor-api";
 
 export type Editor =
-  | { readonly kind: "scheduler"; readonly retentionPercent: string; readonly baseline?: string }
+  | {
+      readonly kind: "scheduler";
+      readonly retentionPercent: string;
+      readonly settings: SchedulerSettings;
+      readonly dailyNewLimit: string;
+      readonly leechThreshold: string;
+      readonly baseline?: string;
+    }
   | {
       readonly kind: "area";
       readonly mode: "create" | "edit";
@@ -46,12 +54,18 @@ export type Editor =
     };
 
 export type NativeWorkspaceAuthoringPanelProps = {
+  readonly mediaStore?: MediaStore | null;
   readonly hideAreaPicker?: boolean;
   readonly flaggedOnly?: boolean;
   readonly onFlaggedFilterChange?: (value: boolean) => void;
   readonly notes?: LibraryNotes;
   readonly notesLoaded?: boolean;
   readonly onFlushDraft?: () => Promise<boolean>;
+  readonly onRetainNoteDraft?: (
+    draft: NoteAuthoringDraft,
+    assets: readonly StoredMediaAsset[],
+  ) => void;
+  readonly onDiscardNoteDraft?: (key: string) => void;
   readonly onRetainDraft?: (draft: LibraryDraft, assets?: readonly StoredMediaAsset[]) => void;
   readonly onDiscardDraft?: (key: string) => void;
   readonly onFlag?: (id: string) => void;

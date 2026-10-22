@@ -66,7 +66,7 @@ jobs:
       - name: Build API
         run: dotnet build backend/Recall.sln --configuration Release
       - name: Verify real ASP.NET publishing routes against disposable Supabase
-        run: python3 backend/scripts/verify-api.py --publishing
+        run: python3 backend/scripts/verify-api.py --publishing --study
       - name: Stop disposable services
         if: always()
         run: pnpm exec supabase stop --no-backup

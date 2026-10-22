@@ -1,4 +1,6 @@
+import { areaMediaReferences } from "../media/media-references";
 import { Effect, Either, Schema } from "effect";
+import { syncStudyDocument } from "./study-sync";
 import {
   SyncPullResponseSchema,
   SyncReviewOperationSchema,
@@ -216,7 +218,7 @@ export function syncWorkspace(
     yield* syncWorkspaceMedia(
       input.mediaStore,
       mediaGateway,
-      after.areas.flatMap((area) => area.document.cards.flatMap((card) => card.media ?? [])),
+      after.areas.flatMap((area) => areaMediaReferences(area.document)),
     ).pipe(
       Effect.mapError((error) =>
         failure(error.reason === "account-changed" ? "account-changed" : "media"),
@@ -225,7 +227,12 @@ export function syncWorkspace(
     for (const areaId of after.deletedAreaIds)
       if (!pulledDeletedAreaIds.includes(areaId)) pulledDeletedAreaIds.push(areaId);
     const pulledAreas = yield* snapshotAreas(after, input, prepared);
+    const study =
+      conflicts.length || pendingEvents.some((event) => !acceptedIds.includes(event.id))
+        ? undefined
+        : yield* syncStudyDocument(prepared, request);
     const changes: WorkspaceSyncChanges = {
+      ...(study ? { studyDocument: study.document, studyConflict: study.conflict } : {}),
       baseline: prepared,
       acceptedIds,
       conflicts,

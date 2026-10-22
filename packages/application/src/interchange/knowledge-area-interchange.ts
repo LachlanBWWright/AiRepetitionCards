@@ -1,3 +1,5 @@
+import { independentNoteLibrary } from "../notes/ownership";
+import { areaMediaReferences } from "../workspace/media/media-references";
 import { Effect, Schema } from "effect";
 import type {
   KnowledgeArea,
@@ -41,7 +43,7 @@ export function toKnowledgeArea(
   syncIds = false,
   includeMedia = false,
 ): Effect.Effect<KnowledgeArea, KnowledgeAreaExportError> {
-  if (!includeMedia && area.cards.some((card) => (card.media?.length ?? 0) > 0)) {
+  if (!includeMedia && areaMediaReferences(area).length > 0) {
     return Effect.fail({ _tag: "KnowledgeAreaExportError", reason: "media-requires-package" });
   }
   const objectives: NonNullable<LearningArea["objectives"]> =
@@ -67,6 +69,11 @@ export function toKnowledgeArea(
   }));
   const idsByTitle = new Map(objectives.map((objective) => [objective.title, objective.id]));
 
+  const noteLibrary = area.noteLibrary
+    ? syncIds
+      ? area.noteLibrary
+      : independentNoteLibrary(area.noteLibrary)
+    : undefined;
   const document = {
     schemaVersion: "1.0.0",
     id: syncIds ? area.id : (area.sourceId ?? area.id),
@@ -77,12 +84,27 @@ export function toKnowledgeArea(
     ...(area.difficulty ? { difficulty: area.difficulty } : {}),
     objectives: documentObjectives,
     ai: area.ai ?? defaultPolicy,
+    ...(noteLibrary
+      ? {
+          noteLibrary: {
+            ...noteLibrary,
+            notes: noteLibrary.notes.map((note) => ({
+              ...note,
+              objectiveIds: note.objectiveIds.map((id) => documentIdByLocalId.get(id) ?? id),
+            })),
+          },
+        }
+      : {}),
     cards: area.cards.map((card) => ({
       ...(card.cloze
         ? { kind: "cloze", text: card.cloze.text, deletionIndex: card.cloze.deletionIndex }
         : { kind: "basic", front: card.front, back: card.back }),
       id: syncIds ? card.id : (card.sourceId ?? card.id),
       ...(card.sourceId ? { sourceId: card.sourceId } : {}),
+      ...(card.noteId ? { noteId: card.noteId } : {}),
+      ...(card.templateId ? { templateId: card.templateId } : {}),
+      ...(card.presentation ? { presentation: card.presentation } : {}),
+      ...(card.imageOcclusion ? { imageOcclusion: card.imageOcclusion } : {}),
       ...(card.media ? { media: card.media } : {}),
       objectiveIds: (
         card.objectiveIds ?? [
@@ -142,7 +164,7 @@ export function fromKnowledgeArea(
   if (!Number.isFinite(now.getTime())) {
     return Effect.fail({ _tag: "KnowledgeAreaImportError", reason: "invalid-document" });
   }
-  if (!mediaAvailable && document.cards.some((card) => (card.media?.length ?? 0) > 0)) {
+  if (!mediaAvailable && areaMediaReferences(document).length > 0) {
     return Effect.fail({ _tag: "KnowledgeAreaImportError", reason: "media-requires-package" });
   }
   const titleById = new Map(
@@ -207,6 +229,10 @@ export function fromKnowledgeArea(
             ? { cloze: { text: card.text, deletionIndex } }
             : {}),
           ...(card.media ? { media: card.media } : {}),
+          ...(card.noteId ? { noteId: card.noteId } : {}),
+          ...(card.templateId ? { templateId: card.templateId } : {}),
+          ...(card.presentation ? { presentation: card.presentation } : {}),
+          ...(card.imageOcclusion ? { imageOcclusion: card.imageOcclusion } : {}),
           objective:
             card.objectiveIds.map((id) => titleById.get(id) ?? "Learning objective").join(" · ") ||
             "Learning objective",
@@ -217,6 +243,18 @@ export function fromKnowledgeArea(
         });
       }
     }
+    const noteLibrary = document.noteLibrary
+      ? {
+          ...(preserveIds ? document.noteLibrary : independentNoteLibrary(document.noteLibrary)),
+          notes: (preserveIds
+            ? document.noteLibrary
+            : independentNoteLibrary(document.noteLibrary)
+          ).notes.map((note) => ({
+            ...note,
+            objectiveIds: note.objectiveIds.map((id) => localObjectiveIdByDocumentId.get(id) ?? id),
+          })),
+        }
+      : undefined;
     return {
       id: preserveIds ? document.id : createAreaId(createId()),
       ...(document.sourceId
@@ -232,6 +270,7 @@ export function fromKnowledgeArea(
       language: document.language,
       ...(document.difficulty ? { difficulty: document.difficulty } : {}),
       ai: document.ai,
+      ...(noteLibrary ? { noteLibrary } : {}),
       tags: document.tags,
       licence: document.licence,
       ...(document.attribution !== undefined ? { attribution: document.attribution } : {}),

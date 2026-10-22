@@ -1,3 +1,4 @@
+import { areaMediaReferences } from "@recall/application";
 import { Effect, Either } from "effect";
 import {
   pendingPublicationOperation,
@@ -88,11 +89,7 @@ export async function runKnowledgeAreaPublishingPublishWorkflow(
   }
   setBusy(true);
   setNotice(null);
-  const references = [
-    ...new Map(
-      area.cards.flatMap((card) => card.media ?? []).map((item) => [item.id, item]),
-    ).values(),
-  ];
+  const references = areaMediaReferences(area);
   for (const reference of references) {
     const local = await Effect.runPromise(Effect.either(mediaStore.get(reference.id)));
     if (Either.isLeft(local) || !local.right || !verifyMediaAsset(local.right)) {

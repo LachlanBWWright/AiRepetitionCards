@@ -4,6 +4,8 @@ import { cn } from "../../../lib/utils";
 
 export type NativeButtonProps = {
   readonly label: string;
+  readonly accessibilityLabel?: string;
+  readonly selected?: boolean;
   readonly onPress: () => void;
   readonly tone?: "dark" | "soft";
   readonly disabled?: boolean;
@@ -13,6 +15,8 @@ export type NativeButtonProps = {
 
 export function NativeButton({
   label,
+  accessibilityLabel,
+  selected,
   onPress,
   tone = "dark",
   disabled = false,
@@ -21,7 +25,8 @@ export function NativeButton({
 }: NativeButtonProps) {
   return (
     <Button
-      accessibilityState={{ disabled }}
+      accessibilityState={{ disabled, ...(selected === undefined ? {} : { selected }) }}
+      accessibilityLabel={accessibilityLabel ?? label}
       className={cn("min-h-12 rounded-xl", className)}
       disabled={disabled}
       onPress={onPress}

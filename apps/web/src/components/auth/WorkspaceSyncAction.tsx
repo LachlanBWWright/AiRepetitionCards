@@ -57,6 +57,8 @@ export function WorkspaceSyncAction({
     hasMore: boolean,
     uploadDeferred: boolean,
     baseline: Workspace,
+    studyDocument?: import("@recall/domain").StudySyncDocument,
+    studyConflict?: Workspace["studySettingsConflict"],
   ) => Workspace | null;
   onContentConflict: (
     ownerId: string,

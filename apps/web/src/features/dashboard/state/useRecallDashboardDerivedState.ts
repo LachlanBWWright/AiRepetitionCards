@@ -2,6 +2,10 @@ import { useCallback, useMemo, useState } from "react";
 import { Effect, Either } from "effect";
 import { emptyActivityLibrary } from "@recall/domain";
 import {
+  studySessionQueue,
+  studySessionArea,
+  nextStudyArea,
+  summarizeStudySubjects,
   recommendLearningActivities,
   retainLibraryDraft,
   renderClozeCard,
@@ -13,7 +17,6 @@ import { retainDraftFile } from "@/lib/library-notes-store";
 import { cardDuplicateAcknowledgementKey } from "@/components/knowledge/library/duplicates/CardDuplicateWarnings";
 import { summarizeDashboardReviews } from "@/features/dashboard/review/RecallDashboardReviewSummary";
 import { snapshotLibraryDraft } from "@/features/dashboard/authoring/drafts/RecallDashboardDraftSnapshot";
-import { dueNow } from "@/features/dashboard/layout/RecallDashboardSupport";
 import type { LearningArea } from "@/features/workspace/types";
 import type { RecallDashboardBaseState } from "./useRecallDashboardBaseState";
 import type { RecallDashboardEditorState } from "./useRecallDashboardEditorState";
@@ -50,6 +53,7 @@ export function useRecallDashboardDerivedState(
     | "libraryNotes"
     | "practiceId"
     | "selectedId"
+    | "imageOcclusion"
     | "cardKind"
     | "clozeText"
     | "clozeIndex"
@@ -64,6 +68,7 @@ export function useRecallDashboardDerivedState(
     | "areaEditor"
     | "workspaceRef"
     | "addingCard"
+    | "cardPresentation"
     | "cardTags"
     | "mediaFile"
     | "removedMediaIds"
@@ -79,6 +84,7 @@ export function useRecallDashboardDerivedState(
     libraryNotes,
     practiceId,
     selectedId,
+    imageOcclusion,
     cardKind,
     clozeText,
     clozeIndex,
@@ -93,6 +99,7 @@ export function useRecallDashboardDerivedState(
     areaEditor,
     workspaceRef,
     addingCard,
+    cardPresentation,
     cardTags,
     mediaFile,
     removedMediaIds,
@@ -117,10 +124,9 @@ export function useRecallDashboardDerivedState(
     .slice(0, 3);
   const area =
     practiceId === "all"
-      ? (workspace.areas.find((item) => item.cards.some((entry) => dueNow(entry, now))) ??
-        workspace.areas[0])
+      ? (nextStudyArea(workspace, now.getTime()) ?? workspace.areas[0])
       : practiceId
-        ? workspace.areas.find((item) => item.id === practiceId)
+        ? studySessionArea(workspace, practiceId, now.getTime())
         : (workspace.areas.find((item) => item.id === selectedId) ?? workspace.areas[0]);
   const publishingAreaDocument = useMemo(
     () => publishingDocument(area, libraryNotes.notes.activityLibrary ?? emptyActivityLibrary),
@@ -174,10 +180,12 @@ export function useRecallDashboardDerivedState(
         front,
         back,
         clozeText,
+        cardPresentation,
         cardTags,
         mediaFilePresent: Boolean(mediaFile),
         removedMediaIds,
         sourceCard: cardEditor.current.sourceCard,
+        imageOcclusion,
         cardKind,
         clozeIndex,
         cardObjectiveIds,
@@ -193,10 +201,12 @@ export function useRecallDashboardDerivedState(
       front,
       back,
       clozeText,
+      cardPresentation,
       cardTags,
       mediaFile,
       removedMediaIds,
       editingCardId,
+      imageOcclusion,
       cardKind,
       clozeIndex,
       cardObjectiveIds,
@@ -212,8 +222,14 @@ export function useRecallDashboardDerivedState(
     if (draft.kind === "card") retainDraftFile(notesScope, draft.key, mediaFile);
   }, [snapshotOpenLibraryDraft, updateLibraryNotes, notesScope, mediaFile]);
   const allCards = workspace.areas.flatMap((item) => item.cards);
-  const dueCount = allCards.filter((card) => dueNow(card, now)).length;
-  const card = area?.cards.find((item) => dueNow(item, now));
+  const dueCount = summarizeStudySubjects(workspace, now.getTime()).reduce(
+    (total, row) => total + row.due,
+    0,
+  );
+  const queue = area
+    ? studySessionQueue(workspace, practiceId ?? "", area, now.getTime())
+    : undefined;
+  const card = queue?.cards[0];
   const reviewSummary = useMemo(
     () => summarizeDashboardReviews(workspace, area, now),
     [workspace, area, now],
@@ -246,6 +262,7 @@ export function useRecallDashboardDerivedState(
     retainOpenDraft,
     allCards,
     dueCount,
+    queue,
     card,
     reviewSummary,
     practice,

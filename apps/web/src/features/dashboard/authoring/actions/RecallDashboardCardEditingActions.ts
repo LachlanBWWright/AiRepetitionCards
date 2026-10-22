@@ -19,10 +19,12 @@ export function createRecallDashboardCardEditingActions(
     | "setEditingCardId"
     | "setFront"
     | "setBack"
+    | "setImageOcclusion"
     | "setCardKind"
     | "setClozeText"
     | "setClozeIndex"
     | "setCardObjectiveIds"
+    | "setCardPresentation"
     | "setCardTags"
     | "setRemovedMediaIds"
     | "setMediaFile"
@@ -43,10 +45,12 @@ export function createRecallDashboardCardEditingActions(
     setEditingCardId,
     setFront,
     setBack,
+    setImageOcclusion,
     setCardKind,
     setClozeText,
     setClozeIndex,
     setCardObjectiveIds,
+    setCardPresentation,
     setCardTags,
     setRemovedMediaIds,
     setMediaFile,
@@ -74,6 +78,7 @@ export function createRecallDashboardCardEditingActions(
     setEditingCardId(latestCard.id);
     setFront(latestCard.front);
     setBack(latestCard.back);
+    setImageOcclusion(latestCard.imageOcclusion);
     setCardKind(latestCard.cloze ? "cloze" : "basic");
     setClozeText(latestCard.cloze?.text ?? "");
     setClozeIndex(String(latestCard.cloze?.deletionIndex ?? 1));
@@ -83,6 +88,7 @@ export function createRecallDashboardCardEditingActions(
           .filter((objective) => objective.title === latestCard.objective)
           .map((objective) => objective.id),
     );
+    setCardPresentation(latestCard.presentation);
     setCardTags(formatTagInput(latestCard.tags ?? []));
     setRemovedMediaIds([]);
     setMediaFile(null);

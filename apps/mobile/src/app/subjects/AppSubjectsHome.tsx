@@ -1,8 +1,10 @@
+import { NativeSubjectTree } from "./NativeSubjectTree";
 import { useState } from "react";
 import { Text, View } from "react-native";
 import { NativeButton, NativeSelect, NativeTextField } from "@recall/ui-native";
 import {
-  summarizeSubjects,
+  summarizeStudySubjects,
+  nextStudyArea,
   subjectSortOptions,
   isSubjectSort,
   type SubjectSort,
@@ -12,19 +14,18 @@ import type { AppModel } from "../useAppController";
 export function AppSubjectsHome({ model }: { readonly model: AppModel }) {
   const [sort, setSort] = useState<SubjectSort>("daily");
   const [search, setSearch] = useState("");
-  const rows = summarizeSubjects(
-    model.workspace?.areas ?? [],
-    model.workspace?.reviewEvents ?? [],
-    model.now,
-    sort,
-    model.deepPracticeRecommendations.map((item) => item.activity.areaId),
-    search,
-  );
-  const due = (model.workspace?.areas ?? []).reduce(
-    (count, area) =>
-      count + area.cards.filter((card) => Date.parse(card.schedule.due) <= model.now).length,
-    0,
-  );
+  const rows = model.workspace
+    ? summarizeStudySubjects(
+        model.workspace,
+        model.now,
+        sort,
+        model.deepPracticeRecommendations.map((item) => item.activity.areaId),
+        search,
+      )
+    : [];
+  const due = model.workspace
+    ? summarizeStudySubjects(model.workspace, model.now).reduce((total, row) => total + row.due, 0)
+    : 0;
   function open(id: string, mode: SubjectMode) {
     if (model.reviewPending) return;
     if (mode === "review") model.startStudy(id);
@@ -79,15 +80,25 @@ export function AppSubjectsHome({ model }: { readonly model: AppModel }) {
         label="Review all due"
         disabled={model.reviewPending || due === 0}
         onPress={() => {
-          const next = summarizeSubjects(model.workspace?.areas ?? [], [], model.now, "daily").find(
-            (row) => row.due > 0,
-          );
+          const next = model.workspace ? nextStudyArea(model.workspace, model.now) : undefined;
           if (next) {
-            model.startStudy(next.area.id);
+            model.startStudy(next.id);
             model.setReviewAll(true);
           }
         }}
       />
+      {model.workspace && (
+        <NativeSubjectTree
+          workspace={model.workspace}
+          disabled={model.reviewPending}
+          onOpen={(id) => {
+            open(id, "overview");
+          }}
+          onStudy={(id) => {
+            open(id, "review");
+          }}
+        />
+      )}
       <NativeTextField label="Find a subject" value={search} onChangeText={setSearch} />
       <NativeSelect
         label="Sort subjects"

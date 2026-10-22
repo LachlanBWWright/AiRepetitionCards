@@ -1,7 +1,9 @@
+import { detachDeletedNoteOwner } from "../../notes/ownership";
 import { Effect } from "effect";
+import { applyStudyDocument, mergeStudyDocuments, workspaceStudyDocument } from "./study-sync";
 import { toKnowledgeArea } from "../../interchange/knowledge-area-interchange";
 import { prepareWorkspaceForSync, repairReviewSyncConflicts } from "@recall/sync-core";
-import { type AreaId, type LearningArea, type Workspace } from "@recall/domain";
+import { reviewPlacement, type AreaId, type LearningArea, type Workspace } from "@recall/domain";
 import { rebuildWorkspaceSchedules } from "../../review/schedule-replay";
 import {
   retainedReviewContent,
@@ -106,15 +108,46 @@ export function applyWorkspaceSyncChanges(
       },
       createId,
     );
-    const rebased = repairReviewSyncConflicts(normalized, changes.conflicts, createId);
+    const repaired = repairReviewSyncConflicts(normalized, changes.conflicts, createId);
+    const localStudy = workspaceStudyDocument(repaired);
+    const mergedStudy = changes.studyDocument
+      ? yield* Effect.either(
+          mergeStudyDocuments(
+            workspaceStudyDocument(changes.baseline),
+            localStudy,
+            changes.studyDocument,
+          ),
+        )
+      : undefined;
+    const document =
+      mergedStudy?._tag === "Right"
+        ? mergedStudy.right
+        : changes.studyDocument
+          ? yield* mergeStudyDocuments(
+              { ...localStudy, settings: changes.studyDocument.settings },
+              { ...localStudy, settings: changes.studyDocument.settings },
+              changes.studyDocument,
+            )
+          : undefined;
+    const rebased = document
+      ? {
+          ...applyStudyDocument(repaired, document),
+          syncStudyBaseline: changes.studyDocument,
+          studySettingsConflict:
+            mergedStudy?._tag === "Left"
+              ? { local: localStudy.settings, remote: document.settings }
+              : (changes.studyConflict ?? repaired.studySettingsConflict),
+        }
+      : repaired;
     const content = yield* reconcileContent(rebased, changes);
+    const placement = reviewPlacement({ ...rebased, areas: content.areas });
     const events = new Map((rebased.reviewEvents ?? []).map((event) => [event.id, event]));
     for (const event of changes.pulledEvents) {
       const existing = events.get(event.id);
       events.set(
         event.id,
         existing
-          ? yield* reconcileCanonicalReview(existing, event).pipe(
+          ? yield* reconcileCanonicalReview(existing, event, placement.areaId(existing)).pipe(
               Effect.mapError(() => failure("reviews")),
             )
           : event,
@@ -192,7 +225,11 @@ export function applyWorkspaceSyncChanges(
       syncCursor: changes.cursor,
       syncHasMore: changes.hasMore,
     }).pipe(Effect.mapError(() => failure("replay")));
-    return releaseRetainedReviewContent(reconciled, {
+    const detached = changes.pulledDeletedAreaIds.reduce(
+      (current, areaId) => detachDeletedNoteOwner(current, areaId),
+      reconciled,
+    );
+    return releaseRetainedReviewContent(detached, {
       deletedCardIds: changes.deletedCardIds,
       deletedAreaIds: [...changes.syncedAreaTombstoneIds, ...changes.pulledDeletedAreaIds],
     });

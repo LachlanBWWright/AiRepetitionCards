@@ -1,6 +1,13 @@
+import { NoteAuthoringDraftSchema } from "../notes/drafts";
 import { Schema, Effect } from "effect";
 import type { StoredMediaAsset } from "@recall/local-store";
-import { ActivityLibrarySchema, AssessmentSchema, MediaReferenceSchema } from "@recall/domain";
+import {
+  ReviewPresentationSchema,
+  ActivityLibrarySchema,
+  AssessmentSchema,
+  ImageOcclusionDraftSchema,
+  MediaReferenceSchema,
+} from "@recall/domain";
 import { mergeActivityLibraries } from "../activities/learning-activities";
 
 // Drafts may be incomplete or invalid authoring proposals; validate their shape, not card validity.
@@ -21,11 +28,13 @@ export const LibraryDraftSchema = Schema.Union(
     areaId: Schema.String,
     id: Schema.String,
     mode: Schema.Literal("create", "edit"),
+    imageOcclusion: Schema.optional(ImageOcclusionDraftSchema),
     cardKind: Schema.Literal("basic", "cloze"),
     front: text,
     back: text,
     clozeText: text,
     clozeIndex: text,
+    presentation: Schema.optional(ReviewPresentationSchema),
     tagsText: text,
     objectiveIds: Schema.Array(Schema.String),
     media: Schema.Array(MediaReferenceSchema),
@@ -39,6 +48,7 @@ export const LibraryNotesSchema = Schema.Struct({
   version: Schema.Literal(1),
   activityLibrary: Schema.optional(ActivityLibrarySchema),
   drafts: Schema.Array(LibraryDraftSchema),
+  noteDrafts: Schema.optional(Schema.Array(NoteAuthoringDraftSchema).pipe(Schema.maxItems(500))),
   flaggedCardIds: Schema.Array(Schema.String),
 });
 export type LibraryNotes = typeof LibraryNotesSchema.Type;

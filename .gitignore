@@ -32,3 +32,5 @@ artifacts/storybook-screenshots/
 
 # Generated browser test reports, screenshots, and traces.
 artifacts/e2e/
+
+apps/desktop/public/vendor/sql-wasm.wasm

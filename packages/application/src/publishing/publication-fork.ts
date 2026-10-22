@@ -1,3 +1,4 @@
+import { independentNoteLibrary } from "../notes/ownership";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { Effect, Either, Schema } from "effect";
 import {
@@ -166,9 +167,19 @@ export function createPublicationFork(input: {
       input.source.cards.map((card) => [card.id, identity.id(PublicationForkIdKind.Card, card.id)]),
     );
 
+    const noteLibrary = input.source.noteLibrary
+      ? {
+          ...independentNoteLibrary(input.source.noteLibrary),
+          notes: independentNoteLibrary(input.source.noteLibrary).notes.map((note) => ({
+            ...note,
+            objectiveIds: note.objectiveIds.map((id) => objectives.get(id) ?? id),
+          })),
+        }
+      : undefined;
     const document = yield* decodeAndMigrateKnowledgeArea({
       ...input.source,
       id: identity.areaId,
+      ...(noteLibrary ? { noteLibrary } : {}),
       sourceId: input.source.sourceId ?? input.source.id,
       attribution: input.attribution ?? input.source.attribution ?? null,
       licence: input.license ?? input.source.licence,

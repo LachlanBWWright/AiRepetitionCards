@@ -54,7 +54,9 @@ export function ProposedCardPreview({
           size="small"
           variant="secondary"
           disabled={disabled}
-          onClick={() => setEditing(true)}
+          onClick={() => {
+            setEditing(true);
+          }}
         >
           Edit
         </Button>
@@ -85,7 +87,9 @@ export function ProposedCardPreview({
               disabled={disabled}
               maxLength={1000}
               value={proposal.front}
-              onChange={(event) => onChange({ ...proposal, front: event.target.value })}
+              onChange={(event) => {
+                onChange({ ...proposal, front: event.target.value });
+              }}
             />
           </div>
           <div className="grid gap-2">
@@ -97,17 +101,27 @@ export function ProposedCardPreview({
               disabled={disabled}
               maxLength={3000}
               value={proposal.back}
-              onChange={(event) => onChange({ ...proposal, back: event.target.value })}
+              onChange={(event) => {
+                onChange({ ...proposal, back: event.target.value });
+              }}
             />
           </div>
           <ProposalObjectiveSelect
             objectives={objectives}
             value={proposal.objectiveId}
             disabled={disabled}
-            onChange={(objectiveId) => onChange({ ...proposal, objectiveId })}
+            onChange={(objectiveId) => {
+              onChange({ ...proposal, objectiveId });
+            }}
           />
           {editorTools}
-          <Button className="justify-self-end" size="small" onClick={() => setEditing(false)}>
+          <Button
+            className="justify-self-end"
+            size="small"
+            onClick={() => {
+              setEditing(false);
+            }}
+          >
             Done
           </Button>
         </DialogContent>

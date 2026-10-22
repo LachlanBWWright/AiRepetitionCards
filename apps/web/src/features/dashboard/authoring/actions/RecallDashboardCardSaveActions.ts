@@ -31,6 +31,7 @@ export function createRecallDashboardCardSaveActions(
     | "cardSavePending"
     | "duplicatesAccepted"
     | "setCardEditorError"
+    | "cardPresentation"
     | "cardTags"
     | "demo"
     | "ready"
@@ -39,6 +40,7 @@ export function createRecallDashboardCardSaveActions(
     | "editingCardId"
     | "cardEditorMounted"
     | "removedMediaIds"
+    | "imageOcclusion"
     | "cardKind"
     | "front"
     | "back"
@@ -69,6 +71,7 @@ export function createRecallDashboardCardSaveActions(
     cardSavePending,
     duplicatesAccepted,
     setCardEditorError,
+    cardPresentation,
     cardTags,
     demo,
     ready,
@@ -77,6 +80,7 @@ export function createRecallDashboardCardSaveActions(
     editingCardId,
     cardEditorMounted,
     removedMediaIds,
+    imageOcclusion,
     cardKind,
     front,
     back,
@@ -134,12 +138,16 @@ export function createRecallDashboardCardSaveActions(
       areaId: area.id,
       cardId,
       content: {
+        imageOcclusion,
+        removeImageOcclusion:
+          !imageOcclusion && Boolean(cardEditor.current.sourceCard?.imageOcclusion),
         kind: cardKind,
         front,
         back,
         cloze:
           cardKind === "cloze" ? { text: clozeText, deletionIndex: Number(clozeIndex) } : undefined,
         objectiveIds: cardObjectiveIds,
+        presentation: cardPresentation,
         tags: parsedTags.right,
         media: references,
       },

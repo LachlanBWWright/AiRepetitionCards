@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { Effect, Either, Schema } from "effect";
 import {
   AccountIdSchema,
+  StudySyncDocumentSchema,
   createAreaId,
   createAssessmentId,
   createDeviceId,
@@ -110,6 +111,15 @@ export function server(
   const uploads: string[] = [];
   const postedDocuments: Array<readonly KnowledgeArea[]> = [];
   let checkpointed: Workspace | undefined;
+  let study = {
+    revision: 0,
+    document: {
+      settings: { requestRetention: 0.9 },
+      adjustments: [],
+      corrections: [],
+      undoStates: [],
+    } as typeof StudySyncDocumentSchema.Type,
+  };
   let loseNextReviewResponse = false;
   let failNextTombstone = false;
   const recordDocument = (document: KnowledgeArea, color: string): void => {
@@ -134,6 +144,41 @@ export function server(
       if (request.method === "POST") {
         assert.ok(checkpointed, "durable owner checkpoint precedes every cloud mutation");
         assert.equal(request.headers?.["x-recall-workspace-owner"], remoteOwner);
+      }
+      if (request.path.startsWith("/api/v1/workspace/study/pages")) {
+        if (request.method === "GET")
+          return Effect.succeed(response({ ...study, nextCursor: null }));
+        const body = decode(
+          Schema.Struct({ revision: Schema.Number, document: StudySyncDocumentSchema }),
+          request.body,
+        );
+        if (body.revision !== study.revision)
+          return Effect.succeed(response({ error: "study-conflict" }, 409));
+        study = {
+          revision: study.revision + 1,
+          document: {
+            settings: body.document.settings,
+            adjustments: [...study.document.adjustments, ...body.document.adjustments],
+            corrections: [...study.document.corrections, ...body.document.corrections],
+            undoStates: [...study.document.undoStates, ...body.document.undoStates],
+            importedSchedules: [
+              ...(study.document.importedSchedules ?? []),
+              ...(body.document.importedSchedules ?? []),
+            ],
+          },
+        };
+        return Effect.succeed(response({ revision: study.revision }));
+      }
+      if (request.path === "/api/v1/workspace/study") {
+        if (request.method === "GET") return Effect.succeed(response(study));
+        const body = decode(
+          Schema.Struct({ revision: Schema.Number, document: StudySyncDocumentSchema }),
+          request.body,
+        );
+        if (body.revision !== study.revision)
+          return Effect.succeed(response({ error: "study-conflict" }, 409));
+        study = { revision: study.revision + 1, document: body.document };
+        return Effect.succeed(response(study));
       }
       if (request.path === "/api/v1/workspace" && request.method === "GET")
         return Effect.succeed(response(snapshot()));

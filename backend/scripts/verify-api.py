@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """Start an isolated Development API, verify its HTTP contracts, and always stop it.
 
-Build Release first. --publishing also needs the three explicit local Supabase
-RECALL_INTEGRATION_* settings and runs the account-scoped publishing verifier.
+Build Release first. --publishing and --study need the three explicit local
+Supabase RECALL_INTEGRATION_* settings, or --local-supabase to read local CLI status.
 """
 
 import argparse
+import json
 import os
 from pathlib import Path
 import subprocess
@@ -28,12 +29,36 @@ def run_checks(checks, root, environment):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--publishing", action="store_true")
+    parser.add_argument("--study", action="store_true")
+    parser.add_argument("--local-supabase", action="store_true",
+                        help="Read credentials from the running local Supabase CLI without printing them.")
     parser.add_argument("--port", type=int, default=5019)
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[2]
     origin = f"http://127.0.0.1:{args.port}"
     environment = dict(os.environ, ASPNETCORE_ENVIRONMENT="Development", API_RATE_LIMIT_MODE="memory")
-    if args.publishing:
+    if args.local_supabase:
+        status = subprocess.run(["pnpm", "exec", "supabase", "status", "-o", "json"],
+                                cwd=root, capture_output=True, text=True, check=False, timeout=30)
+        if status.returncode != 0:
+            print("Local Supabase status could not be read.", file=sys.stderr)
+            return 1
+        try:
+            settings = json.loads(status.stdout)
+            if not isinstance(settings, dict):
+                print("Local Supabase status was invalid.", file=sys.stderr)
+                return 1
+            for suffix, key in (("URL", "API_URL"), ("PUBLISHABLE_KEY", "ANON_KEY"),
+                                ("SERVICE_ROLE_KEY", "SERVICE_ROLE_KEY")):
+                value = settings.get(key)
+                if not isinstance(value, str) or not value:
+                    print("Local Supabase status omitted required configuration.", file=sys.stderr)
+                    return 1
+                environment[f"RECALL_INTEGRATION_SUPABASE_{suffix}"] = value
+        except (json.JSONDecodeError, TypeError):
+            print("Local Supabase status was invalid.", file=sys.stderr)
+            return 1
+    if args.publishing or args.study:
         for suffix in ("URL", "PUBLISHABLE_KEY", "SERVICE_ROLE_KEY"):
             value = environment.get(f"RECALL_INTEGRATION_SUPABASE_{suffix}")
             if not value:
@@ -66,6 +91,8 @@ def main():
             checks = [["verify-openapi.py", f"{origin}/swagger/v1/swagger.json"]]
             if args.publishing:
                 checks.append(["verify-deck-sharing.py"])
+            if args.study:
+                checks.append(["verify-study-sync.py"])
             return run_checks(checks, root, environment)
         finally:
             process.terminate()

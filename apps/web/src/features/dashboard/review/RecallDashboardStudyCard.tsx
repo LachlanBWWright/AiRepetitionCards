@@ -1,18 +1,13 @@
+import { applyMediaTrashPurge } from "@recall/application";
+import { browserWorkspaceStore } from "@/features/workspace/browser-workspace-store";
+import { libraryDraftMediaReferences } from "@recall/application";
+import { browserMediaStore } from "@/features/workspace/browser-media-store";
 import { summarizeStudySession, toggleCardFlag } from "@recall/application";
 import { DashboardView } from "@/features/dashboard/navigation/dashboard-navigation";
 import { ReviewCard } from "@/components/ui/ReviewCard";
-import { dueNow } from "@/features/dashboard/layout/RecallDashboardSupport";
+import { reviewParameters, nextStudyArea } from "@recall/application";
+import { StudyTools } from "./StudyTools";
 import type { RecallDashboardModel } from "../state/useRecallDashboardController";
-
-function findNextDueArea(
-  areas: RecallDashboardModel["workspace"]["areas"],
-  currentAreaId: string,
-  now: Date,
-) {
-  return areas.find(
-    (item) => item.id !== currentAreaId && item.cards.some((entry) => dueNow(entry, now)),
-  );
-}
 
 function createNextDeckHandler(startPractice: (areaId: string) => void, areaId: string) {
   return function startNextDeck() {
@@ -22,6 +17,8 @@ function createNextDeckHandler(startPractice: (areaId: string) => void, areaId: 
 
 export function RecallDashboardStudyCard({ model }: { readonly model: RecallDashboardModel }) {
   const {
+    queue,
+    saveAuthoringCommand,
     reviewSaving,
     reviewSaveFailed,
     area,
@@ -53,7 +50,9 @@ export function RecallDashboardStudyCard({ model }: { readonly model: RecallDash
   function startNextPractice(areaId: string) {
     startPractice(areaId);
   }
-  const nextArea = area ? findNextDueArea(workspace.areas, area.id, now) : undefined;
+  const flaggedCount =
+    area?.cards.filter((entry) => libraryNotes.notes.flaggedCardIds.includes(entry.id)).length ?? 0;
+  const nextArea = area ? nextStudyArea(workspace, now.getTime(), area.id) : undefined;
   const onNextDeck = nextArea ? createNextDeckHandler(startNextPractice, nextArea.id) : undefined;
   return (
     <div
@@ -75,56 +74,76 @@ export function RecallDashboardStudyCard({ model }: { readonly model: RecallDash
             </button>
           </p>
         ) : (
-          <ReviewCard
-            area={area}
-            flaggedCount={
-              area.cards.filter((entry) => libraryNotes.notes.flaggedCardIds.includes(entry.id))
-                .length
-            }
-            flagged={Boolean(card && libraryNotes.notes.flaggedCardIds.includes(card.id))}
-            onFlag={(target) => {
-              libraryNotes.update((notes) => toggleCardFlag(notes, target.id));
-            }}
-            onEditFlagged={() => {
-              setOnlyFlagged(true);
-              if (onViewChange) onViewChange(DashboardView.Library, area.id, "flagged");
-              else setActiveView(DashboardView.Library, area.id);
-            }}
-            session={summarizeStudySession(area, sessionEvents, now.getTime())}
-            now={now}
-            schedulerParameters={workspace.schedulerSettings}
-            onBack={() => {
-              setActiveView(DashboardView.Today);
-            }}
-            onNextDeck={onNextDeck}
-            card={card}
-            mediaPreviews={mediaPreviews}
-            showAnswer={showAnswer}
-            keyboardActive={
-              !addingArea &&
-              !addingCard &&
-              !showAreaSettings &&
-              !reviewSaving &&
-              !reviewSaveFailed &&
-              !erased &&
-              !stale
-            }
-            disabled={
-              reviewSaving ||
-              reviewSaveFailed ||
-              erased ||
-              stale ||
-              (!demo && (!ready || !cacheMayWrite))
-            }
-            saving={reviewSaving}
-            onReveal={() => {
-              setShowAnswer(true);
-            }}
-            onRate={(rating) => void review(rating)}
-            onEdit={editCard}
-            onDelete={(target) => void deleteCard(target)}
-            onAddCard={addCard}
-          />
+          <>
+            <StudyTools
+              workspaceStore={browserWorkspaceStore}
+              onPurged={(result) => {
+                model.setWorkspace((current) => applyMediaTrashPurge(current, result));
+              }}
+              protectedReferences={libraryDraftMediaReferences(libraryNotes.notes)}
+              workspace={workspace}
+              mediaStore={browserMediaStore}
+              area={area}
+              card={card}
+              save={saveAuthoringCommand}
+              onEdit={editCard}
+              disabled={
+                reviewSaving ||
+                reviewSaveFailed ||
+                erased ||
+                stale ||
+                (!demo && (!ready || !cacheMayWrite))
+              }
+            />
+            <ReviewCard
+              reviewerSettings={workspace.schedulerSettings?.reviewer}
+              area={area}
+              flaggedCount={flaggedCount}
+              flagged={Boolean(card && libraryNotes.notes.flaggedCardIds.includes(card.id))}
+              onFlag={(target) => {
+                libraryNotes.update((notes) => toggleCardFlag(notes, target.id));
+              }}
+              onEditFlagged={() => {
+                setOnlyFlagged(true);
+                if (onViewChange) onViewChange(DashboardView.Library, area.id, "flagged");
+                else setActiveView(DashboardView.Library, area.id);
+              }}
+              session={summarizeStudySession(area, sessionEvents, now.getTime(), queue)}
+              now={now}
+              schedulerParameters={card ? reviewParameters(workspace, area.id, card.id) : undefined}
+              onBack={() => {
+                setActiveView(DashboardView.Today);
+              }}
+              onNextDeck={onNextDeck}
+              card={card}
+              mediaPreviews={mediaPreviews}
+              showAnswer={showAnswer}
+              keyboardActive={
+                !addingArea &&
+                !addingCard &&
+                !showAreaSettings &&
+                !reviewSaving &&
+                !reviewSaveFailed &&
+                !erased &&
+                !stale
+              }
+              disabled={
+                reviewSaving ||
+                reviewSaveFailed ||
+                erased ||
+                stale ||
+                (!demo && (!ready || !cacheMayWrite))
+              }
+              saving={reviewSaving}
+              onReveal={() => {
+                setShowAnswer(true);
+              }}
+              onRate={(rating) => void review(rating)}
+              onEdit={editCard}
+              onDelete={(target) => void deleteCard(target)}
+              onAddCard={addCard}
+            />
+          </>
         )}
       </div>
     </div>

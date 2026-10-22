@@ -5,7 +5,11 @@ import { Effect, Either, Schema } from "effect";
 import { NextResponse, type NextRequest } from "next/server";
 import { privateJson } from "@/lib/http/private-json";
 import { authenticatedApiRateLimit } from "@/lib/http/api-rate-limit";
-import { KnowledgeAreaSchema } from "@recall/domain";
+import {
+  KnowledgeAreaSchema,
+  MAX_COLLECTION_CARDS,
+  MAX_WORKSPACE_CONTENT_BYTES,
+} from "@recall/domain";
 import { expandCloze } from "@recall/application";
 import {
   WorkspaceContentPushRequestSchema,
@@ -34,7 +38,7 @@ const StoredAreaVersionSchema = Schema.Struct({
 function isValidSyncDocument(document: typeof KnowledgeAreaSchema.Type): boolean {
   if (
     !uuidPattern.test(document.id) ||
-    document.cards.length > 500 ||
+    document.cards.length > MAX_COLLECTION_CARDS ||
     document.objectives.length > 200
   ) {
     return false;
@@ -81,7 +85,9 @@ async function handlePOST(request: NextRequest): Promise<NextResponse> {
   const limited = await authenticatedApiRateLimit(connected.userId, "workspace-sync", { request });
   if (limited) return limited;
 
-  const body = await Effect.runPromise(Effect.either(readJsonBody(request, 5_000_000)));
+  const body = await Effect.runPromise(
+    Effect.either(readJsonBody(request, MAX_WORKSPACE_CONTENT_BYTES)),
+  );
   if (
     Either.isLeft(body) ||
     typeof body.right !== "object" ||
@@ -147,7 +153,8 @@ async function handlePOST(request: NextRequest): Promise<NextResponse> {
       cardIds.add(card.id);
     }
     cardCount += decoded.right.cards.length;
-    if (cardCount > 2_000) return privateJson({ error: "batch-too-large" }, { status: 413 });
+    if (cardCount > MAX_COLLECTION_CARDS)
+      return privateJson({ error: "batch-too-large" }, { status: 413 });
     areas.push({ document: decoded.right, color, baseContentHash });
   }
 
@@ -170,12 +177,14 @@ async function handlePOST(request: NextRequest): Promise<NextResponse> {
   if (new Set(tombstoneKeys).size !== tombstones.length) {
     return privateJson({ error: "invalid-tombstones" }, { status: 400 });
   }
-  const tombstoneSet = new Set(tombstones.map(({ cardId }) => cardId));
+  const tombstoneSet = new Set(tombstones.map(({ areaId, cardId }) => `${areaId}:${cardId}`));
   const filteredPayload = payload.map((area) => {
-    const cards = area.cards.filter((card) => !tombstoneSet.has(card.id));
+    const cards = area.cards.filter((card) => !tombstoneSet.has(`${area.document.id}:${card.id}`));
     const document = {
       ...area.document,
-      cards: area.document.cards.filter((card) => !tombstoneSet.has(card.id)),
+      cards: area.document.cards.filter(
+        (card) => !tombstoneSet.has(`${area.document.id}:${card.id}`),
+      ),
     };
     return {
       ...area,

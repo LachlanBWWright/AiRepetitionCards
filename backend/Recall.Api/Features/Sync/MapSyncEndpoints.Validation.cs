@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Text.Json.Nodes;
 
 namespace Recall.Api.Features.Sync;
@@ -16,7 +15,7 @@ internal static partial class SyncHandlers
             StringNode(doc["attribution"]) is { Length: > 500 } ||
             StringNode(doc["forkedFromVersionId"]) is { Length: > 80 } ||
             tags.Any(tag => StringNode(tag) is null)) return false;
-        if (objectiveArray.Count > 200 || cardArray.Count > 500) return false;
+        if (objectiveArray.Count > 200 || cardArray.Count > 50000) return false;
         objectives = objectiveArray.Count; cards = cardArray.Count;
         var localObjectives = new HashSet<string>(StringComparer.Ordinal);
         foreach (var objective in objectiveArray)
@@ -45,6 +44,7 @@ internal static partial class SyncHandlers
             }
             else return false;
         }
+        if (!Recall.Api.Contracts.AuthoredMetadataValidator.Validate(System.Text.Json.JsonSerializer.SerializeToElement(doc))) return false;
         return StringNode(ai["tutorInstructions"]) is { Length: <= 2_000 } &&
             (ai["quizInstructions"] is null || StringNode(ai["quizInstructions"]) is { Length: <= 2_000 }) &&
             (ai["cardGenerationInstructions"] is null || StringNode(ai["cardGenerationInstructions"]) is { Length: <= 2_000 });
@@ -53,7 +53,7 @@ internal static partial class SyncHandlers
     private static JsonObject? NormalizeWorkspaceDocument(JsonObject input)
     {
         var document = (JsonObject)input.DeepClone();
-        KeepOnly(document, "schemaVersion", "id", "sourceId", "title", "description", "language", "objectives", "ai", "cards", "tags", "licence", "attribution", "forkedFromVersionId");
+        KeepOnly(document, "schemaVersion", "id", "sourceId", "title", "description", "language", "objectives", "ai", "cards", "tags", "licence", "attribution", "forkedFromVersionId", "noteLibrary");
         if (document["objectives"] is JsonArray objectives)
             foreach (var objective in objectives.OfType<JsonObject>())
                 KeepOnly(objective, "id", "title", "description", "prerequisiteIds", "sourceId");
@@ -63,12 +63,13 @@ internal static partial class SyncHandlers
         {
             foreach (var card in cards.OfType<JsonObject>())
             {
-                if (StringNode(card["kind"]) == "basic") KeepOnly(card, "kind", "id", "front", "back", "objectiveIds", "media", "tags", "origin", "sourceId");
-                else KeepOnly(card, "kind", "id", "text", "deletionIndex", "objectiveIds", "media", "tags", "origin", "sourceId");
+                if (StringNode(card["kind"]) == "basic") KeepOnly(card, "kind", "id", "front", "back", "objectiveIds", "media", "tags", "origin", "sourceId", "noteId", "templateId", "presentation", "imageOcclusion");
+                else KeepOnly(card, "kind", "id", "text", "deletionIndex", "objectiveIds", "media", "tags", "origin", "sourceId", "noteId", "templateId", "presentation", "imageOcclusion");
                 if (card["media"] is JsonArray media)
                     foreach (var reference in media.OfType<JsonObject>()) KeepOnly(reference, "id", "mimeType", "byteLength");
             }
         }
+        Recall.Api.Contracts.AuthoredMetadataValidator.Normalize(document, preservePrivate: true);
         return document;
     }
 
@@ -86,34 +87,12 @@ internal static partial class SyncHandlers
         var mime = StringNode(reference["mimeType"]);
         var length = IntegerNode(reference["byteLength"]);
         return id is not null && System.Text.RegularExpressions.Regex.IsMatch(id, "^[a-f0-9]{64}$") &&
-            mime is "image/jpeg" or "image/png" or "image/gif" or "image/webp" or "audio/mpeg" or "audio/ogg" or "audio/wav" &&
+            mime is "image/jpeg" or "image/png" or "image/gif" or "image/webp" or "audio/mpeg" or "audio/ogg" or "audio/wav" or "audio/mp4" or "audio/webm" &&
             length is > 0 and <= 20_000_000;
     }
 
-    private static bool ValidCloze(string? text, int? deletionIndex)
-    {
-        if (string.IsNullOrWhiteSpace(text) || text.Length > 20_000 || deletionIndex is < 1 or > 20) return false;
-        var pattern = new System.Text.RegularExpressions.Regex(@"\{\{c([1-9]|1[0-9]|20)::([^{}]+?)\}\}", System.Text.RegularExpressions.RegexOptions.CultureInvariant);
-        var matches = pattern.Matches(text);
-        if (matches.Count == 0) return false;
-        var selectedExists = deletionIndex is null;
-        var offset = 0;
-        foreach (System.Text.RegularExpressions.Match match in matches)
-        {
-            var prefix = text[offset..match.Index];
-            if (prefix.Contains("{{", StringComparison.Ordinal) || prefix.Contains("}}", StringComparison.Ordinal)) return false;
-            var contents = match.Groups[2].Value;
-            var separator = contents.IndexOf("::", StringComparison.Ordinal);
-            var answer = separator < 0 ? contents : contents[..separator];
-            var hint = separator < 0 ? null : contents[(separator + 2)..];
-            if (string.IsNullOrWhiteSpace(answer) || hint is not null && (string.IsNullOrWhiteSpace(hint) || hint.Contains("::", StringComparison.Ordinal))) return false;
-            var index = int.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture);
-            if (index == deletionIndex) selectedExists = true;
-            offset = match.Index + match.Length;
-        }
-        var suffix = text[offset..];
-        return selectedExists && !suffix.Contains("{{", StringComparison.Ordinal) && !suffix.Contains("}}", StringComparison.Ordinal);
-    }
+    private static bool ValidCloze(string? text, int? deletionIndex) =>
+        Recall.Api.Contracts.AuthoredMetadataValidator.ValidCloze(text, deletionIndex);
 
     private sealed record JsonRead(bool Ok, bool TooLarge, JsonNode? Value);
 }

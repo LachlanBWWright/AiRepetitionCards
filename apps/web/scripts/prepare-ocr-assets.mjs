@@ -41,6 +41,10 @@ export async function prepareOcrAssets(platform = "web") {
   await Promise.all(
     assets.map(([source, target]) => copyFile(source, resolve(destination, target))),
   );
+  await copyFile(
+    require.resolve("sql.js/dist/sql-wasm.wasm"),
+    resolve(destination, "../sql-wasm.wasm"),
+  );
   process.stdout.write(`Bundled ${assets.length} local OCR assets for ${platform}.\n`);
 }
 

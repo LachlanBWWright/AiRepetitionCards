@@ -140,7 +140,7 @@ await test("bulk deletion preserves original review identities and retains pendi
   assert.equal(result.right.workspace.retainedReviewAreas?.[0]?.cards[0]?.id, firstId);
 });
 
-await test("moves retain original history and copy content into fresh independent schedules", () => {
+await test("moves retain original card identities, scheduling and review evidence", () => {
   const result = apply(workspace, {
     kind: "bulk-move-cards",
     areaId: sourceId,
@@ -154,11 +154,15 @@ await test("moves retain original history and copy content into fresh independen
   if (Either.isLeft(result)) return;
   assert.equal(result.right.workspace.areas[0]?.cards.length, 0);
   assert.equal(result.right.workspace.areas[1]?.cards.length, 2);
-  assert.equal(result.right.workspace.areas[1].cards[0]?.id, "moved-first");
+  assert.equal(result.right.workspace.areas[1].cards[0]?.id, firstId);
   assert.deepEqual(result.right.workspace.areas[1].cards[0].tags, ["existing"]);
-  assert.deepEqual(result.right.workspace.areas[1].cards[0].schedule, newSchedule(now));
+  assert.deepEqual(
+    result.right.workspace.areas[1].cards[0].schedule,
+    workspace.areas[0]?.cards[0]?.schedule,
+  );
   assert.deepEqual(result.right.workspace.reviewEvents, workspace.reviewEvents);
-  assert.equal(result.right.workspace.retainedReviewAreas?.[0]?.cards[0]?.id, firstId);
+  assert.equal(result.right.workspace.retainedReviewAreas?.length ?? 0, 0);
+  assert.equal(result.right.workspace.deletedCards?.length ?? 0, 0);
 });
 
 await test("invalid selections, identifier collisions and tag limits never partially apply a batch", () => {
@@ -171,12 +175,6 @@ await test("invalid selections, identifier collisions and tag limits never parti
       areaId: sourceId,
       cardIds: [firstId, secondId],
       tags: ["x".repeat(81)],
-    },
-    {
-      kind: "bulk-move-cards",
-      areaId: sourceId,
-      targetAreaId: targetId,
-      cards: [{ cardId: firstId, newCardId: secondId }],
     },
     {
       kind: "bulk-move-cards",

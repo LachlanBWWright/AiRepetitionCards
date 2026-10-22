@@ -104,6 +104,7 @@ export function createEditorTransitions(dependencies: Dependencies) {
         objectiveIds: card.objectiveIds ?? [],
         tags: card.tags ?? [],
         media: card.media ?? [],
+        presentation: card.presentation,
       },
       ...bound({ kind: "delete-card", areaId: foundArea.id, cardId: card.id }),
     });

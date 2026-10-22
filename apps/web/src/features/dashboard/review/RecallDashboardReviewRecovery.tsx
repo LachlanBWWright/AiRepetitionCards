@@ -1,3 +1,4 @@
+import { applyAnkiImport } from "@recall/application";
 import { Effect } from "effect";
 import { RecallDashboardImportExportDialog } from "@/features/dashboard/transfers/RecallDashboardImportExportDialog";
 import { dashboardColors as colors } from "@/features/dashboard/layout/RecallDashboardSupport";
@@ -56,26 +57,25 @@ export function RecallDashboardReviewRecovery({ model }: { readonly model: Recal
       cacheWritable={cacheWritable}
       onImportPortableDeck={importPortableDeck}
       onAcceptAnkiImport={(proposal) =>
-        Effect.tryPromise({
-          try: async () => {
-            if (
-              contentImportPending.current ||
-              (pendingContentImport && pendingContentImport.area?.id !== proposal.area.id)
-            )
-              return false;
-            return commitContentImport({
-              area: proposal.area,
-              media: proposal.media,
-              reviewEvents: proposal.reviewEvents,
-              message: `${String(proposal.area.cards.length)} cards and ${String(proposal.reviewEvents.length)} reviews imported from Anki. FSRS schedules were rebuilt from the review history.`,
-            });
-          },
-          catch: () => ({ _tag: "AnkiImportAcceptanceUnavailable" }) as const,
-        }).pipe(
-          Effect.flatMap((saved) =>
-            saved ? Effect.void : Effect.fail({ _tag: "AnkiImportNotSaved" } as const),
-          ),
-        )
+        Effect.gen(function* () {
+          if (
+            contentImportPending.current ||
+            (pendingContentImport && pendingContentImport.area?.id !== proposal.area.id)
+          )
+            return yield* Effect.fail({ _tag: "AnkiImportNotSaved" } as const);
+          const replacement = yield* applyAnkiImport(workspace, proposal);
+          const saved = yield* Effect.tryPromise({
+            try: () =>
+              commitContentImport({
+                replacement,
+                expectedWorkspace: workspace,
+                media: proposal.media,
+                message: `${String(proposal.area.cards.length)} cards imported from Anki. Existing cards retain local scheduling and history.`,
+              }),
+            catch: () => ({ _tag: "AnkiImportAcceptanceUnavailable" }) as const,
+          });
+          if (!saved) return yield* Effect.fail({ _tag: "AnkiImportNotSaved" } as const);
+        })
       }
       onImportDelimited={importDelimited}
       onExportDelimited={exportDelimited}

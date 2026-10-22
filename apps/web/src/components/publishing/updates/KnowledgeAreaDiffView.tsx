@@ -11,6 +11,7 @@ type Card = KnowledgeArea["cards"][number];
 type Objective = KnowledgeArea["objectives"][number];
 
 const metadataLabels = {
+  noteLibrary: "Shared notes and templates",
   title: "Title",
   description: "Description",
   language: "Language",
@@ -24,6 +25,7 @@ const metadataLabels = {
 function metadataText(value: KnowledgeAreaMetadataChange["before"]): string {
   if (value === null || value === undefined || value === "") return "Not provided";
   if (typeof value === "string") return value;
+  if ("notes" in value) return JSON.stringify(value, null, 2);
   if ("tutorInstructions" in value) {
     return [
       `Tutor: ${value.tutorInstructions || "Not provided"}`,

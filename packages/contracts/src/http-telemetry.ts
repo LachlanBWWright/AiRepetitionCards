@@ -13,6 +13,8 @@ export const HttpOperationSchema = Schema.Literal(
   "publication-media-read",
   "publication-media-write",
   "workspace-read",
+  "workspace-study-read",
+  "workspace-study-write",
   "workspace-review-identities",
   "workspace-write",
   "workspace-area-delete",

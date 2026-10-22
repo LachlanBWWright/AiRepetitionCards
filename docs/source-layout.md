@@ -39,6 +39,20 @@ For example, the local tutor adapter is now
 operations live in `tutor/chat/`, and notebook storage/state operations live in
 `notebook/`.
 
+## Shared React workflows
+
+`packages/react` (`@recall/react`) owns React state and lifecycle behavior shared by web,
+Electron, and mobile. Its `activities/`, `decks/`, `workspace/`, and `study/` folders contain
+activity authoring/attempts, deck updates, library-note persistence, filtered practice,
+preset editing, manual scheduling, command saving, and review timing. It imports no browser,
+Expo, Next.js, or React Native services. Platform boundaries inject storage, media gateways,
+identity generation, clocks, and save operations. App hook entry points remain stable re-exports.
+
+Pure command preparation, settings drafts, preset/search updates, and queue-aware subject
+summaries remain in `packages/application`. It has no React dependency. Platform renderers
+use their existing controls. Native persistence supplies its status/location through the
+same store interface; Metro and Vite resolve shared hooks against the renderer's React copy.
+
 ## Web
 
 The dashboard remains under `apps/web/src/features/dashboard/`. Its entry component

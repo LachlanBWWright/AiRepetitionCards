@@ -4,7 +4,7 @@ export { exportDelimitedCards, importDelimitedCards } from "./delimited-intercha
 
 export type { DelimitedImportError, DelimitedImportResult } from "./delimited-interchange";
 
-export { importAnkiApkg } from "./anki/anki-import";
+export { importAnkiApkg, AnkiCollectionSchema } from "./anki/anki-import";
 
 export { decodeAnkiV18Collection } from "./anki/anki-v18";
 
@@ -47,3 +47,11 @@ export type {
 } from "./knowledge-area-interchange";
 
 export * from "./portable/portable-deck-package";
+
+export { privateDeckHistory } from "./portable/private-study-history";
+export { decodeAnkiTemplates, decodeAnkiScheduling } from "./anki/anki-legacy-metadata";
+export { exportAnkiApkg } from "./anki/anki-export";
+export type { AnkiExportFailure, AnkiSqliteWriter, AnkiSqlStatement } from "./anki/anki-export";
+
+export { applyAnkiImport } from "./anki/anki-reimport";
+export type { AnkiReimportFailure } from "./anki/anki-reimport";

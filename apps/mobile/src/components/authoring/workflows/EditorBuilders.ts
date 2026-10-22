@@ -54,10 +54,12 @@ export function createEditorBuilders({ workspace, area, createId }: EditorBuilde
             kind: card.cloze ? "cloze" : "basic",
             front: card.front,
             back: card.back,
+            ...(card.imageOcclusion ? { imageOcclusion: card.imageOcclusion } : {}),
             ...(card.cloze ? { cloze: card.cloze } : {}),
             objectiveIds: card.objectiveIds ?? [],
             tags: card.tags ?? [],
             media: card.media ?? [],
+            presentation: card.presentation,
           }
         : {
             ...emptyContent,
@@ -88,6 +90,9 @@ export function createEditorBuilders({ workspace, area, createId }: EditorBuilde
     return {
       kind: "scheduler",
       retentionPercent: String(settings.requestRetention * 100),
+      settings,
+      dailyNewLimit: String(settings.dailyNewLimit ?? 20),
+      leechThreshold: String(settings.leechThreshold ?? 8),
       ...bound({ kind: "update-scheduler-settings", settings }),
     };
   };

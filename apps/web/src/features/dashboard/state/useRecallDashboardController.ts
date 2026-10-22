@@ -1,4 +1,6 @@
-import { useEffect } from "react";
+import { useReviewTiming } from "@recall/react";
+import { useEffect, useCallback } from "react";
+import type { ReviewRating } from "@recall/scheduler";
 import type { RecallDashboardProps } from "../RecallDashboardProps";
 import {
   useRecallDashboardBaseState,
@@ -47,6 +49,11 @@ export function useRecallDashboardController(props: RecallDashboardProps) {
   ]);
   const derived = useRecallDashboardDerivedState({ ...base, ...editor });
   const core = { ...base, ...editor, ...derived };
+  const { setShowAnswer } = editor;
+  const hideReviewAnswer = useCallback(() => {
+    setShowAnswer(false);
+  }, [setShowAnswer]);
+  const getReviewElapsedMs = useReviewTiming(derived.card?.id, hideReviewAnswer, Date.now);
   const contentActions = createRecallDashboardContentActions({ ...core });
   const editorCloseActions = createRecallDashboardEditorCloseActions({ ...core });
   const draftActions = createRecallDashboardDraftActions({ ...core, ...editorCloseActions });
@@ -87,6 +94,7 @@ export function useRecallDashboardController(props: RecallDashboardProps) {
     ...cardSaveActions,
     ...storageActions,
     ...reviewActions,
+    review: (rating: ReviewRating) => reviewActions.review(rating, getReviewElapsedMs()),
   } as const;
   useRecallDashboardWorkspaceEffects(model);
   useRecallDashboardDraftEffects(model);

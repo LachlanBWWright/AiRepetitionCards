@@ -44,6 +44,8 @@ export function resumeLibraryDraft(
     stagedAssets: [],
     ...(draft.sourceCard ? { sourceCard: draft.sourceCard } : {}),
     content: {
+      imageOcclusion: draft.imageOcclusion,
+      removeImageOcclusion: Boolean(draft.sourceCard?.imageOcclusion) && !draft.imageOcclusion,
       kind: draft.cardKind,
       front: draft.front,
       back: draft.back,
@@ -52,6 +54,7 @@ export function resumeLibraryDraft(
         : {}),
       objectiveIds: draft.objectiveIds.map(createObjectiveId),
       media: draft.media,
+      presentation: draft.presentation,
       tags: Either.isRight(tags) ? tags.right : [],
     },
     ...(draft.baseline === undefined ? {} : { baseline: draft.baseline }),

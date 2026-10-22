@@ -1,4 +1,5 @@
 import {
+  reviewPlacement,
   type AreaId,
   type AssessmentId,
   type LearningArea,
@@ -9,13 +10,25 @@ import { Effect, Schema } from "effect";
 
 export type ReviewDeletionRetentionFailure = { readonly _tag: "ReviewDeletionRetentionFailure" };
 
-function pendingCards(workspace: Workspace, areaId: AreaId): ReadonlySet<AssessmentId> {
+function pendingCards(
+  workspace: Workspace,
+  areaId: AreaId,
+  source?: LearningArea,
+): ReadonlySet<AssessmentId> {
+  const placement = reviewPlacement(
+    source
+      ? {
+          ...workspace,
+          areas: [...workspace.areas.filter((area) => area.id !== source.id), source],
+        }
+      : workspace,
+  );
   const pending = new Set(
     workspace.pendingReviewEventIds ?? workspace.reviewEvents?.map((event) => event.id) ?? [],
   );
   return new Set(
     (workspace.reviewEvents ?? [])
-      .filter((event) => event.areaId === areaId && pending.has(event.id))
+      .filter((event) => placement.areaId(event) === areaId && pending.has(event.id))
       .map((event) => event.cardId),
   );
 }
@@ -30,6 +43,7 @@ function retainedAreaIsValid(
   workspace: Workspace,
   activeCards: ReadonlySet<AssessmentId>,
 ) {
+  const placement = reviewPlacement(workspace);
   const objectives = new Set(area.objectives?.map((objective) => objective.id) ?? []);
   return (
     objectives.size === (area.objectives ?? []).length &&
@@ -41,7 +55,7 @@ function retainedAreaIsValid(
         !activeCards.has(card.id) &&
         (card.objectiveIds ?? []).every((id) => objectives.has(id)) &&
         workspace.reviewEvents?.some(
-          (event) => event.areaId === area.id && event.cardId === card.id,
+          (event) => placement.areaId(event) === area.id && event.cardId === card.id,
         ) &&
         (workspace.deletedAreas?.some((item) => item.areaId === area.id) ||
           workspace.deletedCards?.some(
@@ -79,7 +93,7 @@ export function retainReviewDeletionContent(
   removedCardIds: readonly AssessmentId[],
 ): Effect.Effect<Workspace, ReviewDeletionRetentionFailure> {
   const previous = retainedReviewContent(workspace).find((area) => area.id === source.id);
-  const pending = pendingCards(workspace, source.id);
+  const pending = pendingCards(workspace, source.id, source);
   const removed = new Set(removedCardIds);
   const cards = new Map((previous?.cards ?? []).map((card) => [card.id, card]));
   for (const card of source.cards)

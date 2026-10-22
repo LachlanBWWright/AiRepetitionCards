@@ -1,7 +1,7 @@
 import { useEffect, type ReactNode } from "react";
 import { ScrollView, Text, View } from "react-native";
 import { NativeButton, NativeSelect } from "@recall/ui-native";
-import { summarizeSubjects } from "@recall/application";
+import { nextStudyArea, studyQueue, localStudyDay } from "@recall/application";
 import { AppSubjectProgress } from "./AppSubjectProgress";
 import { AppLibraryPanel } from "./AppLibraryPanel";
 import { AppSubjectAI } from "./AppSubjectAI";
@@ -33,12 +33,16 @@ export function AppSubjectWorkspace({
       !model.workspace
     )
       return;
-    if (model.activeArea?.cards.some((card) => Date.parse(card.schedule.due) <= model.now)) return;
-    const next = summarizeSubjects(model.workspace.areas, [], model.now, "daily").find(
-      (row) => row.due > 0,
-    );
+    if (
+      model.activeArea &&
+      studyQueue(model.workspace, model.activeArea, model.now, localStudyDay(model.now)).cards
+        .length > 0
+    )
+      return;
+    const next = nextStudyArea(model.workspace, model.now);
+
     if (next) {
-      model.startStudy(next.area.id);
+      model.startStudy(next.id);
       model.setReviewAll(true);
     }
   }, [model]);

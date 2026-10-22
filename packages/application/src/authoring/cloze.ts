@@ -25,47 +25,88 @@ type Segment =
   | {
       readonly kind: "deletion";
       readonly index: number;
-      readonly answer: string;
-      readonly hint: string | undefined;
+      readonly children: readonly Segment[];
+      readonly hint?: string;
     };
 
 function failure(reason: ClozeFailure["reason"]): ClozeFailure {
   return { _tag: "ClozeFailure", reason };
 }
 
-function parse(text: unknown): Effect.Effect<readonly Segment[], ClozeFailure> {
-  if (typeof text !== "string" || text.trim().length === 0) {
-    return Effect.fail(failure("invalid-text"));
-  }
-  if (text.length > MAX_CLOZE_TEXT_LENGTH) return Effect.fail(failure("text-too-long"));
+type ParseResult = {
+  readonly segments: readonly Segment[];
+  readonly offset: number;
+  readonly hint?: string;
+};
+function parseSegments(
+  text: string,
+  start: number,
+  nested: boolean,
+  depth: number,
+): ParseResult | undefined {
+  if (depth > 8) return undefined;
   const segments: Segment[] = [];
-  const pattern = /\{\{c([1-9]|1[0-9]|20)::([^{}]+?)\}\}/g;
-  let offset = 0;
-  for (const match of text.matchAll(pattern)) {
-    const prefix = text.slice(offset, match.index);
-    if (prefix.includes("{{") || prefix.includes("}}")) {
-      return Effect.fail(failure("malformed-deletion"));
+  let offset = start;
+  let literal = "";
+  while (offset < text.length) {
+    if (text.startsWith("}}", offset) || (nested && text.startsWith("::", offset))) {
+      if (!nested) return undefined;
+      if (literal) segments.push({ kind: "text", text: literal });
+      if (segments.length === 0) return undefined;
+      if (text.startsWith("}}", offset)) return { segments, offset: offset + 2 };
+      const end = text.indexOf("}}", offset + 2);
+      const hint = text.slice(offset + 2, end);
+      return end < 0 || !hint.trim() || hint.includes("{{") || hint.includes("::")
+        ? undefined
+        : { segments, offset: end + 2, hint };
     }
-    const contents = match[2] ?? "";
-    const separator = contents.indexOf("::");
-    const answer = separator < 0 ? contents : contents.slice(0, separator);
-    const hint = separator < 0 ? undefined : contents.slice(separator + 2);
-    if (!answer.trim() || (hint !== undefined && (!hint.trim() || hint.includes("::")))) {
-      return Effect.fail(failure("malformed-deletion"));
+    if (text.startsWith("{{", offset)) {
+      const header = /^\{\{c([1-9]|1[0-9]|20)::/.exec(text.slice(offset));
+      if (!header) return undefined;
+      if (literal) segments.push({ kind: "text", text: literal });
+      literal = "";
+      const child = parseSegments(text, offset + header[0].length, true, depth + 1);
+      if (!child || !renderSegments(child.segments).trim()) return undefined;
+      segments.push({
+        kind: "deletion",
+        index: Number(header[1]),
+        children: child.segments,
+        ...(child.hint === undefined ? {} : { hint: child.hint }),
+      });
+      offset = child.offset;
+    } else {
+      literal += text.charAt(offset);
+      offset += 1;
     }
-    segments.push({ kind: "text", text: prefix });
-    segments.push({ kind: "deletion", index: Number(match[1]), answer, hint });
-    offset = match.index + match[0].length;
   }
-  const suffix = text.slice(offset);
-  if (suffix.includes("{{") || suffix.includes("}}")) {
-    return Effect.fail(failure("malformed-deletion"));
-  }
-  if (!segments.some((segment) => segment.kind === "deletion")) {
-    return Effect.fail(failure("no-deletions"));
-  }
-  segments.push({ kind: "text", text: suffix });
-  return Effect.succeed(segments);
+  if (nested) return undefined;
+  if (literal) segments.push({ kind: "text", text: literal });
+  return { segments, offset };
+}
+function renderSegments(segments: readonly Segment[], index?: number): string {
+  return segments
+    .map((segment) =>
+      segment.kind === "text"
+        ? segment.text
+        : segment.index === index
+          ? `[${segment.hint ?? "..."}]`
+          : renderSegments(segment.children, index),
+    )
+    .join("");
+}
+function deletionIndices(segments: readonly Segment[]): readonly number[] {
+  return segments.flatMap((segment) =>
+    segment.kind === "text" ? [] : [segment.index, ...deletionIndices(segment.children)],
+  );
+}
+function parse(text: unknown): Effect.Effect<readonly Segment[], ClozeFailure> {
+  if (typeof text !== "string" || !text.trim()) return Effect.fail(failure("invalid-text"));
+  if (text.length > MAX_CLOZE_TEXT_LENGTH) return Effect.fail(failure("text-too-long"));
+  const parsed = parseSegments(text, 0, false, 0);
+  if (!parsed) return Effect.fail(failure("malformed-deletion"));
+  return deletionIndices(parsed.segments).length === 0
+    ? Effect.fail(failure("no-deletions"))
+    : Effect.succeed(parsed.segments);
 }
 
 /** Render one selected deletion, or all distinct deletion indices in ascending order. */
@@ -75,11 +116,7 @@ export function expandCloze(
 ): Effect.Effect<readonly RenderedCloze[], ClozeFailure> {
   return Effect.gen(function* () {
     const segments = yield* parse(text);
-    const indices = [
-      ...new Set(
-        segments.flatMap((segment) => (segment.kind === "deletion" ? [segment.index] : [])),
-      ),
-    ].sort((left, right) => left - right);
+    const indices = [...new Set(deletionIndices(segments))].sort((left, right) => left - right);
     if (
       deletionIndex !== undefined &&
       (typeof deletionIndex !== "number" ||
@@ -94,26 +131,10 @@ export function expandCloze(
     }
     const selected = typeof deletionIndex === "number" ? [deletionIndex] : indices;
     return selected.map((index) => ({
-      text: segments
-        .map((segment) =>
-          segment.kind === "text"
-            ? segment.text
-            : `{{c${String(segment.index)}::${segment.answer}${segment.hint === undefined ? "" : `::${segment.hint}`}}}`,
-        )
-        .join(""),
+      text: typeof text === "string" ? text : "",
       deletionIndex: index,
-      front: segments
-        .map((segment) =>
-          segment.kind === "text"
-            ? segment.text
-            : segment.index === index
-              ? `[${segment.hint ?? "..."}]`
-              : segment.answer,
-        )
-        .join(""),
-      back: segments
-        .map((segment) => (segment.kind === "text" ? segment.text : segment.answer))
-        .join(""),
+      front: renderSegments(segments, index),
+      back: renderSegments(segments),
     }));
   });
 }
@@ -132,3 +153,28 @@ export function renderCloze(
 }
 
 export const renderClozeCard = renderCloze;
+
+function selectedAnswers(segments: readonly Segment[], index: number): readonly string[] {
+  return segments.flatMap((segment) => {
+    if (segment.kind === "text") return [];
+    return segment.index === index
+      ? [renderSegments(segment.children)]
+      : selectedAnswers(segment.children, index);
+  });
+}
+
+/** Answers hidden by the selected cloze; enclosing deletions contribute one complete answer. */
+export function clozeAnswerText(input: unknown): Effect.Effect<string, ClozeFailure> {
+  if (
+    typeof input !== "object" ||
+    input === null ||
+    !("text" in input) ||
+    !("deletionIndex" in input)
+  )
+    return Effect.fail(failure("invalid-text"));
+  return Effect.gen(function* () {
+    const rendered = yield* renderCloze(input.text, input.deletionIndex);
+    const segments = yield* parse(rendered.text);
+    return selectedAnswers(segments, rendered.deletionIndex).join(", ");
+  });
+}

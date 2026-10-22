@@ -1,3 +1,9 @@
+import type { MediaStore } from "@recall/local-store";
+import { useNativeCardMedia } from "../../../hooks/use-native-card-media";
+import { NativePronunciationRecorder } from "./NativePronunciationRecorder";
+import { NativeImageOcclusionEditor } from "../../occlusion/NativeImageOcclusionEditor";
+import { NativeReviewPresentationSettings } from "./NativeReviewPresentationSettings";
+import { NativeRichTextEditor } from "../rich/NativeRichTextEditor";
 import { Pressable, Text, View } from "react-native";
 import type { ReactNode } from "react";
 import type { Editor } from "../NativeWorkspaceAuthoringPanel.types";
@@ -13,6 +19,8 @@ export type CardEditorField = (
 export type NativeWorkspaceCardEditorProps = {
   readonly editor: Extract<Editor, { readonly kind: "card" }>;
   readonly locked: boolean;
+  readonly createId: () => string;
+  readonly mediaStore?: MediaStore;
   readonly field: CardEditorField;
   readonly setEditor: (editor: Editor) => void;
   readonly assistancePanel: ReactNode;
@@ -24,6 +32,8 @@ export type NativeWorkspaceCardEditorProps = {
 export function NativeWorkspaceCardEditor({
   editor,
   locked,
+  createId,
+  mediaStore,
   field,
   setEditor,
   assistancePanel,
@@ -31,6 +41,10 @@ export function NativeWorkspaceCardEditor({
   confirmationPanel,
   saveActions,
 }: NativeWorkspaceCardEditorProps) {
+  const [mediaUris] = useNativeCardMedia(mediaStore ?? null, editor.sourceCard, 0);
+  const occlusionUri = editor.content.imageOcclusion
+    ? mediaUris[editor.content.imageOcclusion.imageMediaId]
+    : undefined;
   function changeDeletionIndex(index: string) {
     setEditor({
       ...editor,
@@ -87,26 +101,34 @@ export function NativeWorkspaceCardEditor({
       </View>
       {editor.content.kind === "basic" ? (
         <>
-          {field(
-            "Question",
-            editor.content.front,
-            (front) => {
+          <NativeRichTextEditor
+            label="Question"
+            media={editor.content.media}
+            value={editor.content.front}
+            disabled={locked}
+            onChange={(front) => {
               setEditor({ ...editor, content: { ...editor.content, front } });
-            },
-            true,
-          )}
-          {field(
-            "Answer",
-            editor.content.back,
-            (back) => {
+            }}
+          />
+          <NativeRichTextEditor
+            label="Answer"
+            media={editor.content.media}
+            value={editor.content.back}
+            disabled={locked}
+            onChange={(back) => {
               setEditor({ ...editor, content: { ...editor.content, back } });
-            },
-            true,
-          )}
+            }}
+          />
         </>
       ) : (
         <>
-          {field("Cloze text", editor.content.cloze?.text ?? "", changeClozeText, true, 20000)}
+          <NativeRichTextEditor
+            label="Cloze text"
+            value={editor.content.cloze?.text ?? ""}
+            onChange={changeClozeText}
+            media={editor.content.media}
+            disabled={locked}
+          />
           <Text className={"text-recall-muted text-[12px] leading-[18px]"}>
             {"Example: Mitochondria produce {{c1::ATP::energy molecule}}."}
           </Text>
@@ -117,6 +139,39 @@ export function NativeWorkspaceCardEditor({
           )}
         </>
       )}
+      <NativePronunciationRecorder
+        key={editor.id}
+        disabled={locked || editor.content.media.length >= 20}
+        onAttach={(asset) => {
+          if (editor.content.media.some((item) => item.id === asset.reference.id)) return;
+          setEditor({
+            ...editor,
+            content: { ...editor.content, media: [...editor.content.media, asset.reference] },
+            stagedAssets: [...editor.stagedAssets, asset],
+          });
+        }}
+      />
+      <NativeReviewPresentationSettings
+        value={editor.content.presentation}
+        disabled={locked}
+        onChange={(presentation) => {
+          setEditor({ ...editor, content: { ...editor.content, presentation } });
+        }}
+      />
+      <NativeImageOcclusionEditor
+        value={editor.content.imageOcclusion}
+        media={editor.content.media}
+        field={field}
+        disabled={locked}
+        createId={createId}
+        {...(occlusionUri ? { uri: occlusionUri } : {})}
+        onChange={(imageOcclusion) => {
+          setEditor({
+            ...editor,
+            content: { ...editor.content, imageOcclusion, removeImageOcclusion: !imageOcclusion },
+          });
+        }}
+      />
       {assistancePanel}
       {detailsPanel}
       {confirmationPanel}

@@ -3,6 +3,7 @@ import { Effect, Schema } from "effect";
 export const ApiRateLimitScopeSchema = Schema.Literal(
   "review-sync",
   "workspace-sync",
+  "study-pages",
   "tutor-read",
   "tutor-write",
 );
@@ -43,6 +44,7 @@ export interface ApiRateLimitStore {
 const policies: Readonly<Record<ApiRateLimitScope, ApiRateLimitPolicy>> = {
   "review-sync": { requests: 120, windowMilliseconds: 60_000 },
   "workspace-sync": { requests: 30, windowMilliseconds: 60_000 },
+  "study-pages": { requests: 120, windowMilliseconds: 60_000 },
   "tutor-read": { requests: 60, windowMilliseconds: 60_000 },
   "tutor-write": { requests: 20, windowMilliseconds: 60_000 },
 };

@@ -29,20 +29,19 @@ export function prepareDeletedReviewProvisions(
     const missing = new Map<AreaId, Set<AssessmentId>>();
     for (const event of batch) {
       const remote = known.get(event.cardId);
-      if (remote) {
-        if (remote.areaId !== event.areaId) return yield* Effect.fail(failure("content"));
-        continue;
-      }
-      const live = workspace.areas.find((area) => area.id === event.areaId);
-      if (live?.cards.some((card) => card.id === event.cardId)) continue;
-      if (
-        !archived.get(event.areaId)?.cards.some((card) => card.id === event.cardId) ||
-        snapshot.deletedAreaIds.includes(event.areaId)
-      )
+      if (remote) continue;
+      const live = workspace.areas.find((area) =>
+        area.cards.some((card) => card.id === event.cardId),
+      );
+      if (live) continue;
+      const retained = [...archived.values()].find((area) =>
+        area.cards.some((card) => card.id === event.cardId),
+      );
+      if (!retained || snapshot.deletedAreaIds.includes(retained.id))
         return yield* Effect.fail(failure("deleted-review-content-missing"));
-      const cards = missing.get(event.areaId) ?? new Set<AssessmentId>();
+      const cards = missing.get(retained.id) ?? new Set<AssessmentId>();
       cards.add(event.cardId);
-      missing.set(event.areaId, cards);
+      missing.set(retained.id, cards);
     }
     // A staged area defers its ordinary live upload. Include the missing live identities
     // used by this same review batch so every submitted operation has a server card.

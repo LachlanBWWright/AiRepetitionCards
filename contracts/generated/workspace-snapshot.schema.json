@@ -185,6 +185,417 @@
                 },
                 "additionalProperties": false
               },
+              "noteLibrary": {
+                "type": "object",
+                "required": [
+                  "types",
+                  "notes"
+                ],
+                "properties": {
+                  "types": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": [
+                        "id",
+                        "name",
+                        "fields",
+                        "templates"
+                      ],
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "description": "a string at most 200 character(s) long",
+                          "title": "maxLength(200)",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "name": {
+                          "type": "string",
+                          "description": "a string at most 80 character(s) long",
+                          "title": "maxLength(80)",
+                          "minLength": 1,
+                          "maxLength": 80
+                        },
+                        "fields": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "required": [
+                              "name"
+                            ],
+                            "properties": {
+                              "name": {
+                                "type": "string",
+                                "description": "a string matching the pattern ^[A-Za-z][A-Za-z0-9 _-]{0,79}$",
+                                "pattern": "^[A-Za-z][A-Za-z0-9 _-]{0,79}$"
+                              },
+                              "sticky": {
+                                "type": "boolean"
+                              }
+                            },
+                            "additionalProperties": false
+                          },
+                          "description": "an array of at most 50 item(s)",
+                          "title": "maxItems(50)",
+                          "minItems": 1,
+                          "maxItems": 50
+                        },
+                        "templates": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "required": [
+                              "id",
+                              "name",
+                              "front",
+                              "back"
+                            ],
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "description": "a string at most 200 character(s) long",
+                                "title": "maxLength(200)",
+                                "minLength": 1,
+                                "maxLength": 200
+                              },
+                              "name": {
+                                "type": "string",
+                                "description": "a string at most 80 character(s) long",
+                                "title": "maxLength(80)",
+                                "minLength": 1,
+                                "maxLength": 80
+                              },
+                              "front": {
+                                "type": "string",
+                                "description": "a string at most 20000 character(s) long",
+                                "title": "maxLength(20000)",
+                                "maxLength": 20000
+                              },
+                              "back": {
+                                "type": "string",
+                                "description": "a string at most 20000 character(s) long",
+                                "title": "maxLength(20000)",
+                                "maxLength": 20000
+                              },
+                              "clozeField": {
+                                "type": "string",
+                                "description": "a string matching the pattern ^[A-Za-z][A-Za-z0-9 _-]{0,79}$",
+                                "pattern": "^[A-Za-z][A-Za-z0-9 _-]{0,79}$"
+                              },
+                              "deckAreaId": {
+                                "type": "string",
+                                "description": "a string at least 1 character(s) long",
+                                "title": "minLength(1)",
+                                "minLength": 1
+                              },
+                              "presentation": {
+                                "type": "object",
+                                "required": [],
+                                "properties": {
+                                  "appearance": {
+                                    "type": "object",
+                                    "required": [
+                                      "font",
+                                      "size",
+                                      "align",
+                                      "lineSpacing"
+                                    ],
+                                    "properties": {
+                                      "font": {
+                                        "type": "string",
+                                        "enum": [
+                                          "sans",
+                                          "serif",
+                                          "mono"
+                                        ]
+                                      },
+                                      "size": {
+                                        "type": "string",
+                                        "enum": [
+                                          "small",
+                                          "medium",
+                                          "large"
+                                        ]
+                                      },
+                                      "align": {
+                                        "type": "string",
+                                        "enum": [
+                                          "left",
+                                          "center"
+                                        ]
+                                      },
+                                      "lineSpacing": {
+                                        "type": "string",
+                                        "enum": [
+                                          "compact",
+                                          "comfortable"
+                                        ]
+                                      }
+                                    },
+                                    "additionalProperties": false
+                                  },
+                                  "typedAnswer": {
+                                    "type": "object",
+                                    "required": [
+                                      "enabled",
+                                      "ignoreCase",
+                                      "ignoreAccents"
+                                    ],
+                                    "properties": {
+                                      "enabled": {
+                                        "type": "boolean"
+                                      },
+                                      "ignoreCase": {
+                                        "type": "boolean"
+                                      },
+                                      "ignoreAccents": {
+                                        "type": "boolean"
+                                      }
+                                    },
+                                    "additionalProperties": false
+                                  },
+                                  "speech": {
+                                    "type": "object",
+                                    "required": [],
+                                    "properties": {
+                                      "front": {
+                                        "type": "object",
+                                        "required": [
+                                          "language",
+                                          "rate",
+                                          "autoplay"
+                                        ],
+                                        "properties": {
+                                          "language": {
+                                            "type": "string",
+                                            "description": "a string at most 80 character(s) long",
+                                            "title": "maxLength(80)",
+                                            "minLength": 1,
+                                            "maxLength": 80
+                                          },
+                                          "voice": {
+                                            "type": "string",
+                                            "description": "a string at most 200 character(s) long",
+                                            "title": "maxLength(200)",
+                                            "maxLength": 200
+                                          },
+                                          "rate": {
+                                            "type": "number",
+                                            "description": "a number between 0.25 and 2",
+                                            "title": "between(0.25, 2)",
+                                            "minimum": 0.25,
+                                            "maximum": 2
+                                          },
+                                          "autoplay": {
+                                            "type": "boolean"
+                                          }
+                                        },
+                                        "additionalProperties": false
+                                      },
+                                      "back": {
+                                        "type": "object",
+                                        "required": [
+                                          "language",
+                                          "rate",
+                                          "autoplay"
+                                        ],
+                                        "properties": {
+                                          "language": {
+                                            "type": "string",
+                                            "description": "a string at most 80 character(s) long",
+                                            "title": "maxLength(80)",
+                                            "minLength": 1,
+                                            "maxLength": 80
+                                          },
+                                          "voice": {
+                                            "type": "string",
+                                            "description": "a string at most 200 character(s) long",
+                                            "title": "maxLength(200)",
+                                            "maxLength": 200
+                                          },
+                                          "rate": {
+                                            "type": "number",
+                                            "description": "a number between 0.25 and 2",
+                                            "title": "between(0.25, 2)",
+                                            "minimum": 0.25,
+                                            "maximum": 2
+                                          },
+                                          "autoplay": {
+                                            "type": "boolean"
+                                          }
+                                        },
+                                        "additionalProperties": false
+                                      }
+                                    },
+                                    "additionalProperties": false
+                                  }
+                                },
+                                "additionalProperties": false
+                              }
+                            },
+                            "additionalProperties": false
+                          },
+                          "description": "an array of at most 20 item(s)",
+                          "title": "maxItems(20)",
+                          "minItems": 1,
+                          "maxItems": 20
+                        }
+                      },
+                      "additionalProperties": false
+                    },
+                    "description": "an array of at most 100 item(s)",
+                    "title": "maxItems(100)",
+                    "maxItems": 100
+                  },
+                  "notes": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": [
+                        "id",
+                        "typeId",
+                        "fields",
+                        "tags",
+                        "objectiveIds"
+                      ],
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "description": "a string at most 200 character(s) long",
+                          "title": "maxLength(200)",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "typeId": {
+                          "type": "string",
+                          "description": "a string at most 200 character(s) long",
+                          "title": "maxLength(200)",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "source": {
+                          "type": "object",
+                          "required": [
+                            "areaId",
+                            "noteId",
+                            "revision"
+                          ],
+                          "properties": {
+                            "areaId": {
+                              "type": "string",
+                              "description": "a string at least 1 character(s) long",
+                              "title": "minLength(1)",
+                              "minLength": 1
+                            },
+                            "noteId": {
+                              "type": "string",
+                              "description": "a string at most 200 character(s) long",
+                              "title": "maxLength(200)",
+                              "minLength": 1,
+                              "maxLength": 200
+                            },
+                            "revision": {
+                              "type": "string",
+                              "description": "a string matching the pattern ^[a-f0-9]{64}$",
+                              "pattern": "^[a-f0-9]{64}$"
+                            }
+                          },
+                          "additionalProperties": false
+                        },
+                        "fields": {
+                          "type": "object",
+                          "required": [],
+                          "properties": {},
+                          "patternProperties": {
+                            "": {
+                              "type": "string",
+                              "description": "a string at most 20000 character(s) long",
+                              "title": "maxLength(20000)",
+                              "maxLength": 20000
+                            }
+                          },
+                          "propertyNames": {
+                            "type": "string",
+                            "description": "a string matching the pattern ^[A-Za-z][A-Za-z0-9 _-]{0,79}$",
+                            "pattern": "^[A-Za-z][A-Za-z0-9 _-]{0,79}$"
+                          }
+                        },
+                        "tags": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "description": "a string at most 80 character(s) long",
+                            "title": "maxLength(80)",
+                            "minLength": 1,
+                            "maxLength": 80
+                          },
+                          "description": "an array of at most 100 item(s)",
+                          "title": "maxItems(100)",
+                          "maxItems": 100
+                        },
+                        "objectiveIds": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "description": "a string at least 1 character(s) long",
+                            "title": "minLength(1)",
+                            "minLength": 1
+                          }
+                        },
+                        "media": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "required": [
+                              "id",
+                              "mimeType",
+                              "byteLength"
+                            ],
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "description": "a string matching the pattern ^[a-f0-9]{64}$",
+                                "pattern": "^[a-f0-9]{64}$"
+                              },
+                              "mimeType": {
+                                "type": "string",
+                                "enum": [
+                                  "image/jpeg",
+                                  "image/png",
+                                  "image/gif",
+                                  "image/webp",
+                                  "audio/mpeg",
+                                  "audio/ogg",
+                                  "audio/wav",
+                                  "audio/mp4",
+                                  "audio/webm"
+                                ]
+                              },
+                              "byteLength": {
+                                "type": "integer",
+                                "description": "a number less than or equal to 20000000",
+                                "title": "lessThanOrEqualTo(20000000)",
+                                "exclusiveMinimum": 0,
+                                "maximum": 20000000
+                              }
+                            },
+                            "additionalProperties": false
+                          },
+                          "description": "an array of at most 20 item(s)",
+                          "title": "maxItems(20)",
+                          "maxItems": 20
+                        }
+                      },
+                      "additionalProperties": false
+                    },
+                    "description": "an array of at most 50000 item(s)",
+                    "title": "maxItems(50000)",
+                    "maxItems": 50000
+                  }
+                },
+                "additionalProperties": false
+              },
               "cards": {
                 "type": "array",
                 "items": {
@@ -207,11 +618,282 @@
                             "basic"
                           ]
                         },
+                        "presentation": {
+                          "type": "object",
+                          "required": [],
+                          "properties": {
+                            "appearance": {
+                              "type": "object",
+                              "required": [
+                                "font",
+                                "size",
+                                "align",
+                                "lineSpacing"
+                              ],
+                              "properties": {
+                                "font": {
+                                  "type": "string",
+                                  "enum": [
+                                    "sans",
+                                    "serif",
+                                    "mono"
+                                  ]
+                                },
+                                "size": {
+                                  "type": "string",
+                                  "enum": [
+                                    "small",
+                                    "medium",
+                                    "large"
+                                  ]
+                                },
+                                "align": {
+                                  "type": "string",
+                                  "enum": [
+                                    "left",
+                                    "center"
+                                  ]
+                                },
+                                "lineSpacing": {
+                                  "type": "string",
+                                  "enum": [
+                                    "compact",
+                                    "comfortable"
+                                  ]
+                                }
+                              },
+                              "additionalProperties": false
+                            },
+                            "typedAnswer": {
+                              "type": "object",
+                              "required": [
+                                "enabled",
+                                "ignoreCase",
+                                "ignoreAccents"
+                              ],
+                              "properties": {
+                                "enabled": {
+                                  "type": "boolean"
+                                },
+                                "ignoreCase": {
+                                  "type": "boolean"
+                                },
+                                "ignoreAccents": {
+                                  "type": "boolean"
+                                }
+                              },
+                              "additionalProperties": false
+                            },
+                            "speech": {
+                              "type": "object",
+                              "required": [],
+                              "properties": {
+                                "front": {
+                                  "type": "object",
+                                  "required": [
+                                    "language",
+                                    "rate",
+                                    "autoplay"
+                                  ],
+                                  "properties": {
+                                    "language": {
+                                      "type": "string",
+                                      "description": "a string at most 80 character(s) long",
+                                      "title": "maxLength(80)",
+                                      "minLength": 1,
+                                      "maxLength": 80
+                                    },
+                                    "voice": {
+                                      "type": "string",
+                                      "description": "a string at most 200 character(s) long",
+                                      "title": "maxLength(200)",
+                                      "maxLength": 200
+                                    },
+                                    "rate": {
+                                      "type": "number",
+                                      "description": "a number between 0.25 and 2",
+                                      "title": "between(0.25, 2)",
+                                      "minimum": 0.25,
+                                      "maximum": 2
+                                    },
+                                    "autoplay": {
+                                      "type": "boolean"
+                                    }
+                                  },
+                                  "additionalProperties": false
+                                },
+                                "back": {
+                                  "type": "object",
+                                  "required": [
+                                    "language",
+                                    "rate",
+                                    "autoplay"
+                                  ],
+                                  "properties": {
+                                    "language": {
+                                      "type": "string",
+                                      "description": "a string at most 80 character(s) long",
+                                      "title": "maxLength(80)",
+                                      "minLength": 1,
+                                      "maxLength": 80
+                                    },
+                                    "voice": {
+                                      "type": "string",
+                                      "description": "a string at most 200 character(s) long",
+                                      "title": "maxLength(200)",
+                                      "maxLength": 200
+                                    },
+                                    "rate": {
+                                      "type": "number",
+                                      "description": "a number between 0.25 and 2",
+                                      "title": "between(0.25, 2)",
+                                      "minimum": 0.25,
+                                      "maximum": 2
+                                    },
+                                    "autoplay": {
+                                      "type": "boolean"
+                                    }
+                                  },
+                                  "additionalProperties": false
+                                }
+                              },
+                              "additionalProperties": false
+                            }
+                          },
+                          "additionalProperties": false
+                        },
+                        "imageOcclusion": {
+                          "type": "object",
+                          "required": [
+                            "imageMediaId",
+                            "masks",
+                            "targetMaskIds",
+                            "mode"
+                          ],
+                          "properties": {
+                            "imageMediaId": {
+                              "type": "string",
+                              "description": "a string at most 100 character(s) long",
+                              "title": "maxLength(100)",
+                              "minLength": 1,
+                              "maxLength": 100
+                            },
+                            "sourceId": {
+                              "type": "string",
+                              "description": "a string at most 100 character(s) long",
+                              "title": "maxLength(100)",
+                              "minLength": 1,
+                              "maxLength": 100
+                            },
+                            "masks": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "required": [
+                                  "id",
+                                  "label",
+                                  "shape",
+                                  "points"
+                                ],
+                                "properties": {
+                                  "id": {
+                                    "type": "string",
+                                    "description": "a string at most 100 character(s) long",
+                                    "title": "maxLength(100)",
+                                    "minLength": 1,
+                                    "maxLength": 100
+                                  },
+                                  "label": {
+                                    "type": "string",
+                                    "description": "a string at most 200 character(s) long",
+                                    "title": "maxLength(200)",
+                                    "maxLength": 200
+                                  },
+                                  "groupId": {
+                                    "type": "string",
+                                    "description": "a string at most 100 character(s) long",
+                                    "title": "maxLength(100)",
+                                    "minLength": 1,
+                                    "maxLength": 100
+                                  },
+                                  "shape": {
+                                    "type": "string",
+                                    "enum": [
+                                      "rectangle",
+                                      "ellipse",
+                                      "polygon"
+                                    ]
+                                  },
+                                  "points": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "object",
+                                      "required": [
+                                        "x",
+                                        "y"
+                                      ],
+                                      "properties": {
+                                        "x": {
+                                          "type": "number",
+                                          "description": "a number between 0 and 1",
+                                          "title": "between(0, 1)",
+                                          "minimum": 0,
+                                          "maximum": 1
+                                        },
+                                        "y": {
+                                          "type": "number",
+                                          "description": "a number between 0 and 1",
+                                          "title": "between(0, 1)",
+                                          "minimum": 0,
+                                          "maximum": 1
+                                        }
+                                      },
+                                      "additionalProperties": false
+                                    },
+                                    "description": "an array of at most 32 item(s)",
+                                    "title": "maxItems(32)",
+                                    "minItems": 2,
+                                    "maxItems": 32
+                                  }
+                                },
+                                "additionalProperties": false
+                              },
+                              "description": "an array of at most 100 item(s)",
+                              "title": "maxItems(100)",
+                              "minItems": 1,
+                              "maxItems": 100
+                            },
+                            "targetMaskIds": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              },
+                              "description": "an array of at most 100 item(s)",
+                              "title": "maxItems(100)",
+                              "minItems": 1,
+                              "maxItems": 100
+                            },
+                            "mode": {
+                              "type": "string",
+                              "enum": [
+                                "hide-one",
+                                "hide-all"
+                              ]
+                            }
+                          },
+                          "additionalProperties": false
+                        },
                         "id": {
                           "type": "string",
                           "description": "a string at least 1 character(s) long",
                           "title": "minLength(1)",
                           "minLength": 1
+                        },
+                        "noteId": {
+                          "type": "string"
+                        },
+                        "templateId": {
+                          "type": "string"
                         },
                         "front": {
                           "type": "string",
@@ -258,7 +940,9 @@
                                   "image/webp",
                                   "audio/mpeg",
                                   "audio/ogg",
-                                  "audio/wav"
+                                  "audio/wav",
+                                  "audio/mp4",
+                                  "audio/webm"
                                 ]
                               },
                               "byteLength": {
@@ -312,11 +996,282 @@
                             "cloze"
                           ]
                         },
+                        "presentation": {
+                          "type": "object",
+                          "required": [],
+                          "properties": {
+                            "appearance": {
+                              "type": "object",
+                              "required": [
+                                "font",
+                                "size",
+                                "align",
+                                "lineSpacing"
+                              ],
+                              "properties": {
+                                "font": {
+                                  "type": "string",
+                                  "enum": [
+                                    "sans",
+                                    "serif",
+                                    "mono"
+                                  ]
+                                },
+                                "size": {
+                                  "type": "string",
+                                  "enum": [
+                                    "small",
+                                    "medium",
+                                    "large"
+                                  ]
+                                },
+                                "align": {
+                                  "type": "string",
+                                  "enum": [
+                                    "left",
+                                    "center"
+                                  ]
+                                },
+                                "lineSpacing": {
+                                  "type": "string",
+                                  "enum": [
+                                    "compact",
+                                    "comfortable"
+                                  ]
+                                }
+                              },
+                              "additionalProperties": false
+                            },
+                            "typedAnswer": {
+                              "type": "object",
+                              "required": [
+                                "enabled",
+                                "ignoreCase",
+                                "ignoreAccents"
+                              ],
+                              "properties": {
+                                "enabled": {
+                                  "type": "boolean"
+                                },
+                                "ignoreCase": {
+                                  "type": "boolean"
+                                },
+                                "ignoreAccents": {
+                                  "type": "boolean"
+                                }
+                              },
+                              "additionalProperties": false
+                            },
+                            "speech": {
+                              "type": "object",
+                              "required": [],
+                              "properties": {
+                                "front": {
+                                  "type": "object",
+                                  "required": [
+                                    "language",
+                                    "rate",
+                                    "autoplay"
+                                  ],
+                                  "properties": {
+                                    "language": {
+                                      "type": "string",
+                                      "description": "a string at most 80 character(s) long",
+                                      "title": "maxLength(80)",
+                                      "minLength": 1,
+                                      "maxLength": 80
+                                    },
+                                    "voice": {
+                                      "type": "string",
+                                      "description": "a string at most 200 character(s) long",
+                                      "title": "maxLength(200)",
+                                      "maxLength": 200
+                                    },
+                                    "rate": {
+                                      "type": "number",
+                                      "description": "a number between 0.25 and 2",
+                                      "title": "between(0.25, 2)",
+                                      "minimum": 0.25,
+                                      "maximum": 2
+                                    },
+                                    "autoplay": {
+                                      "type": "boolean"
+                                    }
+                                  },
+                                  "additionalProperties": false
+                                },
+                                "back": {
+                                  "type": "object",
+                                  "required": [
+                                    "language",
+                                    "rate",
+                                    "autoplay"
+                                  ],
+                                  "properties": {
+                                    "language": {
+                                      "type": "string",
+                                      "description": "a string at most 80 character(s) long",
+                                      "title": "maxLength(80)",
+                                      "minLength": 1,
+                                      "maxLength": 80
+                                    },
+                                    "voice": {
+                                      "type": "string",
+                                      "description": "a string at most 200 character(s) long",
+                                      "title": "maxLength(200)",
+                                      "maxLength": 200
+                                    },
+                                    "rate": {
+                                      "type": "number",
+                                      "description": "a number between 0.25 and 2",
+                                      "title": "between(0.25, 2)",
+                                      "minimum": 0.25,
+                                      "maximum": 2
+                                    },
+                                    "autoplay": {
+                                      "type": "boolean"
+                                    }
+                                  },
+                                  "additionalProperties": false
+                                }
+                              },
+                              "additionalProperties": false
+                            }
+                          },
+                          "additionalProperties": false
+                        },
+                        "imageOcclusion": {
+                          "type": "object",
+                          "required": [
+                            "imageMediaId",
+                            "masks",
+                            "targetMaskIds",
+                            "mode"
+                          ],
+                          "properties": {
+                            "imageMediaId": {
+                              "type": "string",
+                              "description": "a string at most 100 character(s) long",
+                              "title": "maxLength(100)",
+                              "minLength": 1,
+                              "maxLength": 100
+                            },
+                            "sourceId": {
+                              "type": "string",
+                              "description": "a string at most 100 character(s) long",
+                              "title": "maxLength(100)",
+                              "minLength": 1,
+                              "maxLength": 100
+                            },
+                            "masks": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "required": [
+                                  "id",
+                                  "label",
+                                  "shape",
+                                  "points"
+                                ],
+                                "properties": {
+                                  "id": {
+                                    "type": "string",
+                                    "description": "a string at most 100 character(s) long",
+                                    "title": "maxLength(100)",
+                                    "minLength": 1,
+                                    "maxLength": 100
+                                  },
+                                  "label": {
+                                    "type": "string",
+                                    "description": "a string at most 200 character(s) long",
+                                    "title": "maxLength(200)",
+                                    "maxLength": 200
+                                  },
+                                  "groupId": {
+                                    "type": "string",
+                                    "description": "a string at most 100 character(s) long",
+                                    "title": "maxLength(100)",
+                                    "minLength": 1,
+                                    "maxLength": 100
+                                  },
+                                  "shape": {
+                                    "type": "string",
+                                    "enum": [
+                                      "rectangle",
+                                      "ellipse",
+                                      "polygon"
+                                    ]
+                                  },
+                                  "points": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "object",
+                                      "required": [
+                                        "x",
+                                        "y"
+                                      ],
+                                      "properties": {
+                                        "x": {
+                                          "type": "number",
+                                          "description": "a number between 0 and 1",
+                                          "title": "between(0, 1)",
+                                          "minimum": 0,
+                                          "maximum": 1
+                                        },
+                                        "y": {
+                                          "type": "number",
+                                          "description": "a number between 0 and 1",
+                                          "title": "between(0, 1)",
+                                          "minimum": 0,
+                                          "maximum": 1
+                                        }
+                                      },
+                                      "additionalProperties": false
+                                    },
+                                    "description": "an array of at most 32 item(s)",
+                                    "title": "maxItems(32)",
+                                    "minItems": 2,
+                                    "maxItems": 32
+                                  }
+                                },
+                                "additionalProperties": false
+                              },
+                              "description": "an array of at most 100 item(s)",
+                              "title": "maxItems(100)",
+                              "minItems": 1,
+                              "maxItems": 100
+                            },
+                            "targetMaskIds": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              },
+                              "description": "an array of at most 100 item(s)",
+                              "title": "maxItems(100)",
+                              "minItems": 1,
+                              "maxItems": 100
+                            },
+                            "mode": {
+                              "type": "string",
+                              "enum": [
+                                "hide-one",
+                                "hide-all"
+                              ]
+                            }
+                          },
+                          "additionalProperties": false
+                        },
                         "id": {
                           "type": "string",
                           "description": "a string at least 1 character(s) long",
                           "title": "minLength(1)",
                           "minLength": 1
+                        },
+                        "noteId": {
+                          "type": "string"
+                        },
+                        "templateId": {
+                          "type": "string"
                         },
                         "text": {
                           "type": "string",
@@ -365,7 +1320,9 @@
                                   "image/webp",
                                   "audio/mpeg",
                                   "audio/ogg",
-                                  "audio/wav"
+                                  "audio/wav",
+                                  "audio/mp4",
+                                  "audio/webm"
                                 ]
                               },
                               "byteLength": {
@@ -404,9 +1361,9 @@
                     }
                   ]
                 },
-                "description": "an array of at most 500 item(s)",
-                "title": "maxItems(500)",
-                "maxItems": 500
+                "description": "an array of at most 50000 item(s)",
+                "title": "maxItems(50000)",
+                "maxItems": 50000
               },
               "tags": {
                 "type": "array",

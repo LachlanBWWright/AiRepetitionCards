@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Net.Http.Headers;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Recall.Api.Features.Auth;
 using Recall.Api.Features.RateLimits;
 using Recall.Infrastructure.SupabaseAuth;
@@ -73,6 +74,15 @@ public static class AccountEndpointMappings
         if (revisions is null || cardObjectives is null)
             return Error("account-export-unavailable", StatusCodes.Status502BadGateway);
 
+        var studyRows = await ReadRows(client, projectUrl, publishableKey, context, "workspace_study", "owner_id=eq." + ownerId, "owner_id", cancellationToken);
+        if (studyRows is null) return Error("account-export-unavailable", StatusCodes.Status502BadGateway);
+        var studyEntries = await ReadRows(client, projectUrl, publishableKey, context, "workspace_study_entries", "owner_id=eq." + ownerId, "sequence", cancellationToken);
+        var studyAfter = await ReadRows(client, projectUrl, publishableKey, context, "workspace_study", "owner_id=eq." + ownerId, "owner_id", cancellationToken);
+        if (studyEntries is null || studyAfter is null || JsonSerializer.Serialize(studyRows) != JsonSerializer.Serialize(studyAfter)) return Error("account-export-unavailable", StatusCodes.Status502BadGateway);
+        var studySettings = studyRows.Count > 0 ? JsonNode.Parse(studyRows[0].GetProperty("document").GetRawText()) as JsonObject : new JsonObject { ["settings"] = new JsonObject { ["requestRetention"] = .9 } };
+        if (studySettings is null) return Error("account-export-unavailable", StatusCodes.Status502BadGateway);
+        foreach (var kind in new[] { "adjustments", "corrections", "undoStates", "importedSchedules" })
+            studySettings[kind] = new JsonArray(studyEntries.Where(entry => entry.GetProperty("kind").GetString() == kind).Select(entry => JsonNode.Parse(entry.GetProperty("value").GetRawText())).ToArray());
         var now = DateTimeOffset.UtcNow;
         var export = new
         {
@@ -91,6 +101,7 @@ public static class AccountEndpointMappings
                 cardObjectives,
                 reviewEvents = reviews,
                 schedulingState = schedules,
+                studySettings,
                 syncChanges,
                 tutorSessions = sessions,
                 tutorMessages = messages,

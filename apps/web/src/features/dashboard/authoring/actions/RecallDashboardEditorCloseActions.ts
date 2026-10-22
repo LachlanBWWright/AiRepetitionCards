@@ -22,10 +22,12 @@ export function createRecallDashboardEditorCloseActions(
     | "setEditingCardId"
     | "setFront"
     | "setBack"
+    | "setImageOcclusion"
     | "setCardKind"
     | "setClozeText"
     | "setClozeIndex"
     | "setCardObjectiveIds"
+    | "setCardPresentation"
     | "setCardTags"
     | "setRemovedMediaIds"
     | "setMediaFile"
@@ -50,10 +52,12 @@ export function createRecallDashboardEditorCloseActions(
     setEditingCardId,
     setFront,
     setBack,
+    setImageOcclusion,
     setCardKind,
     setClozeText,
     setClozeIndex,
     setCardObjectiveIds,
+    setCardPresentation,
     setCardTags,
     setRemovedMediaIds,
     setMediaFile,
@@ -86,10 +90,12 @@ export function createRecallDashboardEditorCloseActions(
     setEditingCardId(null);
     setFront("");
     setBack("");
+    setImageOcclusion(undefined);
     setCardKind("basic");
     setClozeText("");
     setClozeIndex("1");
     setCardObjectiveIds([]);
+    setCardPresentation(undefined);
     setCardTags(formatTagInput([]));
     setRemovedMediaIds([]);
     setMediaFile(null);

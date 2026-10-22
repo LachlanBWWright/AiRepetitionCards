@@ -1,3 +1,4 @@
+import { MAX_COLLECTION_CARDS } from "@recall/domain";
 import { Effect, Either, Schema } from "effect";
 import { KnowledgeAreaSchema } from "@recall/domain";
 import { CodingPayloadSchema } from "@recall/domain";
@@ -46,6 +47,8 @@ const mediaMimeTypes = new Set([
   "audio/mpeg",
   "audio/ogg",
   "audio/wav",
+  "audio/mp4",
+  "audio/webm",
 ]);
 const validMediaReference = (entry: Record<string, unknown> | undefined): boolean =>
   !!entry &&
@@ -65,7 +68,7 @@ export function inspectDeckQuality(
 ): Effect.Effect<readonly DeckQualityIssue[], DeckQualityFailure> {
   return Effect.gen(function* () {
     const raw = record(input);
-    if (!raw || !Array.isArray(raw.cards) || raw.cards.length > 500)
+    if (!raw || !Array.isArray(raw.cards) || raw.cards.length > MAX_COLLECTION_CARDS)
       return yield* Effect.fail({
         _tag: "DeckQualityFailure",
         message: "The deck could not be validated for publishing.",

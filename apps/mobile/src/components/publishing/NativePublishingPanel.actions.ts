@@ -1,3 +1,4 @@
+import { areaMediaReferences } from "@recall/application";
 import { Effect, Either } from "effect";
 import {
   diffKnowledgeAreas,
@@ -140,11 +141,7 @@ export function createNativePublishingPanelActions(context: NativePublishingPane
     }
     setBusy(true);
     setNotice(null);
-    const references = [
-      ...new Map(
-        area.cards.flatMap((card) => card.media ?? []).map((item) => [item.id, item]),
-      ).values(),
-    ];
+    const references = areaMediaReferences(area);
     for (const reference of references) {
       const stored = await Effect.runPromise(Effect.either(mediaStore.get(reference.id)));
       if (Either.isLeft(stored) || !stored.right || !verifyMediaAsset(stored.right)) {
@@ -309,11 +306,7 @@ export function createNativePublishingPanelActions(context: NativePublishingPane
       return;
     }
     const document = result.right.document;
-    const references = [
-      ...new Map(
-        document.cards.flatMap((card) => card.media ?? []).map((item) => [item.id, item]),
-      ).values(),
-    ];
+    const references = areaMediaReferences(document);
     const assets: StoredMediaAsset[] = [];
     for (const reference of references) {
       const downloaded = await Effect.runPromise(

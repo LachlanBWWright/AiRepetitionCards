@@ -1,3 +1,9 @@
+import { createNoteDraftPort } from "@recall/react";
+import { useState } from "react";
+import { NoteLibraryEditor } from "../notes/NoteLibraryEditor";
+import { PronunciationRecorder } from "@/components/cards/PronunciationRecorder";
+import { CardOcclusionEditor } from "@/components/occlusion/CardOcclusionEditor";
+import { ReviewPresentationSettings } from "@/components/cards/ReviewPresentationSettings";
 import { Either } from "effect";
 import { Button } from "@/components/ui/Button";
 import {
@@ -37,6 +43,8 @@ function ReopenLatestCardButton({
 }
 
 export function RecallDashboardCardEditor({ model }: { readonly model: RecallDashboardModel }) {
+  const [sharedNotes, setSharedNotes] = useState(false);
+  const linkedNoteId = model.cardEditor.current.sourceCard?.noteId;
   const {
     addingCard,
     workspaceUnlocked,
@@ -111,6 +119,91 @@ export function RecallDashboardCardEditor({ model }: { readonly model: RecallDas
       : null;
   const assistanceArea =
     tutorAreaDocument && Either.isRight(tutorAreaDocument) ? tutorAreaDocument.right : null;
+  const cardFields = (
+    <RecallDashboardCardEditorFields cardSaving={cardSaving}>
+      <RecallDashboardCardPromptFields
+        media={(cardEditor.current.sourceCard?.media ?? []).filter(
+          (item) => !removedMediaIds.includes(item.id),
+        )}
+        cardKind={cardKind}
+        setCardKind={setCardKind}
+        generation={cardEditor.current.generation}
+        front={front}
+        setFront={setFront}
+        back={back}
+        setBack={setBack}
+        clozeText={clozeText}
+        setClozeText={setClozeText}
+        clozeIndex={clozeIndex}
+        setClozeIndex={setClozeIndex}
+        clozePreview={clozePreviewValue}
+      />
+      <CardOcclusionEditor
+        sourceCard={model.cardEditor.current.sourceCard ?? undefined}
+        value={model.imageOcclusion}
+        onChange={model.setImageOcclusion}
+        removedMediaIds={removedMediaIds}
+        disabled={cardSaving}
+      />
+      <RecallDashboardCardAssistance
+        area={assistanceArea}
+        candidates={duplicateCandidates}
+        cardKind={cardKind}
+        front={front}
+        back={back}
+        clozeText={clozeText}
+        clozePreview={clozePreview && Either.isRight(clozePreview) ? clozePreview.right : null}
+        objectiveId={cardObjectiveIds[0] ?? null}
+        editingCardId={editingCardId}
+        saving={cardSaving}
+        mediaFile={mediaFile}
+        stale={cardDraftStale}
+        demo={Boolean(demo)}
+        ready={ready}
+        cacheWritable={cacheWritable}
+        onBusyChange={setCardSaving}
+        onApply={applyCardRefinement}
+      />
+      <RecallDashboardCardDuplicateSection
+        draft={duplicateDraft}
+        candidates={duplicateCandidates}
+        editingCardId={editingCardId}
+        acknowledgement={duplicateAcknowledgement}
+        duplicateKey={duplicateKey}
+        saving={cardSaving}
+        onAcknowledgementChange={(value) => {
+          setDuplicateAcknowledgement(value ? duplicateKey : null);
+        }}
+        onOpenCandidate={openDuplicateCandidate}
+      />
+      <RecallDashboardCardDetails
+        objectives={area?.objectives}
+        objectiveIds={cardObjectiveIds}
+        setObjectiveIds={setCardObjectiveIds}
+        tags={cardTags}
+        setTags={setCardTags}
+        sourceMedia={cardEditor.current.sourceCard?.media ?? []}
+        removedMediaIds={removedMediaIds}
+        setRemovedMediaIds={setRemovedMediaIds}
+        mediaFile={mediaFile}
+        setMediaFile={setMediaFile}
+      />
+      <RecallDashboardCardEditorActions
+        editing={Boolean(editingCardId)}
+        saving={cardSaving}
+        duplicatesAccepted={duplicatesAccepted}
+        canSave={canSaveCardDraft({
+          kind: cardKind,
+          front,
+          back,
+          hasClozePreview: Boolean(clozePreview && Either.isRight(clozePreview)),
+        })}
+        onCancel={() => {
+          requestDraftClose("card");
+        }}
+      />
+    </RecallDashboardCardEditorFields>
+  );
   return (
     <Dialog
       open={addingCard && workspaceUnlocked}
@@ -120,13 +213,14 @@ export function RecallDashboardCardEditor({ model }: { readonly model: RecallDas
     >
       <DialogContent
         aria-labelledby="card-dialog-title"
-        className="max-h-[calc(100dvh-2.5rem)] overflow-y-auto"
+        className={`max-h-[calc(100dvh-2.5rem)] overflow-y-auto ${sharedNotes || linkedNoteId ? "sm:max-w-3xl" : ""}`}
         showCloseButton={false}
       >
         <form
           className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-3"
           onSubmit={(event) => {
-            void createCard(event);
+            if (sharedNotes || linkedNoteId) event.preventDefault();
+            else void createCard(event);
           }}
         >
           <Button
@@ -142,6 +236,15 @@ export function RecallDashboardCardEditor({ model }: { readonly model: RecallDas
           >
             ×
           </Button>
+          {!(sharedNotes || linkedNoteId) && (
+            <>
+              <PronunciationRecorder onAttach={setMediaFile} disabled={cardSaving} />
+              <ReviewPresentationSettings
+                value={model.cardPresentation}
+                onChange={model.setCardPresentation}
+              />
+            </>
+          )}
           <DialogHeader className="pr-10">
             <DialogTitle id="card-dialog-title">
               {editingCardId ? "Edit card" : "Add card"}
@@ -156,81 +259,33 @@ export function RecallDashboardCardEditor({ model }: { readonly model: RecallDas
               )}
             </Alert>
           )}
-          <RecallDashboardCardEditorFields cardSaving={cardSaving}>
-            <RecallDashboardCardPromptFields
-              cardKind={cardKind}
-              setCardKind={setCardKind}
-              generation={cardEditor.current.generation}
-              front={front}
-              setFront={setFront}
-              back={back}
-              setBack={setBack}
-              clozeText={clozeText}
-              setClozeText={setClozeText}
-              clozeIndex={clozeIndex}
-              setClozeIndex={setClozeIndex}
-              clozePreview={clozePreviewValue}
-            />
-            <RecallDashboardCardAssistance
-              area={assistanceArea}
-              candidates={duplicateCandidates}
-              cardKind={cardKind}
-              front={front}
-              back={back}
-              clozeText={clozeText}
-              clozePreview={
-                clozePreview && Either.isRight(clozePreview) ? clozePreview.right : null
-              }
-              objectiveId={cardObjectiveIds[0] ?? null}
-              editingCardId={editingCardId}
-              saving={cardSaving}
-              mediaFile={mediaFile}
-              stale={cardDraftStale}
-              demo={Boolean(demo)}
-              ready={ready}
-              cacheWritable={cacheWritable}
-              onBusyChange={setCardSaving}
-              onApply={applyCardRefinement}
-            />
-            <RecallDashboardCardDuplicateSection
-              draft={duplicateDraft}
-              candidates={duplicateCandidates}
-              editingCardId={editingCardId}
-              acknowledgement={duplicateAcknowledgement}
-              duplicateKey={duplicateKey}
-              saving={cardSaving}
-              onAcknowledgementChange={(value) => {
-                setDuplicateAcknowledgement(value ? duplicateKey : null);
+          {!editingCardId && (
+            <Button
+              type="button"
+              variant="secondary"
+              size="small"
+              onClick={() => {
+                setSharedNotes(!sharedNotes);
               }}
-              onOpenCandidate={openDuplicateCandidate}
+            >
+              {sharedNotes ? "Use individual card editor" : "Use shared notes and templates"}
+            </Button>
+          )}
+          {(sharedNotes || linkedNoteId) && area ? (
+            <NoteLibraryEditor
+              key={`${area.id}:${linkedNoteId ?? "new"}`}
+              workspace={model.workspace}
+              area={area}
+              save={model.saveAuthoringCommand}
+              createId={() => crypto.randomUUID()}
+              initialNoteId={linkedNoteId}
+              disabled={cardSaving || !model.cacheWritable}
+              draftsLoaded={model.libraryNotes.loaded}
+              draftPort={createNoteDraftPort(model.libraryNotes.notes, model.libraryNotes.update)}
             />
-            <RecallDashboardCardDetails
-              objectives={area?.objectives}
-              objectiveIds={cardObjectiveIds}
-              setObjectiveIds={setCardObjectiveIds}
-              tags={cardTags}
-              setTags={setCardTags}
-              sourceMedia={cardEditor.current.sourceCard?.media ?? []}
-              removedMediaIds={removedMediaIds}
-              setRemovedMediaIds={setRemovedMediaIds}
-              mediaFile={mediaFile}
-              setMediaFile={setMediaFile}
-            />
-            <RecallDashboardCardEditorActions
-              editing={Boolean(editingCardId)}
-              saving={cardSaving}
-              duplicatesAccepted={duplicatesAccepted}
-              canSave={canSaveCardDraft({
-                kind: cardKind,
-                front,
-                back,
-                hasClozePreview: Boolean(clozePreview && Either.isRight(clozePreview)),
-              })}
-              onCancel={() => {
-                requestDraftClose("card");
-              }}
-            />
-          </RecallDashboardCardEditorFields>
+          ) : (
+            cardFields
+          )}
         </form>
       </DialogContent>
     </Dialog>

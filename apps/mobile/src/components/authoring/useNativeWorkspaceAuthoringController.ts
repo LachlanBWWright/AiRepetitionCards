@@ -20,6 +20,7 @@ import { createSubmitWorkflow } from "./workflows/SubmitWorkflow";
 
 export function useNativeWorkspaceAuthoringController({
   workspace,
+  mediaStore,
   notes = emptyLibraryNotes,
   flaggedOnly: requestedFlaggedOnly,
   onFlaggedFilterChange,
@@ -298,6 +299,7 @@ export function useNativeWorkspaceAuthoringController({
     })(continueAdding);
   }
   return {
+    mediaStore,
     workspace,
     notes,
     area,

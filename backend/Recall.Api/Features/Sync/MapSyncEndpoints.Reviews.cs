@@ -26,7 +26,7 @@ internal static partial class SyncHandlers
                 !item.ContainsKey("schedulerParameterSetId") || !item.ContainsKey("previousStateHash") ||
                 item["baseReviewEventId"] is not null && !TryUuid(item["baseReviewEventId"], out _) ||
                 item["elapsedMs"] is not null && IntegerNode(item["elapsedMs"]) is null or < 0 ||
-                item["schedulerParameterSetId"] is not null && StringNode(item["schedulerParameterSetId"]) is not { Length: <= 80 } ||
+                item["schedulerParameterSetId"] is not null && StringNode(item["schedulerParameterSetId"]) is not { Length: <= 2048 } ||
                 item["previousStateHash"] is not null && !IsHash(StringNode(item["previousStateHash"]))) return Error("invalid-request", 400);
             var elapsed = IntegerNode(item["elapsedMs"]);
             var normalizedDeviceTime = DateTimeOffset.FromUnixTimeMilliseconds(deviceTime.ToUnixTimeMilliseconds());

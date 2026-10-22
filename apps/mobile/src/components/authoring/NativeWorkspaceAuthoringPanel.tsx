@@ -1,3 +1,4 @@
+import { NativeNoteAuthoringSection } from "./notes/NativeNoteAuthoringSection";
 import { View } from "react-native";
 import type { NativeWorkspaceAuthoringPanelProps } from "./NativeWorkspaceAuthoringPanel.types";
 import { DeleteConfirmation } from "./workflows/DeleteConfirmation";
@@ -26,7 +27,13 @@ export function NativeWorkspaceAuthoringPanel(props: NativeWorkspaceAuthoringPan
       <NativeWorkspaceSearchHistory {...sections.searchHistory} />
       {sections.deckControls && <NativeWorkspaceDeckControls {...sections.deckControls} />}
       <NativeWorkspaceSimpleEditors {...sections.simpleEditors} />
-      {sections.cardEditor && <NativeWorkspaceCardEditor {...sections.cardEditor} />}
+      <NativeNoteAuthoringSection
+        {...props}
+        initialNoteId={sections.cardEditor?.editor.sourceCard?.noteId}
+      />
+      {sections.cardEditor && !sections.cardEditor.editor.sourceCard?.noteId && (
+        <NativeWorkspaceCardEditor {...sections.cardEditor} />
+      )}
       {sections.settingsEditor && <NativeWorkspaceSettingsEditor {...sections.settingsEditor} />}
       <DeleteConfirmation {...sections.deleteConfirmation} />
       <NativeWorkspaceCardLibrary {...sections.cardLibrary} />

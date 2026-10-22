@@ -145,7 +145,7 @@ public sealed partial class TutorApiOperations
             !TryString(area, "language", out _) || !area.TryGetProperty("objectives", out var objectives) || objectives.ValueKind != JsonValueKind.Array || objectives.GetArrayLength() > 200 ||
             !area.TryGetProperty("ai", out var ai) || !TryString(ai, "tutorInstructions", out var tutorInstructions) || tutorInstructions.Length > 2_000 ||
             !OptionalNullString(ai, "quizInstructions", 2_000) || !OptionalNullString(ai, "cardGenerationInstructions", 2_000) ||
-            !area.TryGetProperty("cards", out var cards) || cards.ValueKind != JsonValueKind.Array || cards.GetArrayLength() > 500 ||
+            !area.TryGetProperty("cards", out var cards) || cards.ValueKind != JsonValueKind.Array || cards.GetArrayLength() > 50000 ||
             !area.TryGetProperty("tags", out var tags) || !IsStringArray(tags) ||
             !area.TryGetProperty("licence", out var licence) || !(licence.ValueKind is JsonValueKind.Null or JsonValueKind.String)) return false;
         foreach (var objective in objectives.EnumerateArray())
@@ -166,7 +166,7 @@ public sealed partial class TutorApiOperations
                 (!deletion.TryGetInt32(out var deletionIndex) || deletionIndex is < 1 or > 20)) return false;
             if (card.TryGetProperty("media", out var media) && (media.ValueKind != JsonValueKind.Array || media.GetArrayLength() > 20 ||
                 media.EnumerateArray().Any(item => !TryString(item, "id", out _) || !TryString(item, "mimeType", out var mime) ||
-                    mime is not ("image/jpeg" or "image/png" or "image/gif" or "image/webp" or "audio/mpeg" or "audio/ogg" or "audio/wav") ||
+                    mime is not ("image/jpeg" or "image/png" or "image/gif" or "image/webp" or "audio/mpeg" or "audio/ogg" or "audio/wav" or "audio/mp4" or "audio/webm") ||
                     !item.TryGetProperty("byteLength", out var length) || !length.TryGetInt32(out var bytes) || bytes is < 1 or > 20_000_000))) return false;
         }
         if (area.TryGetProperty("attribution", out var attribution) && attribution.ValueKind != JsonValueKind.Null &&

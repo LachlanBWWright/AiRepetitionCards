@@ -62,3 +62,10 @@ Use `pnpm supabase:start` and copy the local Supabase URL/publishable key into `
 ## Web content security policy
 
 Web pages render dynamically with a fresh script nonce forwarded through the proxy and Supabase cookie refresh. Do not cache nonce-bearing HTML across requests at the CDN. The policy restricts connections to this origin and the validated configured Supabase origin, denies embedded frames/objects, and permits local blob/data media. Existing inline CSS and WebAssembly compilation remain allowed for the UI and bounded Anki importer; JavaScript evaluation is allowed only during development. Browser enforcement and authentication/import flows still need runtime acceptance. There is no blanket insecure-request upgrade, preserving configured HTTP loopback development.
+
+## Study migration acceptance
+
+The development database has been reconciled with the split initial chain and upgraded through
+`20261024000000_atomic_linked_notes.sql`. This does not change a hosted environment.
+See [study release validation](study-release-readiness.md) for the catalog comparison, preserved
+row counts, scratch restore and repeatable authenticated HTTP acceptance command.

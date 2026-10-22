@@ -56,7 +56,7 @@ const nextConfig: NextConfig = {
   typedRoutes: true,
   output: "standalone",
   outputFileTracingRoot: fileURLToPath(new URL("../../", import.meta.url)),
-  transpilePackages: ["@recall/ui-web"],
+  transpilePackages: ["@recall/ui-web", "@recall/react"],
   headers() {
     return Promise.resolve([
       { source: "/:path*", headers: securityHeaders },

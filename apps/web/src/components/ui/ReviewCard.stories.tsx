@@ -1,3 +1,5 @@
+import { defaultReviewerSettings } from "@recall/domain";
+import { useState } from "react";
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { ReviewCard } from "./ReviewCard";
 import { mockWorkspace } from "@/features/workspace/mock-data";
@@ -93,4 +95,72 @@ export const FullScreenCatalog: Story = {
       </div>
     </main>
   ),
+};
+
+function TypedAnswerPractice() {
+  const [revealed, setRevealed] = useState(false);
+  const [rating, setRating] = useState("");
+  if (!exampleCard) return null;
+  const card = {
+    ...exampleCard,
+    front: "French for coffee?",
+    back: "café",
+    presentation: {
+      typedAnswer: { enabled: true, ignoreCase: true, ignoreAccents: false },
+      speech: { back: { language: "fr-FR", rate: 0.8, autoplay: false } },
+    },
+  };
+  return (
+    <main className="max-w-2xl mx-auto p-8">
+      <ReviewCard
+        area={biology}
+        card={card}
+        showAnswer={revealed}
+        onReveal={() => {
+          setRevealed(true);
+        }}
+        onRate={setRating}
+        onAddCard={() => undefined}
+      />
+      {rating && <p role="status">Selected rating: {rating}</p>}
+    </main>
+  );
+}
+export const TypedAnswerAndSpeech: Story = {
+  args: Question.args,
+  render: () => <TypedAnswerPractice />,
+};
+
+function CustomReviewerPractice() {
+  const [revealed, setRevealed] = useState(false);
+  const [rating, setRating] = useState("");
+  if (!exampleCard) return null;
+  return (
+    <main className="mx-auto max-w-2xl p-6">
+      <ReviewCard
+        area={biology}
+        card={exampleCard}
+        showAnswer={revealed}
+        keyboardActive
+        reviewerSettings={{
+          ...defaultReviewerSettings,
+          showTimer: true,
+          questionSeconds: 3,
+          answerSeconds: 3,
+          shortcuts: { reveal: "r", again: "a", hard: "h", good: "g", easy: "e" },
+          swipeEnabled: true,
+        }}
+        onReveal={() => {
+          setRevealed(true);
+        }}
+        onRate={setRating}
+        onAddCard={() => undefined}
+      />
+      {rating && <p role="status">Selected rating: {rating}</p>}
+    </main>
+  );
+}
+export const CustomReviewerControls: Story = {
+  args: Question.args,
+  render: () => <CustomReviewerPractice />,
 };

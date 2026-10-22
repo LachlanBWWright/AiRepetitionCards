@@ -1163,6 +1163,48 @@ export type Database = {
           },
         ];
       };
+      workspace_study: {
+        Row: {
+          document: NonNullable<Json>;
+          owner_id: string;
+          revision: number;
+        };
+        Insert: {
+          document: NonNullable<Json>;
+          owner_id: string;
+          revision?: number;
+        };
+        Update: {
+          document?: NonNullable<Json>;
+          owner_id?: string;
+          revision?: number;
+        };
+        Relationships: [];
+      };
+      workspace_study_entries: {
+        Row: {
+          entry_id: string;
+          kind: string;
+          owner_id: string;
+          sequence: number;
+          value: NonNullable<Json>;
+        };
+        Insert: {
+          entry_id: string;
+          kind: string;
+          owner_id: string;
+          sequence?: never;
+          value: NonNullable<Json>;
+        };
+        Update: {
+          entry_id?: string;
+          kind?: string;
+          owner_id?: string;
+          sequence?: never;
+          value?: NonNullable<Json>;
+        };
+        Relationships: [];
+      };
     };
     Views: {
       [_ in never]: never;
@@ -1461,6 +1503,8 @@ export type Database = {
           visibility: string;
         }[];
       };
+      read_workspace_study: { Args: Record<PropertyKey, never>; Returns: Json };
+      read_workspace_study_page: { Args: { p_after?: number; p_limit?: number }; Returns: Json };
       record_tutor_ai_usage: {
         Args: { p_id: string; p_input_tokens: number; p_output_tokens: number };
         Returns: boolean;
@@ -1483,6 +1527,12 @@ export type Database = {
         Returns: boolean;
       };
       sync_workspace_content: { Args: { p_areas: Json; p_tombstones: Json }; Returns: boolean };
+      sync_workspace_content_unchecked: {
+        Args: { p_areas: Json; p_tombstones: Json };
+        Returns: boolean;
+      };
+      sync_workspace_study: { Args: { p_document: Json; p_revision: number }; Returns: Json };
+      sync_workspace_study_batch: { Args: { p_document: Json; p_revision: number }; Returns: Json };
       tombstone_knowledge_areas: { Args: { p_area_tombstones: Json }; Returns: boolean };
       write_learning_activities: {
         Args: { p_library: Json; p_revision: number; p_user_id: string };

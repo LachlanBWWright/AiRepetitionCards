@@ -38,6 +38,8 @@ export function snapshotLibraryDraft(
   if (
     source &&
     (source.cloze ? "cloze" : "basic") === content.kind &&
+    JSON.stringify(source.presentation) === JSON.stringify(content.presentation) &&
+    JSON.stringify(source.imageOcclusion) === JSON.stringify(content.imageOcclusion) &&
     source.front === content.front &&
     source.back === content.back &&
     (source.cloze?.text ?? "") === (content.cloze?.text ?? "") &&
@@ -53,11 +55,13 @@ export function snapshotLibraryDraft(
     areaId: editor.areaId,
     id: editor.id,
     mode: editor.mode,
+    imageOcclusion: content.imageOcclusion,
     cardKind: content.kind,
     front: content.front,
     back: content.back,
     clozeText: content.cloze?.text ?? "",
     clozeIndex: String(content.cloze?.deletionIndex ?? 1),
+    presentation: content.presentation,
     tagsText: editor.tagsText,
     objectiveIds: content.objectiveIds,
     media: content.media,

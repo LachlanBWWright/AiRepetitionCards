@@ -1,3 +1,10 @@
+import { useNativeReviewerControls } from "./useNativeReviewerControls";
+import { defaultReviewerSettings, type ReviewerSettings } from "@recall/domain";
+import { occlusionAnswerLabel, occlusionSafeMediaUrls } from "@recall/application";
+import { NativeImageOcclusionView } from "../occlusion/NativeImageOcclusionView";
+import { NativeReviewSpeech } from "./NativeReviewSpeech";
+import { NativeCardRichText } from "../authoring/rich/NativeCardRichText";
+import { NativeTypedReviewAnswer } from "./NativeTypedReviewAnswer";
 import type { Assessment } from "@recall/domain";
 import type { ReviewRating } from "@recall/scheduler";
 import { Image, Pressable, Text, View } from "react-native";
@@ -14,6 +21,8 @@ const ratings = [
 
 export type NativeTodayScreenReviewCardProps = {
   readonly card: Assessment;
+  readonly automationPaused?: boolean;
+  readonly reviewerSettings?: ReviewerSettings | undefined;
   readonly flagged: boolean;
   readonly onFlag?: (id: string) => void;
   readonly showAnswer: boolean;
@@ -67,6 +76,8 @@ function RatingButtons({
 
 export function NativeTodayScreenReviewCard({
   card,
+  reviewerSettings = defaultReviewerSettings,
+  automationPaused = false,
   flagged,
   onFlag,
   showAnswer,
@@ -77,6 +88,14 @@ export function NativeTodayScreenReviewCard({
   onReview,
   onShowAnswer,
 }: NativeTodayScreenReviewCardProps) {
+  const controls = useNativeReviewerControls({
+    cardId: card.id,
+    revealed: showAnswer,
+    disabled: reviewPending || automationPaused,
+    settings: reviewerSettings,
+    onReveal: onShowAnswer,
+    onRate: onReview,
+  });
   return (
     <View>
       {onFlag && (
@@ -89,18 +108,57 @@ export function NativeTodayScreenReviewCard({
           }}
         />
       )}
+      {(reviewerSettings.showTimer || controls.canAutoAdvance) && (
+        <View className="flex-row items-center justify-end gap-3 pb-2">
+          {reviewerSettings.showTimer && (
+            <Text accessibilityLabel="Time on this side" className="text-sm text-recall-muted">
+              {Math.floor(controls.elapsedSeconds / 60)}:
+              {String(controls.elapsedSeconds % 60).padStart(2, "0")}
+            </Text>
+          )}
+          {controls.canAutoAdvance && (
+            <NativeButton
+              label={controls.running ? "Stop auto-advance" : "Start auto-advance"}
+              tone="soft"
+              disabled={reviewPending}
+              onPress={controls.toggle}
+            />
+          )}
+        </View>
+      )}
       <Card className="rounded-[12px] bg-recall-surface border border-recall-line p-[23px] min-h-[260px] justify-between">
         <View className="flex-row justify-between items-center">
           <Text className="text-recall-muted text-[12px]">
             {showAnswer ? "Answer" : "Question"}
           </Text>
         </View>
-        <Text className="text-recall-ink text-[23px] leading-[32px] font-medium my-[28px]">
-          {showAnswer ? card.back : card.front}
-        </Text>
+        <View {...controls.panHandlers}>
+          <NativeCardRichText
+            appearance={card.presentation?.appearance}
+            text={showAnswer ? occlusionAnswerLabel(card.imageOcclusion, card.back) : card.front}
+            mediaUrls={occlusionSafeMediaUrls(card.imageOcclusion, mediaUris)}
+          />
+        </View>
+        <NativeReviewSpeech card={card} revealed={showAnswer} />
+        <NativeTypedReviewAnswer
+          key={card.id}
+          card={card}
+          revealed={showAnswer}
+          disabled={reviewPending}
+          onReveal={onShowAnswer}
+        />
         {card.media?.map((reference) => {
           const uri = mediaUris[reference.id];
           if (!uri) return null;
+          if (card.imageOcclusion?.imageMediaId === reference.id)
+            return (
+              <NativeImageOcclusionView
+                key={reference.id}
+                image={card.imageOcclusion}
+                uri={uri}
+                revealed={showAnswer}
+              />
+            );
           return reference.mimeType.startsWith("image/") ? (
             <Image
               key={reference.id}

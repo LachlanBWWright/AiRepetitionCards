@@ -56,3 +56,22 @@ export type {
   WorkspaceSearchResult,
   WorkspaceSearchOptions,
 } from "./workspace-search";
+
+export {
+  inspectCollection,
+  collectionCardIssues,
+  maintainCollectionMedia,
+  type CollectionHealth,
+} from "./maintenance/collection-health";
+export { workspaceMediaReferences, areaMediaReferences } from "./media/media-references";
+
+export {
+  restoreWorkspaceCheckpoint,
+  repairCollectionReferences,
+} from "./maintenance/workspace-recovery";
+
+export {
+  purgeMediaTrash,
+  applyMediaTrashPurge,
+  type MediaTrashPurgeResult,
+} from "./maintenance/purge-media-trash";

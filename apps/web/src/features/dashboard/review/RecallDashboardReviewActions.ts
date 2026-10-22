@@ -47,9 +47,10 @@ export function createRecallDashboardReviewActions(
     setShowAnswer,
     setNow,
   } = model;
-  function review(rating: ReviewRating) {
+  function review(rating: ReviewRating, elapsedMs?: number) {
     return reviewWorkspaceCard({
       rating,
+      ...(elapsedMs === undefined ? {} : { elapsedMs }),
       reviewingRef,
       pendingReviewRef,
       area,

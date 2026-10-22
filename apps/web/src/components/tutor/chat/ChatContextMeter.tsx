@@ -11,7 +11,7 @@ export function ChatContextMeter({
     ? Math.min(100, (usage.inputTokens / TUTOR_CONTEXT_TOKEN_LIMIT) * 100)
     : null;
   const label =
-    percent === null ? "—" : `${percent < 1 ? percent.toFixed(1) : Math.round(percent)}%`;
+    percent === null ? "—" : `${percent < 1 ? percent.toFixed(1) : String(Math.round(percent))}%`;
   const count = (value: number | null) =>
     value === null ? "Not reported" : value.toLocaleString();
   return (
@@ -32,7 +32,7 @@ export function ChatContextMeter({
             aria-hidden="true"
             className={`size-3.5 rounded-full border border-current ${percent !== null && percent >= 90 ? "text-amber-400" : ""}`}
             style={{
-              background: `conic-gradient(currentColor ${(percent ?? 0) * 3.6}deg, transparent 0)`,
+              background: `conic-gradient(currentColor ${String((percent ?? 0) * 3.6)}deg, transparent 0)`,
             }}
           />
           {label}

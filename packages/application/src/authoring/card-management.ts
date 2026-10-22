@@ -1,7 +1,10 @@
+import { MAX_COLLECTION_CARDS } from "@recall/domain";
 import { captureCardVersion } from "../card-history";
 import { retainReviewDeletionContent } from "../review/review-deletion-retention";
 import { Effect, Schema } from "effect";
 import {
+  ReviewPresentationSchema,
+  ImageOcclusionSchema,
   AreaIdSchema,
   AssessmentIdSchema,
   ClozeContentSchema,
@@ -17,6 +20,10 @@ import { renderCloze } from "./cloze";
 import { authoredTagsValid, tagsUnchanged } from "./tag-input";
 
 export const CardContentSchema = Schema.Struct({
+  removeImageOcclusion: Schema.optional(Schema.Boolean),
+  removePresentation: Schema.optional(Schema.Boolean),
+  presentation: Schema.optional(ReviewPresentationSchema),
+  imageOcclusion: Schema.optional(ImageOcclusionSchema),
   kind: Schema.Union(Schema.Literal("basic"), Schema.Literal("cloze")),
   front: Schema.String,
   back: Schema.String,
@@ -46,7 +53,11 @@ const decodeWorkspace = (input: unknown) =>
     Effect.mapError(() => failure("invalid-input", "This workspace contains invalid data.")),
   );
 
-function prepareContent(area: LearningArea, input: CardContent, previous?: Assessment) {
+export function prepareStudyCardContent(
+  area: LearningArea,
+  input: CardContent,
+  previous?: Assessment,
+) {
   return Effect.gen(function* () {
     const tags = input.tags;
     if (!tagsUnchanged(tags, previous?.tags ?? []) && !authoredTagsValid(tags)) {
@@ -65,6 +76,22 @@ function prepareContent(area: LearningArea, input: CardContent, previous?: Asses
     if (new Set(input.media.map((reference) => reference.id)).size !== input.media.length) {
       return yield* Effect.fail(failure("invalid-input", "Choose each attachment only once."));
     }
+    const imageOcclusion = input.removeImageOcclusion
+      ? undefined
+      : (input.imageOcclusion ?? previous?.imageOcclusion);
+    if (
+      imageOcclusion &&
+      !input.media.some(
+        (reference) =>
+          reference.id === imageOcclusion.imageMediaId && reference.mimeType.startsWith("image/"),
+      )
+    )
+      return yield* Effect.fail(
+        failure(
+          "invalid-input",
+          "Image occlusion requires its attached image. Remove the masks before removing the image.",
+        ),
+      );
     const objectiveIds = [...new Set(input.objectiveIds)];
     const available = new Set((area.objectives ?? []).map((objective) => objective.id));
     if (objectiveIds.some((id) => !available.has(id))) {
@@ -92,6 +119,14 @@ function prepareContent(area: LearningArea, input: CardContent, previous?: Asses
       return yield* Effect.fail(failure("invalid-input", "Write both a question and an answer."));
     }
     return {
+      ...(input.presentation || previous?.presentation
+        ? {
+            presentation: input.removePresentation
+              ? undefined
+              : (input.presentation ?? previous?.presentation),
+          }
+        : {}),
+      ...(imageOcclusion || previous?.imageOcclusion ? { imageOcclusion } : {}),
       front,
       back,
       cloze: rendered ? { text: rendered.text, deletionIndex: rendered.deletionIndex } : undefined,
@@ -128,18 +163,15 @@ export function createStudyCard(workspaceInput: unknown, commandInput: unknown, 
     ) {
       return yield* Effect.fail(failure("duplicate-card", "This card ID has already been used."));
     }
-    if (area.cards.length >= 500) {
+    if (area.cards.length >= MAX_COLLECTION_CARDS) {
       return yield* Effect.fail(
-        failure(
-          "invalid-input",
-          "A Knowledge Area can have up to 500 cards. Create another area to continue.",
-        ),
+        failure("invalid-input", "This subject has reached its 50,000-card capacity."),
       );
     }
     if (!Number.isFinite(now.getTime())) {
       return yield* Effect.fail(failure("invalid-input", "The card's creation time is invalid."));
     }
-    const content = yield* prepareContent(area, command.content);
+    const content = yield* prepareStudyCardContent(area, command.content);
     const schedule = yield* Effect.try({
       try: () => newSchedule(now),
       catch: () => failure("invalid-input", "This card's schedule could not be created."),
@@ -170,7 +202,14 @@ export function updateStudyCard(
       return yield* Effect.fail(failure("area-missing", "This knowledge area no longer exists."));
     const card = area.cards.find((candidate) => candidate.id === command.cardId);
     if (!card) return yield* Effect.fail(failure("card-missing", "This card no longer exists."));
-    const content = yield* prepareContent(area, command.content, card);
+    if (card.noteId)
+      return yield* Effect.fail(
+        failure(
+          "invalid-input",
+          "Edit the shared note to update all of its linked cards together.",
+        ),
+      );
+    const content = yield* prepareStudyCardContent(area, command.content, card);
     if (!Number.isFinite(now.getTime()))
       return yield* Effect.fail(failure("invalid-input", "The edit time is invalid."));
     const changed = Object.entries(content).some(
