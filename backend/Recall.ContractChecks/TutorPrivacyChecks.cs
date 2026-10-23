@@ -38,7 +38,7 @@ internal static class TutorPrivacyChecks
                     Content = new StringContent($"[{{\"id\":\"{Guid.NewGuid()}\",\"user_id\":\"{owner}\"}}]", Encoding.UTF8, "application/json")
                 });
             var response = new HttpResponseMessage(HttpStatusCode.OK);
-            response.Headers.TryAddWithoutValidation("Content-Range", "*/1");
+            response.Content.Headers.TryAddWithoutValidation("Content-Range", "*/1");
             return Task.FromResult(response);
         }
     }

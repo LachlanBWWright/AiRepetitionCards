@@ -101,7 +101,8 @@ public sealed class TutorPrivacyOperations(HttpClient httpClient, IConfiguration
             using var response = await httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
             if (!response.IsSuccessStatusCode)
                 return Fail("upstream-failure");
-            if (!response.Headers.TryGetValues("Content-Range", out var rangeValues))
+            if (!response.Content.Headers.TryGetValues("Content-Range", out var rangeValues) &&
+                !response.Headers.TryGetValues("Content-Range", out rangeValues))
                 return Fail("invalid-response");
             var range = rangeValues.SingleOrDefault();
             var separator = range?.LastIndexOf('/') ?? -1;
