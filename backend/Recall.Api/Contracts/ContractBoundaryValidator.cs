@@ -67,10 +67,13 @@ public static partial class ContractBoundaryValidator
                 return ContractValidationResult.Invalid("invalid-deleted-area-id");
         }
 
+        var cardCount = 0;
         foreach (var area in value.GetProperty("areas").EnumerateArray())
         {
             var result = ValidateWorkspaceArea(area);
             if (!result.IsValid) return result;
+            cardCount += area.GetProperty("document").GetProperty("cards").GetArrayLength();
+            if (cardCount > 50_000) return ContractValidationResult.Invalid("workspace-card-limit");
         }
 
         return ContractValidationResult.Valid;
@@ -96,7 +99,7 @@ public static partial class ContractBoundaryValidator
             !OptionalDifficulty(document) ||
             !Has(document, "objectives", JsonValueKind.Array) ||
             !Has(document, "ai", JsonValueKind.Object) ||
-            !Has(document, "cards", JsonValueKind.Array) || document.GetProperty("cards").GetArrayLength() > 500 ||
+            !Has(document, "cards", JsonValueKind.Array) || document.GetProperty("cards").GetArrayLength() > 50_000 ||
             !Has(document, "tags", JsonValueKind.Array) || !AllStrings(document.GetProperty("tags")) ||
             !Has(document, "licence", JsonValueKind.Null, JsonValueKind.String) ||
             !OptionalNullableString(document, "attribution", 500) ||

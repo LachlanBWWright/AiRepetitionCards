@@ -36,6 +36,7 @@ foreach (var entry in manifest.RootElement.EnumerateArray())
 }
 failures.AddRange(AuthoredMetadataChecks.Run());
 failures.AddRange(PublishingMetadataChecks.Run());
+failures.AddRange(WorkspaceScaleChecks.Run(root));
 if (count < 15) failures.Add("The shared contract corpus is incomplete.");
 foreach (var failure in failures) Console.Error.WriteLine(failure);
 Console.WriteLine($"Shared contract fixtures: {count} checked, {failures.Count} failures.");

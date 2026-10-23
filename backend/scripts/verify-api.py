@@ -8,6 +8,7 @@ Supabase RECALL_INTEGRATION_* settings, or --local-supabase to read local CLI st
 import argparse
 import json
 import os
+import secrets
 from pathlib import Path
 import subprocess
 import sys
@@ -37,6 +38,9 @@ def main():
     root = Path(__file__).resolve().parents[2]
     origin = f"http://127.0.0.1:{args.port}"
     environment = dict(os.environ, ASPNETCORE_ENVIRONMENT="Development", API_RATE_LIMIT_MODE="memory")
+    environment["RECALL_INTEGRATION_API_URL"] = origin
+    environment["RECALL_WEB_ORIGIN"] = "https://recall-proxy-test.example"
+    environment["RECALL_PROXY_SECRET"] = secrets.token_urlsafe(48)
     if args.local_supabase:
         status = subprocess.run(["pnpm", "exec", "supabase", "status", "-o", "json"],
                                 cwd=root, capture_output=True, text=True, check=False, timeout=30)
@@ -89,6 +93,7 @@ def main():
                 print("Development API did not become ready.", file=sys.stderr)
                 return 1
             checks = [["verify-openapi.py", f"{origin}/swagger/v1/swagger.json"]]
+            checks.append(["verify-web-proxy.py"])
             if args.publishing:
                 checks.append(["verify-deck-sharing.py"])
             if args.study:

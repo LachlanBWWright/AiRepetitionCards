@@ -36,6 +36,11 @@ by the hosting proxy instead of being returned from a second function. Keep
 headers only, and forwarding large bodies into middleware hits Vercel's function
 payload limit before the rewrite can run.
 
+Apply `20261025000000_content_sync_timeout.sql` for large atomic content writes.
+It grants only that RPC a bounded 60-second timeout instead of the hosted
+authenticated role's default eight seconds; other database operations keep their
+existing timeout settings.
+
 Leave `OPENAI_API_KEY` and website ChatGPT client settings unset to disable hosted
 AI and ChatGPT website sign-in. Email-link sign-in remains available. Add OAuth
 providers only after configuring their clients and callback URLs.
@@ -58,7 +63,7 @@ SMTP. Never claim that sending a real email was tested from a generated admin li
 5. Promote only the validated version. Record the two deployment IDs for rollback;
    rolling back code does not roll back database migrations.
 
-Android development APKs are available through the existing GitHub Actions
-artifacts. They use debug signing; replacement builds can require uninstalling
+The [Android test APK](https://github.com/LachlanBWWright/AiRepetitionCards/releases/tag/android-dev-2026.10.23)
+is published with checksums on GitHub Releases. It uses debug signing; replacement builds can require uninstalling
 the previous app. Export local data first. No store submission or dedicated
 release signing is configured by this free-hosting setup.

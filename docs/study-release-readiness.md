@@ -1,8 +1,8 @@
 # Study release validation
 
 The local Supabase database now records the complete split initial chain and the
-study migrations through `20261024000000_atomic_linked_notes.sql`. This is local
-validation; no hosted environment was deployed.
+study migrations through `20261024000000_atomic_linked_notes.sql`. These checks
+were local. The subsequent hosted setup is documented in [free hosting](free-hosting.md).
 
 ## Reconciling the legacy local database
 
