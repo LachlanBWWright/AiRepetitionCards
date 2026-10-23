@@ -87,8 +87,8 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-app.UseForwardedHeaders(forwardedHeaders);
 app.UseTrustedWebProxy(builder.Configuration);
+app.UseForwardedHeaders(forwardedHeaders);
 app.UseApiRequestObservation();
 app.UseSupabaseSsrBearer();
 if (authConfigured)

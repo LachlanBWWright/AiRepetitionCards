@@ -18,6 +18,11 @@ public static class TrustedWebProxy
         var expected = SHA256.HashData(Encoding.UTF8.GetBytes(secret ?? ""));
         return app.Use(async (context, next) =>
         {
+            if (origin is not null)
+            {
+                context.Request.Headers.Remove("X-Forwarded-Host");
+                context.Request.Headers.Remove("X-Forwarded-Proto");
+            }
             var values = context.Request.Headers["x-recall-proxy-key"];
             if (values.Count == 0)
             {

@@ -3,13 +3,13 @@
 import { useState } from "react";
 import Link from "next/link";
 import { Effect, Either } from "effect";
-import { Button } from "@/components/ui/Button";
 import { Alert, toast } from "@recall/ui-web";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { readSupabaseConfig } from "@/lib/supabase/config";
 import { sharedPublicationReturnPath } from "@/lib/auth/return-path";
-import { ContinueWithChatGPT } from "./ContinueWithChatGPT";
+import { ChatGPTIdentityOption } from "./ChatGPTIdentityOption";
 import { EmailSignIn } from "./EmailSignIn";
+import { OAuthSignInButtons } from "./OAuthSignInButtons";
 
 export function SignInScreen({
   chatGptEnabled = false,
@@ -101,37 +101,14 @@ export function SignInScreen({
         ) : (
           <>
             <EmailSignIn next={returnPath} demo={demo} />
-            {oauthProviders.length > 0 && (
-              <div className="grid gap-3 pt-2">
-                {oauthProviders.includes("apple") && (
-                  <Button
-                    type="button"
-                    disabled={submitting}
-                    onClick={() => void signInWithProvider("apple")}
-                  >
-                    Continue with Apple
-                  </Button>
-                )}
-                {oauthProviders.includes("google") && (
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    disabled={submitting}
-                    onClick={() => void signInWithProvider("google")}
-                  >
-                    Continue with Google
-                  </Button>
-                )}
-              </div>
-            )}
-            {chatGptEnabled && (
-              <>
-                <div className="flex items-center gap-3 pt-2 text-xs text-muted-foreground before:h-px before:flex-1 before:bg-border after:h-px after:flex-1 after:bg-border">
-                  <span>or</span>
-                </div>
-                <ContinueWithChatGPT enabled={chatGptEnabled} next={returnPath} demo={demo} />
-              </>
-            )}
+            <OAuthSignInButtons
+              providers={oauthProviders}
+              busy={submitting}
+              onSelect={(provider) => {
+                void signInWithProvider(provider);
+              }}
+            />
+            <ChatGPTIdentityOption enabled={chatGptEnabled} next={returnPath} demo={demo} />
             {message && <Alert variant="destructive">{message}</Alert>}
           </>
         )}

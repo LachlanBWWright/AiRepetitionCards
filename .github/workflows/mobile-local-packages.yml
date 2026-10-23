@@ -5,6 +5,12 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      platform:
+        description: Platform to package
+        type: choice
+        options: [android, ios, all]
+        default: android
 
 permissions:
   contents: read
@@ -22,6 +28,7 @@ env:
 
 jobs:
   android:
+    if: github.event_name != 'workflow_dispatch' || inputs.platform != 'ios'
     name: Android debug-key standalone APK
     runs-on: ubuntu-24.04
     timeout-minutes: 60
@@ -71,6 +78,7 @@ jobs:
           if-no-files-found: error
           retention-days: 14
   ios:
+    if: github.event_name != 'workflow_dispatch' || inputs.platform != 'android'
     name: iOS simulator standalone app
     runs-on: macos-26
     timeout-minutes: 90
