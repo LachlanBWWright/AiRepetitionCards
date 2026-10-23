@@ -30,7 +30,6 @@ await test("a persisted clean deck accepts remote edits automatically while over
   };
   const first = Effect.runSync(syncWorkspace(input(workspace([]))));
   assert.equal(first._tag, "Synced");
-  if (first._tag !== "Synced") return;
   assert.ok(first.workspace.syncContentFingerprints?.[areaId]);
   const restored = decode(WorkspaceSchema, JSON.parse(JSON.stringify(first.workspace)));
   const initial = remote.documents.get(areaId);
@@ -43,7 +42,6 @@ await test("a persisted clean deck accepts remote edits automatically while over
   });
   const pulled = Effect.runSync(syncWorkspace(input(restored)));
   assert.equal(pulled._tag, "Synced");
-  if (pulled._tag !== "Synced") return;
   assert.equal(pulled.workspace.areas[0]?.title, document.title);
   assert.equal(remote.documents.get(areaId)?.document.title, document.title);
   const edited = {

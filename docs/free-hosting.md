@@ -16,6 +16,14 @@ large workspace read; private media upload/download; and authenticated retention
 Email callback tests used generated administrator links without sending mail.
 Actual email delivery and physical Android-device behavior remain unverified.
 
+On October 24, Google account sign-in was enabled and a real sign-in was confirmed
+by the user. Browser acceptance verified the Google redirect, rejected invalid
+callbacks, automatic loading and remote-change pulls after reconnect, and a new
+subject reaching the account without manual sync. Normal sync controls and
+success banners are removed. The isolated acceptance accounts and data were
+removed afterward. Native source uses automatic sync and PKCE; device acceptance
+is still required for its packaged Google callback and resume behavior.
+
 Vercel uses Hobby and the API, Supabase and Redis use free plans. Upstash automatic
 paid upgrades are disabled. Hosted AI is disabled. Google is the only Recall account sign-in method. Deployments remain manual from the release branch; these checks do
 not establish a fully automated production release pipeline. The scheduled

@@ -14,7 +14,7 @@ export type DashboardReviewHistoryEntry = {
 
 function syncStatusLabel(event: DashboardReviewHistoryEntry): string | null {
   if (event.retainedForSync) return "Deleted · pending sync";
-  if (event.needsSyncRetry) return "Sync again";
+  if (event.needsSyncRetry) return "Waiting to sync";
   if (event.hasConcurrentBranch) return "Pending sync";
   return null;
 }

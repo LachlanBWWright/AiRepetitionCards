@@ -16,7 +16,7 @@ export function StudySyncConflict({
       <h3 className="font-semibold">Study settings changed on another device</h3>
       <p>
         Synced settings are active. Your device settings have been kept below for comparison. Choose
-        which set to retain, then sync again.
+        which set to retain. Your choice will sync automatically.
       </p>
       <div className="grid gap-2 sm:grid-cols-2">
         <div>

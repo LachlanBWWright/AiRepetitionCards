@@ -92,11 +92,7 @@ export function createRecallDashboardAreaActions(
       return;
     }
     setSelectedId(id);
-    setImportNotice(
-      editingAreaId
-        ? `${title} updated. Syncing to your account…`
-        : `${title} created. Syncing to your account…`,
-    );
+    setImportNotice(editingAreaId ? `${title} updated.` : `${title} created.`);
     const created = !editingAreaId;
     libraryNotes.update((notes) =>
       discardLibraryDraft(notes, editingAreaId ? `area:${editingAreaId}` : "new-area"),

@@ -127,7 +127,6 @@ export function runWorkspaceSyncAction(args: {
   }
   if (busy || !expectedOwner) return Effect.void;
   setBusy(true);
-  setMessage(null);
   const authenticatedRequest = readSyncOwner().pipe(
     Effect.tap((verifiedOwner) =>
       Effect.sync(() => {
