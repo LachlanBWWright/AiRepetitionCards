@@ -32,6 +32,9 @@ importers:
 
   apps/desktop:
     devDependencies:
+      '@recall/infra-supabase':
+        specifier: workspace:*
+        version: link:../../packages/infra-supabase
       '@recall/application':
         specifier: workspace:*
         version: link:../../packages/application
@@ -143,6 +146,9 @@ importers:
       '@recall/infra-study-materials':
         specifier: workspace:*
         version: link:../../packages/infra-study-materials
+      '@recall/infra-supabase':
+        specifier: workspace:*
+        version: link:../../packages/infra-supabase
       '@recall/local-store':
         specifier: workspace:*
         version: link:../../packages/local-store
@@ -717,6 +723,9 @@ importers:
       '@recall/infra-rich-content':
         specifier: workspace:*
         version: link:../infra-rich-content
+      '@recall/infra-supabase':
+        specifier: workspace:*
+        version: link:../infra-supabase
       '@recall/local-store':
         specifier: workspace:*
         version: link:../local-store

@@ -17,11 +17,7 @@ export async function proxy(request: NextRequest) {
   const apiOrigin = process.env.RECALL_API_URL?.trim();
   const isBackendRoute =
     request.nextUrl.pathname.startsWith("/api/") ||
-    (request.nextUrl.pathname.startsWith("/auth/") &&
-      !(
-        request.nextUrl.pathname === "/auth/confirm" &&
-        (request.nextUrl.searchParams.has("code") || request.nextUrl.searchParams.has("error"))
-      ));
+    (request.nextUrl.pathname.startsWith("/auth/") && request.nextUrl.pathname !== "/auth/confirm");
   if (apiOrigin && isBackendRoute) {
     let upstream: URL;
     try {

@@ -1,7 +1,7 @@
 import type { ComponentProps } from "react";
 import { Alert } from "react-native";
 import { Effect, Either } from "effect";
-import { sendNativeMagicLink, supabaseAuthClient } from "../../storage/auth/supabase-auth";
+import { signInNativeWithGoogle, supabaseAuthClient } from "../../storage/auth/supabase-auth";
 import { NativeAccountPanel } from "./NativeAccountPanel";
 import { NativeBudgetSettingsPanel } from "./NativeBudgetSettingsPanel";
 import { NativeChatGPTConnection } from "./NativeChatGPTConnection";
@@ -48,11 +48,11 @@ export function NativeAccountTab({
         cloudAvailable={cloudAvailable}
         account={account}
         ownershipIssue={ownershipIssue}
-        onRequestSignIn={async (email) => {
-          const result = await Effect.runPromise(Effect.either(sendNativeMagicLink(email)));
+        onRequestSignIn={async () => {
+          const result = await Effect.runPromise(Effect.either(signInNativeWithGoogle()));
           return Either.isRight(result) && result.right
-            ? "Check your email for a sign-in link."
-            : "Could not send a sign-in link. Check your email and connection.";
+            ? "Complete Google sign-in in your browser, then return to Recall."
+            : "Google sign-in could not start. Please try again.";
         }}
         onSignOut={async () => {
           const client = supabaseAuthClient;

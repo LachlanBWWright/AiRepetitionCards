@@ -5,13 +5,13 @@ const meta = {
   title: "Screens/Sign In",
   component: SignInScreen,
   parameters: { layout: "fullscreen" },
-  args: { demo: true, supabaseEnabled: true, chatGptEnabled: true },
+  args: { demo: true, supabaseEnabled: true },
 } satisfies Meta<typeof SignInScreen>;
 
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-export const Configured: Story = { name: "Sign in · Apple, Google, and ChatGPT" };
+export const Configured: Story = { name: "Sign in · Google" };
 export const Unconfigured: Story = {
   name: "Sign in · Supabase unavailable",
   args: { supabaseEnabled: false },
@@ -19,14 +19,13 @@ export const Unconfigured: Story = {
 export const Retry: Story = {
   name: "Sign in · authorization cancelled",
   args: {
-    initialMessage: "Apple or Google sign-in was cancelled. You can try again.",
+    initialMessage: "Google sign-in was cancelled. You can try again.",
   },
 };
 export const TemporarilyUnavailable: Story = {
   name: "Sign in · temporary provider outage",
   args: {
-    initialMessage:
-      "Apple or Google sign-in is temporarily unavailable. Please start again shortly.",
+    initialMessage: "Google sign-in is temporarily unavailable. Please start again shortly.",
   },
 };
 export const SharedReturn: Story = {

@@ -58,7 +58,7 @@ declare global {
       };
       readonly auth: {
         readonly getStatus: () => Promise<unknown>;
-        readonly requestMagicLink: (email: string) => Promise<unknown>;
+        readonly signInWithGoogle: () => Promise<unknown>;
         readonly signOut: () => Promise<unknown>;
         readonly onStateChanged: (callback: (state: unknown) => void) => () => void;
         readonly onSignInResult: (callback: (result: unknown) => void) => () => void;

@@ -41,7 +41,7 @@ export const DeleteConfirmation: Story = {
     account: "learner@example.com",
     onSignOut: () =>
       Promise.resolve("Signed out. This device’s local study data remains available."),
-    onRequestSignIn: () => Promise.resolve("Check your email for a sign-in link."),
+    onRequestSignIn: () => Promise.resolve("Complete Google sign-in in your browser."),
     initialDeleteConfirmationOpen: true,
   },
   globals: { viewport: { value: "recallMobile", isRotated: false } },

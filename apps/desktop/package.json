@@ -100,6 +100,7 @@
     "react-dom": "19.2.8",
     "typescript": "^5",
     "vite": "7.3.6",
-    "@recall/react": "workspace:*"
+    "@recall/react": "workspace:*",
+    "@recall/infra-supabase": "workspace:*"
   }
 }

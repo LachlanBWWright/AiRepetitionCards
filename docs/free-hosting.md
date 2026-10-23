@@ -17,8 +17,7 @@ Email callback tests used generated administrator links without sending mail.
 Actual email delivery and physical Android-device behavior remain unverified.
 
 Vercel uses Hobby and the API, Supabase and Redis use free plans. Upstash automatic
-paid upgrades are disabled. Hosted AI and website ChatGPT/Apple/Google sign-in
-are disabled. Deployments remain manual from the release branch; these checks do
+paid upgrades are disabled. Hosted AI is disabled. Google is the only Recall account sign-in method. Deployments remain manual from the release branch; these checks do
 not establish a fully automated production release pipeline. The scheduled
 retention endpoint was tested manually; its first Vercel-scheduled execution has
 not yet been observed.
@@ -43,7 +42,7 @@ authenticated database and Redis operations. Automatic deployment starts disable
 Configure these server-only values:
 
 - Vercel: `RECALL_API_URL` (the Render HTTPS origin), `RECALL_PROXY_SECRET`,
-  `RECALL_OAUTH_PROVIDERS=none`, and a random `CRON_SECRET`.
+  and a random `CRON_SECRET`.
 - Render: `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`,
   `SUPABASE_SERVICE_ROLE_KEY`, `RECALL_WEB_ORIGIN`, `RECALL_PROXY_SECRET`,
   `API_RATE_LIMIT_MODE=redis`, `API_RATE_LIMIT_STORE_REST_URL`,
@@ -65,14 +64,12 @@ authenticated role's default eight seconds; other database operations keep their
 existing timeout settings.
 
 Leave `OPENAI_API_KEY` and website ChatGPT client settings unset to disable hosted
-AI and ChatGPT website sign-in. Email-link sign-in remains available. Add OAuth
-providers only after configuring their clients and callback URLs.
-
-Set Supabase's Site URL to the production Vercel origin and allow its exact
-`/auth/confirm` callback plus `recall://auth/confirm`. Keep the hosted email
-template's default confirmation URL for the browser PKCE callback. Supabase's default
-email sender has recipient and rate restrictions; broader use requires custom
-SMTP. Never claim that sending a real email was tested from a generated admin link.
+AI and ChatGPT website sign-in. Configure the Google provider using
+[Google sign-in setup](google-sign-in.md). Google is the only account sign-in
+method; no email sender or SMTP setup is needed. Supabase's Site URL must be the
+production Vercel origin, with its exact `/auth/confirm` callback plus
+`recall://auth/confirm` allowed as redirects. Local development can also allow
+its local callback. Native packages must be rebuilt to receive the Google flow.
 
 ## Release sequence
 

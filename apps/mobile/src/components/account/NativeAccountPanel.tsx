@@ -42,14 +42,13 @@ export function NativeAccountPanel({
   readonly account: string | null;
   readonly cloudAvailable?: boolean;
   readonly onSignOut: () => Promise<string>;
-  readonly onRequestSignIn: (email: string) => Promise<string>;
+  readonly onRequestSignIn: () => Promise<string>;
   readonly initialDeleteConfirmationOpen?: boolean;
   readonly ownershipIssue?: "account-mismatch" | "owner-adoption-required" | null;
   readonly onAdoptLegacyOwner?: () => Promise<string>;
   readonly onResetForAccount?: () => void;
 }) {
   const [showAccountActions, setShowAccountActions] = useState(initialDeleteConfirmationOpen);
-  const [email, setEmail] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [syncBusy, setSyncBusy] = useState(false);
@@ -58,22 +57,20 @@ export function NativeAccountPanel({
   const [showDelete, setShowDelete] = useState(initialDeleteConfirmationOpen);
   const [deleteConfirmation, setDeleteConfirmation] = useState("");
 
-  async function requestLink() {
+  async function signInWithGoogle() {
     setBusy(true);
     setNotice(null);
     const result = await Effect.runPromise(
       Effect.either(
         Effect.tryPromise({
-          try: () => onRequestSignIn(email.trim()),
+          try: onRequestSignIn,
           catch: () => ({ _tag: "NativeSignInRequestError" }) as const,
         }),
       ),
     );
     setBusy(false);
     setNotice(
-      Either.isRight(result)
-        ? result.right
-        : "Could not send a sign-in link. Check your email and connection.",
+      Either.isRight(result) ? result.right : "Google sign-in could not start. Please try again.",
     );
   }
 
@@ -238,30 +235,17 @@ export function NativeAccountPanel({
         </>
       ) : cloudAvailable ? (
         <View className={"gap-[8px]"}>
-          <TextInput
-            accessibilityLabel="Email address"
-            autoCapitalize="none"
-            autoComplete="email"
-            keyboardType="email-address"
-            onChangeText={setEmail}
-            placeholder="you@example.com"
-            placeholderTextColor={palette.muted}
-            className={
-              "flex-1 min-h-[42px] px-[12px] rounded-[10px] bg-recall-paper text-recall-ink"
-            }
-            value={email}
-          />
           <Pressable
             accessibilityRole="button"
-            disabled={busy || email.trim().length === 0}
-            onPress={() => void requestLink()}
+            disabled={busy}
+            onPress={() => void signInWithGoogle()}
             className={"min-h-[42px] justify-center px-[14px] rounded-[10px] bg-recall-darkGreen"}
           >
             {busy ? (
               <ActivityIndicator color={palette.surface} />
             ) : (
               <Text className={"text-recall-surface font-bold text-[12px]"}>
-                Email sign-in link
+                Continue with Google
               </Text>
             )}
           </Pressable>

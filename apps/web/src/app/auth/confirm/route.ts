@@ -1,5 +1,6 @@
 import { Effect, Either } from "effect";
 import { NextResponse, type NextRequest } from "next/server";
+import { googleSignInCallbackCode } from "@recall/infra-supabase/google-sign-in";
 import { readSupabaseConfig } from "@/lib/supabase/config";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { sharedReturnPathFromQuery } from "@/lib/auth/return-path";
@@ -14,17 +15,13 @@ function signInRedirect(request: NextRequest, reason: string, returnPath: string
 export async function GET(request: NextRequest): Promise<NextResponse> {
   const url = new URL(request.url);
   const returnPath = sharedReturnPathFromQuery(url.searchParams.getAll("next"));
-  const code = url.searchParams.get("code");
-  const tokenHash = url.searchParams.get("token_hash");
-  const type = url.searchParams.get("type");
+  const code = googleSignInCallbackCode(
+    request.url,
+    new URL("/auth/confirm", request.url).toString(),
+  );
   const providerError = url.searchParams.get("error");
-  const credential = code
-    ? { kind: "oauth" as const, code }
-    : process.env.NODE_ENV === "development" && type === "email" && tokenHash
-      ? { kind: "local-email" as const, tokenHash }
-      : null;
   if (providerError) return signInRedirect(request, "provider-error", returnPath);
-  if (!credential) return signInRedirect(request, "invalid-link", returnPath);
+  if (!code) return signInRedirect(request, "invalid-link", returnPath);
 
   const config = readSupabaseConfig();
   if (Either.isLeft(config)) return signInRedirect(request, "provider-not-configured", returnPath);
@@ -35,8 +32,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         config.right.url,
         config.right.publishableKey,
       );
-      if (credential.kind === "oauth") return client.auth.exchangeCodeForSession(credential.code);
-      return client.auth.verifyOtp({ token_hash: credential.tokenHash, type: "email" });
+      return client.auth.exchangeCodeForSession(code);
     },
     catch: () => ({ _tag: "SignInConfirmationError" }) as const,
   }).pipe(
@@ -45,11 +41,6 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     ),
   );
   const result = await Effect.runPromise(Effect.either(verification));
-  if (Either.isLeft(result))
-    return signInRedirect(
-      request,
-      credential.kind === "oauth" ? "provider-error" : "link-expired",
-      returnPath,
-    );
+  if (Either.isLeft(result)) return signInRedirect(request, "provider-error", returnPath);
   return NextResponse.redirect(new URL(returnPath, request.url));
 }

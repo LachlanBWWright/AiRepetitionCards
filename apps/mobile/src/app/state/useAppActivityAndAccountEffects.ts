@@ -14,7 +14,7 @@ import {
   openSqliteMediaStore,
   openSqliteWorkspaceStore,
 } from "../../storage/workspace/sqlite-workspace-store";
-import { confirmNativeMagicLink, supabaseAuthClient } from "../../storage/auth/supabase-auth";
+import { confirmNativeGoogleSignIn, supabaseAuthClient } from "../../storage/auth/supabase-auth";
 import type { AppCoreState } from "../useAppController";
 
 type LocalMutation = <A, E>(
@@ -185,7 +185,7 @@ export function useAppActivityAndAccountEffects(
       updateSession(session);
     });
     const handleUrl = (url: string | null) => {
-      if (url) void Effect.runPromise(Effect.either(confirmNativeMagicLink(url)));
+      if (url) void Effect.runPromise(Effect.either(confirmNativeGoogleSignIn(url)));
     };
     const initialUrl = Effect.tryPromise({
       try: () => Linking.getInitialURL(),

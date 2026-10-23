@@ -3,7 +3,8 @@ import { Buffer } from "node:buffer";
 import type { DatabaseSync } from "node:sqlite";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { Effect, Either, Schema } from "effect";
-import { ipcMain, safeStorage } from "electron";
+import { completeGoogleSignIn, startGoogleSignIn } from "@recall/infra-supabase/google-sign-in";
+import { ipcMain, safeStorage, shell } from "electron";
 import type { BrowserWindow, IpcMainInvokeEvent } from "electron";
 import { isDesktopApiPathAllowed } from "./desktop-api-path";
 import { createDesktopMediaRequestHandler } from "./desktop-services-media";
@@ -127,6 +128,7 @@ function makeAuthClient(database: DatabaseSync): {
   return {
     client: createClient(url, key, {
       auth: {
+        flowType: "pkce",
         autoRefreshToken: false,
         detectSessionInUrl: false,
         persistSession: true,
@@ -198,33 +200,27 @@ export function registerDesktopServices(
     };
   };
 
-  const requestMagicLink = async (
-    event: IpcMainInvokeEvent,
-    email: unknown,
-  ): Promise<DesktopReply<boolean>> => {
-    if (!trustedSender(event)) return failure();
-    const decoded = Schema.decodeUnknownEither(
-      Schema.String.pipe(Schema.maxLength(254), Schema.pattern(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)),
-    )(email);
-    if (Either.isLeft(decoded) || !authClient) return failure();
+  const signInWithGoogle = async (event: IpcMainInvokeEvent): Promise<DesktopReply<boolean>> => {
+    if (!trustedSender(event) || !authClient) return failure();
     const available = await Effect.runPromise(Effect.either(secureStorageAvailability()));
-    if (Either.isLeft(available) || !available.right || !secureAuth.storageHealthy()) {
+    if (Either.isLeft(available) || !available.right || !secureAuth.storageHealthy())
       return failure();
-    }
     const result = await Effect.runPromise(
       Effect.either(
-        Effect.tryPromise({
-          try: () =>
-            authClient.auth.signInWithOtp({
-              email: decoded.right,
-              options: { emailRedirectTo: "recall://auth/confirm" },
+        startGoogleSignIn(
+          process.env.NEXT_PUBLIC_SUPABASE_URL ?? "",
+          () =>
+            authClient.auth.signInWithOAuth({
+              provider: "google",
+              options: { redirectTo: "recall://auth/confirm", skipBrowserRedirect: true },
             }),
-          catch: (): AuthFailure => ({ _tag: "DesktopAuthFailure" }),
-        }),
+          async (url) => {
+            if (secureAuth.storageHealthy()) await shell.openExternal(url);
+          },
+        ),
       ),
     );
-    if (Either.isLeft(result) || result.right.error || !secureAuth.storageHealthy())
-      return failure();
+    if (Either.isLeft(result) || !secureAuth.storageHealthy()) return failure();
     return { _tag: "Success", value: true };
   };
 
@@ -297,35 +293,8 @@ export function registerDesktopServices(
 
   async function handleAuthUrl(value: string): Promise<boolean> {
     if (!authClient) return false;
-    const callback = Effect.flatMap(
-      Effect.try({
-        try: () => new URL(value),
-        catch: (): AuthFailure => ({ _tag: "DesktopAuthFailure" }),
-      }),
-      (url) => {
-        if (url.protocol !== "recall:" || url.hostname !== "auth" || url.pathname !== "/confirm") {
-          return Effect.succeed(false);
-        }
-        const tokenHashes = url.searchParams.getAll("token_hash");
-        const types = url.searchParams.getAll("type");
-        const tokenHash = tokenHashes[0];
-        if (
-          tokenHashes.length !== 1 ||
-          types.length !== 1 ||
-          !tokenHash ||
-          tokenHash.length > 2_000 ||
-          types[0] !== "email"
-        ) {
-          return Effect.succeed(false);
-        }
-        return Effect.map(
-          Effect.tryPromise({
-            try: () => authClient.auth.verifyOtp({ token_hash: tokenHash, type: "email" }),
-            catch: (): AuthFailure => ({ _tag: "DesktopAuthFailure" }),
-          }),
-          (result) => result.error === null,
-        );
-      },
+    const callback = completeGoogleSignIn(value, "recall://auth/confirm", (code) =>
+      authClient.auth.exchangeCodeForSession(code),
     );
     const result = await Effect.runPromise(Effect.either(callback));
     return Either.isRight(result) && result.right;
@@ -334,7 +303,7 @@ export function registerDesktopServices(
   ipcMain.handle("auth:status", async (event): Promise<DesktopReply<DesktopAuthStatus>> =>
     trustedSender(event) ? status() : failure(),
   );
-  ipcMain.handle("auth:magic-link", (event, email: unknown) => requestMagicLink(event, email));
+  ipcMain.handle("auth:google", signInWithGoogle);
   ipcMain.handle("auth:sign-out", signOut);
   ipcMain.handle("desktop-api:request", apiRequest);
   ipcMain.handle("desktop-api:request-media", mediaRequest);

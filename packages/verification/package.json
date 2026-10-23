@@ -28,6 +28,7 @@
     "fflate": "0.8.3",
     "@noble/hashes": "2.4.0",
     "@recall/local-store": "workspace:*",
-    "@recall/infra-rich-content": "workspace:*"
+    "@recall/infra-rich-content": "workspace:*",
+    "@recall/infra-supabase": "workspace:*"
   }
 }
