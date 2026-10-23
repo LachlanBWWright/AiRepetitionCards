@@ -28,7 +28,7 @@ public sealed class TutorPrivacyOperations(HttpClient httpClient, IConfiguration
         if (ownerId == Guid.Empty || !TryAdmin(out var baseUri, out var key))
             return Fail();
         using var request = CreateRequest(HttpMethod.Delete,
-            new Uri(baseUri, $"rest/v1/tutor_sessions?user_id=eq.{ownerId:D}&select=id"), key);
+            new Uri(baseUri, $"tutor_sessions?user_id=eq.{ownerId:D}&select=id"), key);
         request.Headers.TryAddWithoutValidation("Prefer", "count=exact,return=minimal");
         return await DeleteCountAsync(request, cancellationToken);
     }
@@ -42,7 +42,7 @@ public sealed class TutorPrivacyOperations(HttpClient httpClient, IConfiguration
             return Fail();
         var cutoffText = Uri.EscapeDataString(cutoff.UtcDateTime.ToString("O", CultureInfo.InvariantCulture));
         using var select = CreateRequest(HttpMethod.Get, new Uri(baseUri,
-            $"rest/v1/tutor_sessions?select=id,user_id&updated_at=lt.{cutoffText}&order=updated_at.asc,id.asc&limit={batchSize}"), key);
+            $"tutor_sessions?select=id,user_id&updated_at=lt.{cutoffText}&order=updated_at.asc,id.asc&limit={batchSize}"), key);
         var selected = await SendRowsAsync(select, cancellationToken);
         if (selected is Result<ImmutableArray<ExpiredSession>, TutorPrivacyFailure>.Failure selectionFailure)
             return Fail(selectionFailure.Error.Code);
@@ -56,7 +56,7 @@ public sealed class TutorPrivacyOperations(HttpClient httpClient, IConfiguration
             var ids = string.Join(',', group.Select(session => session.Id.ToString("D")));
             var owner = group.Key.ToString("D");
             using var request = CreateRequest(HttpMethod.Delete, new Uri(baseUri,
-                $"rest/v1/tutor_sessions?user_id=eq.{owner}&id=in.({ids})&updated_at=lt.{cutoffText}&select=id"), key);
+                $"tutor_sessions?user_id=eq.{owner}&id=in.({ids})&updated_at=lt.{cutoffText}&select=id"), key);
             request.Headers.TryAddWithoutValidation("Prefer", "count=exact,return=minimal");
             var result = await DeleteCountAsync(request, cancellationToken);
             if (result is Result<int, TutorPrivacyFailure>.Failure deletionFailure)
