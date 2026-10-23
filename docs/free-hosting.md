@@ -1,5 +1,28 @@
 # Free hosting
 
+## Current test deployment
+
+- Website: <https://recall-learning-blond.vercel.app>
+- API health: <https://recall-api-akep.onrender.com/health>
+- Source: `deployment/free-hosting` on GitHub. The existing checkout's branch and
+  unrelated work were preserved.
+- Android download: [test release](https://github.com/LachlanBWWright/AiRepetitionCards/releases/tag/android-dev-2026.10.23).
+
+The October 23, 2026 acceptance used isolated Auth accounts and removed its
+database/media fixtures afterward. It verified authenticated sync, isolation,
+append-only study history, pagination, atomic linked notes and reviewed moves;
+browser callback/session cookies/sign-out; 6 MB and 12 MB uploads and the combined
+large workspace read; private media upload/download; and authenticated retention.
+Email callback tests used generated administrator links without sending mail.
+Actual email delivery and physical Android-device behavior remain unverified.
+
+Vercel uses Hobby and the API, Supabase and Redis use free plans. Upstash automatic
+paid upgrades are disabled. Hosted AI and website ChatGPT/Apple/Google sign-in
+are disabled. Deployments remain manual from the release branch; these checks do
+not establish a fully automated production release pipeline. The scheduled
+retention endpoint was tested manually; its first Vercel-scheduled execution has
+not yet been observed.
+
 Recall uses a Vercel Next.js project, a separate Render Docker service, Supabase
 Auth/Postgres/Storage, and an Upstash Redis database. Select the free plans and
 disable automatic Upstash plan upgrades. Render's free running hours are shared
