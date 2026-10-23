@@ -253,6 +253,12 @@ export const WorkspaceSchema = Schema.Struct({
       }),
     ),
   ),
+  syncContentFingerprints: Schema.optional(
+    Schema.Record({
+      key: Schema.String,
+      value: Schema.String.pipe(Schema.pattern(/^[a-f0-9]{64}$/)),
+    }),
+  ),
   syncContentHashes: Schema.optional(
     Schema.Record({
       key: Schema.String,

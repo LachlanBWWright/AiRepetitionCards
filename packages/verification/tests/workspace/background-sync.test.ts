@@ -13,6 +13,8 @@ await test("background sync uploads pending reviews quietly and retries a tempor
   const settled = { current: null as string | null };
   const messages: (string | null)[] = [];
   let retryRequests = 0;
+  const retryCount = () => retryRequests;
+  const remoteReviewCount = () => remote.reviews.size;
   let offline = true;
   const run = () =>
     Effect.runPromise(
@@ -97,18 +99,18 @@ await test("background sync uploads pending reviews quietly and retries a tempor
       }),
     );
   await run();
-  assert.equal(remote.reviews.size, 0);
+  assert.equal(remoteReviewCount(), 0);
   assert.equal(pendingCount(), 1);
-  assert.equal(retryRequests, 1);
+  assert.equal(retryCount(), 1);
   assert.match(messages.at(-1) ?? "", /Retrying automatically/);
   offline = false;
   for (let attempt = 0; attempt < 5; attempt += 1) {
     await run();
     if (pendingCount() === 0) break;
   }
-  assert.ok(remote.reviews.size >= 1);
+  assert.ok(remoteReviewCount() >= 1);
   assert.equal(pendingCount(), 0);
   assert.equal(settled.current, JSON.stringify(current));
   assert.equal(messages.at(-1), null);
-  assert.ok(retryRequests >= 2);
+  assert.ok(retryCount() >= 2);
 });

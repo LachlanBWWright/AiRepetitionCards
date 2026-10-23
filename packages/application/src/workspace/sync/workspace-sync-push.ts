@@ -1,3 +1,4 @@
+import { existingContentForSync } from "./content-baseline";
 import { deletingContentProvisions } from "./deleting-content-provisions";
 import { workspaceContentBatches } from "./content-batches";
 import { areaMediaReferences } from "../media/media-references";
@@ -168,20 +169,12 @@ export function pushWorkspaceChanges(options: PushInput) {
         )
           return yield* conflictResult(input, prepared, before);
       }
-      const existing = yield* Effect.forEach(
-        before.areas.filter(
-          (area) => !deletedAreas.has(area.document.id) && !stagedIds.has(area.document.id),
-        ),
-        (remote) => {
-          const local = localById.get(remote.document.id);
-          const baseContentHash = prepared.syncContentHashes?.[remote.document.id];
-          if (!local || !baseContentHash)
-            return Effect.succeed({ ...remote, baseContentHash: remote.contentHash });
-          return toKnowledgeArea(local, true, true).pipe(
-            Effect.mapError(() => failure("content")),
-            Effect.map((document) => ({ document, color: local.color, baseContentHash })),
-          );
-        },
+      const existing = yield* existingContentForSync(
+        prepared,
+        before,
+        localById,
+        deletedAreas,
+        stagedIds,
       );
       const added = yield* Effect.forEach(
         prepared.areas.filter(

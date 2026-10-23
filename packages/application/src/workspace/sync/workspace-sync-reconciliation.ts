@@ -1,3 +1,4 @@
+import { workspaceContentFingerprints } from "./content-baseline";
 import { detachDeletedNoteOwner } from "../../notes/ownership";
 import { Effect } from "effect";
 import { applyStudyDocument, mergeStudyDocuments, workspaceStudyDocument } from "./study-sync";
@@ -229,10 +230,20 @@ export function applyWorkspaceSyncChanges(
       (current, areaId) => detachDeletedNoteOwner(current, areaId),
       reconciled,
     );
-    return releaseRetainedReviewContent(detached, {
+    const released = releaseRetainedReviewContent(detached, {
       deletedCardIds: changes.deletedCardIds,
       deletedAreaIds: [...changes.syncedAreaTombstoneIds, ...changes.pulledDeletedAreaIds],
     });
+    if (changes.hasMore || changes.uploadDeferred) return released;
+    const fingerprints = yield* workspaceContentFingerprints({
+      areas: released.areas.filter(
+        (area) => !content.pendingContent.has(area.id) && !content.conflicts.has(area.id),
+      ),
+    });
+    return {
+      ...released,
+      syncContentFingerprints: { ...released.syncContentFingerprints, ...fingerprints },
+    };
   });
 }
 
