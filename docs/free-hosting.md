@@ -31,7 +31,10 @@ The API accepts the configured public HTTPS web origin only when that shared
 secret authenticates the proxy. Native bearer requests remain independent.
 Never put this secret or service-role/Redis credentials in public variables.
 Vercel uses an external rewrite for backend traffic so API bodies are forwarded
-by the hosting proxy instead of being returned from a second function.
+by the hosting proxy instead of being returned from a second function. Keep
+`skipMiddlewareRequestBody` enabled in `apps/web/vercel.json`: the proxy reads
+headers only, and forwarding large bodies into middleware hits Vercel's function
+payload limit before the rewrite can run.
 
 Leave `OPENAI_API_KEY` and website ChatGPT client settings unset to disable hosted
 AI and ChatGPT website sign-in. Email-link sign-in remains available. Add OAuth
