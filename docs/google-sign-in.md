@@ -19,8 +19,8 @@ The ChatGPT connection in tutor settings is separate from the Recall account.
    ID and secret. The secret belongs in Supabase, never in app bundles or Git.
 4. Set Supabase's Site URL to `https://recall-repetition-learning.vercel.app`.
    Allow `https://recall-repetition-learning.vercel.app/auth/confirm` and
-   `recall://auth/confirm` as redirect URLs. Disable the Email provider and any
-   other unused providers after confirming Google sign-in works.
+   `recall://auth/confirm` as redirect URLs. The hosted Email provider remains
+   enabled by choice; the Recall apps offer Google as their only sign-in control.
 5. Deploy the web changes and rebuild native packages. Existing native APKs that
    contain email sign-in must be replaced. Existing sessions are not erased by
    changing the sign-in screen. Supabase can link Google to an existing account

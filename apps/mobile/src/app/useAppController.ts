@@ -14,6 +14,7 @@ import { createAppAuthoringActions } from "./actions/AppAuthoringActions";
 import { createAppNavigationActions } from "./actions/AppNavigationActions";
 import { createAppDeckUpdateActions } from "./actions/AppDeckUpdateActions";
 import { useAppActivityAndAccountEffects } from "./state/useAppActivityAndAccountEffects";
+import { useNativeBackgroundSync } from "./state/useNativeBackgroundSync";
 import { useAppStorageEffects } from "./state/useAppStorageEffects";
 export type AppCoreState = AppBaseState &
   AppServices & { readonly authoringDisabledReason: string | undefined };
@@ -75,6 +76,7 @@ export function useAppController() {
   } as const;
   useAppActivityAndAccountEffects(model);
   useAppStorageEffects(model);
+  useNativeBackgroundSync(model);
   return model;
 }
 export type AppModel = ReturnType<typeof useAppController>;

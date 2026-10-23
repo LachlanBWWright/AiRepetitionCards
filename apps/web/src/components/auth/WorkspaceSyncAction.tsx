@@ -18,11 +18,12 @@ import type { LearningArea, ReviewEvent, Workspace } from "@/features/workspace/
 import { readWorkspaceSyncOwner, runWorkspaceSyncAction } from "./workspace-sync-action-workflow";
 import { readBrowserSession } from "@/lib/auth/browser-session";
 import { readSupabaseConfig } from "@/lib/supabase/config";
+import { useWorkspaceBackgroundSync } from "./useWorkspaceBackgroundSync";
 import { apiFetch } from "@/lib/desktop-api";
 
 export function WorkspaceSyncAction({
   workspace,
-  autoSync = false,
+  autoSync = true,
   demo = false,
   onSynced,
   onContentConflict,
@@ -72,7 +73,8 @@ export function WorkspaceSyncAction({
   );
   const ownerRef = useRef(ownerId);
   const lastSyncedWorkspace = useRef<string | null>(null);
-  const syncRef = useRef<() => void>(() => undefined);
+  const busyRef = useRef(false);
+  const retryTimer = useRef<number | undefined>(undefined);
   const accountEpoch = useRef(0);
   const [accountFailure, setAccountFailure] = useState<typeof demoAccountState>(demoAccountState);
   const [adoptionConfirmed, setAdoptionConfirmed] = useState(false);
@@ -104,6 +106,7 @@ export function WorkspaceSyncAction({
     if (ownerRef.current !== next) {
       accountEpoch.current += 1;
       ownerRef.current = next;
+      lastSyncedWorkspace.current = null;
       setConflictData(null);
       setMessage(null);
       setAccountFailure(undefined);
@@ -112,8 +115,6 @@ export function WorkspaceSyncAction({
     }
     setOwnerId(next);
   }, []);
-  const pendingIds = workspace.pendingReviewEventIds ?? [];
-  const retainedCards = (workspace.retainedReviewAreas ?? []).flatMap((area) => area.cards).length;
 
   useEffect(() => {
     if (demo) return;
@@ -193,53 +194,68 @@ export function WorkspaceSyncAction({
         },
         catch: () => ({ _tag: "WorkspaceSyncTransportFailure" }) as const,
       });
-    runWorkspaceSyncAction({
-      adoptLegacyOwner,
-      demoMissingReviewContent,
-      demoAccountState,
-      busy,
-      expectedOwner: ownerRef.current,
-      startedEpoch: accountEpoch.current,
-      currentEpoch: () => accountEpoch.current,
-      publishOwner,
-      setBusy,
-      setMessage,
-      setAccountFailure,
-      setConflictData,
-      lastSyncedWorkspace,
-      autoSync,
-      setRetrySignal,
-      workspace,
-      checkpoint,
-      mediaStore: browserMediaStore,
-      mediaGatewayForOwner: createOwnerBoundWorkspaceMediaGateway,
-      transport,
-      readSyncOwner: readWorkspaceSyncOwner,
-      onSynced,
-      onMissingReviewContent,
-      onReviewProvisionCapacity,
-      retainedCards,
-      missingReviewContentMessage,
-      provisionCapacityMessage,
-    });
+    Effect.runFork(
+      runWorkspaceSyncAction({
+        adoptLegacyOwner,
+        demoMissingReviewContent,
+        demoAccountState,
+        busy: busyRef.current,
+        expectedOwner: ownerRef.current,
+        startedEpoch: accountEpoch.current,
+        currentEpoch: () => accountEpoch.current,
+        publishOwner,
+        setBusy: (next) => {
+          busyRef.current = next;
+          setBusy(next);
+        },
+        setMessage,
+        setAccountFailure,
+        setConflictData,
+        lastSyncedWorkspace,
+        scheduleRetry: () => {
+          if (!autoSync) return;
+          if (retryTimer.current !== undefined) window.clearTimeout(retryTimer.current);
+          retryTimer.current = window.setTimeout(() => {
+            setRetrySignal((value) => value + 1);
+          }, 3_000);
+        },
+        workspace,
+        checkpoint,
+        mediaStore: browserMediaStore,
+        mediaGatewayForOwner: createOwnerBoundWorkspaceMediaGateway,
+        transport,
+        readSyncOwner: readWorkspaceSyncOwner,
+        onSynced,
+        onMissingReviewContent,
+        onReviewProvisionCapacity,
+        missingReviewContentMessage,
+        provisionCapacityMessage,
+      }),
+    );
   }
 
-  useEffect(() => {
-    syncRef.current = () => {
+  useEffect(
+    () => () => {
+      if (retryTimer.current !== undefined) window.clearTimeout(retryTimer.current);
+    },
+    [],
+  );
+  useWorkspaceBackgroundSync({
+    enabled:
+      autoSync &&
+      Boolean(ownerId) &&
+      !demo &&
+      !demoAccountState &&
+      !demoMissingReviewContent &&
+      !visibleAccountFailure &&
+      !conflictData,
+    revision: workspace,
+    retrySignal,
+    lastSyncedWorkspace,
+    sync: () => {
       sync();
-    };
+    },
   });
-
-  useEffect(() => {
-    if (!autoSync || !ownerId || demo || demoAccountState || demoMissingReviewContent) return;
-    if (lastSyncedWorkspace.current === JSON.stringify(workspace)) return;
-    const timer = window.setTimeout(() => {
-      syncRef.current();
-    }, 400);
-    return () => {
-      window.clearTimeout(timer);
-    };
-  }, [autoSync, demo, demoAccountState, demoMissingReviewContent, ownerId, retrySignal, workspace]);
 
   if ((demo && !demoAccountState && !demoMissingReviewContent) || !enabled || !ownerId) return null;
   const messageIsError =
@@ -285,40 +301,18 @@ export function WorkspaceSyncAction({
               return;
             }
             setConflictData(null);
-            setMessage("Server content loaded. Sync again to upload pending reviews.");
+            lastSyncedWorkspace.current = null;
+            setMessage(null);
+            setRetrySignal((value) => value + 1);
           },
         }),
       ),
     );
   };
+  if (!message && !visibleAccountFailure && !conflictData) return null;
   return (
-    <div className="relative">
-      <Button
-        type="button"
-        onClick={() => {
-          sync();
-        }}
-        disabled={busy || visibleAccountFailure === "account-mismatch"}
-      >
-        {busy ? "Syncing…" : `Sync${pendingIds.length ? ` · ${String(pendingIds.length)}` : ""}`}
-      </Button>
-      <div
-        className={
-          visibleAccountFailure ||
-          message === missingReviewContentMessage ||
-          message === provisionCapacityMessage
-            ? "absolute right-0 top-[calc(100%+12px)] z-20 grid w-[min(390px,85vw)] gap-3.5 rounded-xl border bg-card p-5 shadow-lg [&>div]:grid [&>div]:gap-3.5 [&_label]:text-xs [&_label]:leading-relaxed"
-            : ""
-        }
-      >
-        {retainedCards > 0 && (
-          <Alert
-            role="status"
-            title="Deleted content is retained privately until its reviews and deletion acknowledgements have synced."
-          >
-            {retainedCards} deleted · awaiting review sync
-          </Alert>
-        )}
+    <div className="grid gap-3">
+      <div className="grid gap-3 text-sm [&_label]:text-xs [&_label]:leading-relaxed">
         {(message || visibleAccountFailure) && (
           <Alert
             role={messageIsError ? "alert" : "status"}

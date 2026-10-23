@@ -6,7 +6,7 @@
 - API health: <https://recall-api-akep.onrender.com/health>
 - Source: `deployment/free-hosting` on GitHub. The existing checkout's branch and
   unrelated work were preserved.
-- Android download: [test release](https://github.com/LachlanBWWright/AiRepetitionCards/releases/tag/android-dev-2026.10.23).
+- Android download: [test release](https://github.com/LachlanBWWright/AiRepetitionCards/releases/tag/android-dev-2026.10.24).
 
 The October 23, 2026 acceptance used isolated Auth accounts and removed its
 database/media fixtures afterward. It verified authenticated sync, isolation,
@@ -83,7 +83,7 @@ its local callback. Native packages must be rebuilt to receive the Google flow.
 5. Promote only the validated version. Record the two deployment IDs for rollback;
    rolling back code does not roll back database migrations.
 
-The [Android test APK](https://github.com/LachlanBWWright/AiRepetitionCards/releases/tag/android-dev-2026.10.23)
+The [Android test APK](https://github.com/LachlanBWWright/AiRepetitionCards/releases/tag/android-dev-2026.10.24)
 is published with checksums on GitHub Releases. It uses debug signing; replacement builds can require uninstalling
 the previous app. Export local data first. No store submission or dedicated
 release signing is configured by this free-hosting setup.

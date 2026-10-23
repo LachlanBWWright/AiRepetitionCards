@@ -8,7 +8,6 @@ import { AccountActions, AccountConflictNotice } from "./NativeAccountPanelActio
 const palette = designTokens.color;
 
 export function NativeAccountPanel({
-  onSync,
   conflictAreas,
   onUseServerVersion,
   onImport,
@@ -51,7 +50,6 @@ export function NativeAccountPanel({
   const [showAccountActions, setShowAccountActions] = useState(initialDeleteConfirmationOpen);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [syncBusy, setSyncBusy] = useState(false);
   const [resolvingConflict, setResolvingConflict] = useState(false);
   const [fileBusy, setFileBusy] = useState(false);
   const [showDelete, setShowDelete] = useState(initialDeleteConfirmationOpen);
@@ -90,22 +88,6 @@ export function NativeAccountPanel({
       Either.isRight(result)
         ? result.right
         : "Could not sign out. Your current account session is unchanged.",
-    );
-  }
-
-  async function syncNow() {
-    setSyncBusy(true);
-    const result = await Effect.runPromise(
-      Effect.either(
-        Effect.tryPromise({
-          try: onSync,
-          catch: () => ({ _tag: "NativeSyncRequestError" }) as const,
-        }),
-      ),
-    );
-    setSyncBusy(false);
-    setNotice(
-      Either.isRight(result) ? result.right : "Sync failed. Your offline data is still saved.",
     );
   }
 
@@ -181,7 +163,7 @@ export function NativeAccountPanel({
       )}
       <NativeAccountPanelTransfers
         fileBusy={fileBusy}
-        syncBusy={syncBusy}
+        syncBusy={false}
         ownershipIssue={cloudAvailable ? ownershipIssue : null}
         onAdoptLegacyOwner={onAdoptLegacyOwner}
         onResetForAccount={onResetForAccount}
@@ -195,23 +177,11 @@ export function NativeAccountPanel({
       />
       {cloudAvailable && account ? (
         <>
-          <Pressable
-            accessibilityRole="button"
-            disabled={syncBusy || resolvingConflict || ownershipIssue !== null}
-            onPress={() => void syncNow()}
-            className={"min-h-[42px] justify-center px-[14px] rounded-[10px] bg-recall-darkGreen"}
-          >
-            {syncBusy ? (
-              <ActivityIndicator color={palette.surface} />
-            ) : (
-              <Text className={"text-recall-surface font-bold text-[12px]"}>Sync now</Text>
-            )}
-          </Pressable>
           <AccountActions
             expanded={showAccountActions}
             fileBusy={fileBusy}
             busy={busy}
-            syncBusy={syncBusy}
+            syncBusy={false}
             resolvingConflict={resolvingConflict}
             onToggle={() => {
               setShowAccountActions((value) => !value);
@@ -226,7 +196,7 @@ export function NativeAccountPanel({
             <AccountConflictNotice
               areas={conflictAreas}
               resolving={resolvingConflict}
-              disabled={resolvingConflict || syncBusy}
+              disabled={resolvingConflict}
               onUseServer={() => {
                 void applyServerVersion();
               }}

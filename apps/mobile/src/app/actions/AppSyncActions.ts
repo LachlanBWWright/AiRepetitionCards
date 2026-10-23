@@ -71,7 +71,10 @@ export function createAppSyncActions(
     syncConflictWorkspace,
     setActiveAreaId,
   } = model;
-  async function syncCloudWorkspace(adoptLegacyOwner = false): Promise<string> {
+  async function syncCloudWorkspace(
+    adoptLegacyOwner = false,
+    onProgress?: (workspace: NonNullable<typeof model.workspace>, more: boolean) => void,
+  ): Promise<string> {
     const generation = workspaceLifetime.generation();
     const authGeneration = authSession.current.generation;
     if (workspaceLifetime.isBlocked())
@@ -174,6 +177,14 @@ export function createAppSyncActions(
       }
       return "Sync could not reconcile the latest local workspace. Your current data was preserved.";
     }
+    onProgress?.(
+      committed.right,
+      result.hasMore ||
+        result.uploadDeferred ||
+        (committed.right.pendingReviewEventIds?.length ?? 0) > 0 ||
+        (committed.right.syncPendingContentAreaIds?.length ?? 0) > 0 ||
+        (committed.right.syncContentConflictAreaIds?.length ?? 0) > 0,
+    );
     setSyncConflictWorkspace(null);
     if ((committed.right.syncContentConflictAreaIds ?? []).length > 0)
       return "Your newer local edits were preserved. Sync again to review conflicting server content.";
@@ -235,7 +246,7 @@ export function createAppSyncActions(
     }
     setActiveAreaId(committed.right.areas[0]?.id ?? null);
     setSyncConflictWorkspace(null);
-    return "Server content loaded. Sync again to upload pending reviews.";
+    return "Server content loaded. Pending reviews will upload automatically.";
   }
   return { syncCloudWorkspace, useServerWorkspace } as const;
 }

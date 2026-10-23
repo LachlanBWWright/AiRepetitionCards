@@ -60,8 +60,7 @@ export function runWorkspaceSyncAction(args: {
   ) => void;
   readonly setConflictData: (data: ConflictData | null) => void;
   readonly lastSyncedWorkspace: { current: string | null };
-  readonly autoSync: boolean;
-  readonly setRetrySignal: (update: (value: number) => number) => void;
+  readonly scheduleRetry: () => void;
   readonly workspace: Workspace;
   readonly checkpoint: (
     workspace: Workspace,
@@ -88,10 +87,9 @@ export function runWorkspaceSyncAction(args: {
   ) => Workspace | null;
   readonly onMissingReviewContent?: (() => void) | undefined;
   readonly onReviewProvisionCapacity?: (() => void) | undefined;
-  readonly retainedCards: number;
   readonly missingReviewContentMessage: string;
   readonly provisionCapacityMessage: string;
-}): void {
+}): Effect.Effect<void> {
   const {
     adoptLegacyOwner,
     demoMissingReviewContent,
@@ -106,8 +104,7 @@ export function runWorkspaceSyncAction(args: {
     setAccountFailure,
     setConflictData,
     lastSyncedWorkspace,
-    autoSync,
-    setRetrySignal,
+    scheduleRetry,
     workspace,
     checkpoint,
     mediaStore,
@@ -117,19 +114,18 @@ export function runWorkspaceSyncAction(args: {
     onSynced,
     onMissingReviewContent,
     onReviewProvisionCapacity,
-    retainedCards,
     missingReviewContentMessage,
     provisionCapacityMessage,
   } = args;
   if (demoMissingReviewContent) {
     setMessage(missingReviewContentMessage);
-    return;
+    return Effect.void;
   }
   if (demoAccountState) {
     setMessage("Mock account ownership controls are ready for review.");
-    return;
+    return Effect.void;
   }
-  if (busy || !expectedOwner) return;
+  if (busy || !expectedOwner) return Effect.void;
   setBusy(true);
   setMessage(null);
   const authenticatedRequest = readSyncOwner().pipe(
@@ -200,7 +196,7 @@ export function runWorkspaceSyncAction(args: {
           return;
         }
         let message =
-          "Sync failed. Changes exist only in this tab until the server confirms them; retry before leaving.";
+          "Changes haven’t reached your account yet. Retrying automatically; keep this tab open.";
         if (
           error._tag === "WorkspaceSyncFailure" &&
           error.reason === "deleted-review-content-missing"
@@ -258,9 +254,8 @@ export function runWorkspaceSyncAction(args: {
         lastSyncedWorkspace.current = JSON.stringify(applied);
         setConflictData(null);
         if ((applied.syncContentConflictAreaIds ?? []).length > 0) {
-          setMessage(
-            "Your newer local edits were preserved. Sync again to review conflicting server content.",
-          );
+          lastSyncedWorkspace.current = null;
+          setMessage(null);
           return;
         }
         if (
@@ -269,52 +264,34 @@ export function runWorkspaceSyncAction(args: {
           !result.uploadDeferred
         ) {
           lastSyncedWorkspace.current = null;
-          setMessage("Your newer local edits were preserved. Sync again to upload them.");
+          setMessage(null);
           return;
         }
         if (result.hasMore) {
           lastSyncedWorkspace.current = null;
-          setMessage("Sync progress saved. More remote changes remain; sync again to continue.");
+          setMessage(null);
           return;
         }
         if (result.uploadDeferred) {
           lastSyncedWorkspace.current = null;
-          setMessage(
-            retainedCards > 0
-              ? "Reviews and deletion acknowledgements are still syncing. Deleted content stays hidden; sync again to finish."
-              : "Sync progress received. Sync again to finish content and local uploads.",
-          );
+          setMessage(null);
           return;
         }
         if (result.remainingPendingReviews > 0 && result.conflicts.length === 0) {
           lastSyncedWorkspace.current = null;
-          setMessage(
-            `Sync progress saved. ${String(result.remainingPendingReviews)} pending review${result.remainingPendingReviews === 1 ? " remains" : "s remain"}; sync again to continue.`,
-          );
+          setMessage(null);
           return;
         }
-        const { acceptedIds, conflicts } = result;
-        setMessage(
-          conflicts.length > 0
-            ? `${String(conflicts.length)} review conflict${conflicts.length === 1 ? " was" : "s were"} rebased. Sync again to finish.`
-            : acceptedIds.length === 0
-              ? result.pulledEvents.length === 0
-                ? "Everything is up to date."
-                : `${String(result.pulledEvents.length)} review${result.pulledEvents.length === 1 ? "" : "s"} received.`
-              : `${String(acceptedIds.length)} review${acceptedIds.length === 1 ? "" : "s"} synced${result.pulledEvents.length ? ` · ${String(result.pulledEvents.length)} received` : ""}.`,
-        );
+        if (result.conflicts.length > 0) lastSyncedWorkspace.current = null;
+        setMessage(null);
       },
     }),
     Effect.ensuring(
       Effect.sync(() => {
         setBusy(false);
-        if (autoSync) {
-          window.setTimeout(() => {
-            setRetrySignal((value) => value + 1);
-          }, 3_000);
-        }
+        scheduleRetry();
       }),
     ),
   );
-  Effect.runFork(program);
+  return program;
 }
