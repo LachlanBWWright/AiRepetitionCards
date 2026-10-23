@@ -2,7 +2,7 @@
 
 ## Current test deployment
 
-- Website: <https://recall-learning-blond.vercel.app>
+- Website: <https://recall-repetition-learning.vercel.app>
 - API health: <https://recall-api-akep.onrender.com/health>
 - Source: `deployment/free-hosting` on GitHub. The existing checkout's branch and
   unrelated work were preserved.
