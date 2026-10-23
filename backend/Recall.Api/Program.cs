@@ -10,6 +10,7 @@ using Recall.Api.Features.Sync;
 using Recall.Api.Features.Tutor;
 using Recall.Api.Features.Learning;
 using Recall.Api.Contracts;
+using Recall.Api.Hosting;
 using Recall.Infrastructure.SupabaseAuth;
 using Recall.Infrastructure.SupabaseWorkspaceRead;
 
@@ -87,6 +88,7 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseForwardedHeaders(forwardedHeaders);
+app.UseTrustedWebProxy(builder.Configuration);
 app.UseApiRequestObservation();
 app.UseSupabaseSsrBearer();
 if (authConfigured)

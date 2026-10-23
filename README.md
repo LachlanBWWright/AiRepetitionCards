@@ -1,5 +1,7 @@
 # Recall
 
+For Vercel, Render, Supabase and Redis setup, see [free hosting](docs/free-hosting.md).
+
 Recall is a spaced-repetition learning app with web, Expo mobile and Electron desktop clients. All three share learning areas, card authoring, FSRS reviews, sync, AI tutoring with approved proposals, interchange and publishing; mobile and Electron also support local-only offline study.
 
 The [source layout guide](docs/source-layout.md) maps the feature folders, package entry points, and nested test suites.
@@ -229,7 +231,7 @@ The normal web build (`pnpm build`) includes its install manifest and cached app
 
 Desktop and mobile package their application code and SQLite storage, so local startup and learning operations need neither a Recall server nor a development server. Optional authentication and sync run independently from local startup. Being signed in does not make local study depend on the network.
 
-Electron and React Native keep Recall account sign-in optional and separate from AI provider access. On Electron, open **Account settings → AI connection** to connect ChatGPT without creating or signing in to a Recall account, even with an empty library. Recall sign-out leaves that connection intact; use the ChatGPT controls to disconnect AI access. Web study still requires a Recall account. React Native also exposes a separate ChatGPT connection in Account on native builds, using a device-local callback listener and protected credentials. Expo Go does not include this module.
+Electron and React Native keep Recall account sign-in optional and separate from AI provider access. On Electron, open **Account settings → AI connection** to connect ChatGPT without creating or signing in to a Recall account, even with an empty library. The desktop tutor shows a **Sign in with ChatGPT** button with the ChatGPT logo when disconnected or after a session expires; it reuses the saved account registration and opens browser sign-in directly. Recall sign-out leaves that connection intact; use the ChatGPT controls to disconnect AI access. Web study still requires a Recall account. React Native also exposes a separate ChatGPT connection in Account on native builds, using a device-local callback listener and protected credentials. Expo Go does not include this module.
 
 AI inference requires a network connection. Direct ChatGPT plan tutoring is enabled in desktop builds by default; no build flag or Recall account is required. OpenAI's documented local authorization flow requires a loopback HTTP listener; native mobile sign-in implements that callback directly rather than using a custom app redirect. Mobile tutoring also supports direct ChatGPT plan requests with on-device credentials and SQLite sessions. Choose ChatGPT plan or Recall hosted in Account → ChatGPT connection; hosted tutoring remains a separate Recall service and is never selected automatically after a ChatGPT failure. See [OpenAI's local sign-in flow](https://developers.openai.com/siwc/token-sharing-open-source/sign-in).
 

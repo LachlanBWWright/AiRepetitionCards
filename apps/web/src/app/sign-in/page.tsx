@@ -21,6 +21,7 @@ export default async function SignInPage({
   return (
     <SignInScreen
       chatGptEnabled={chatGptEnabled}
+      oauthProviders={process.env.RECALL_OAUTH_PROVIDERS === "none" ? [] : ["apple", "google"]}
       next={sharedReturnPathFromQuery(nextValues)}
       {...(initialMessage === undefined ? {} : { initialMessage })}
     />

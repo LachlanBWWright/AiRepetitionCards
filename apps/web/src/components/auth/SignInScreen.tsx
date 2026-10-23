@@ -9,6 +9,7 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { readSupabaseConfig } from "@/lib/supabase/config";
 import { sharedPublicationReturnPath } from "@/lib/auth/return-path";
 import { ContinueWithChatGPT } from "./ContinueWithChatGPT";
+import { EmailSignIn } from "./EmailSignIn";
 
 export function SignInScreen({
   chatGptEnabled = false,
@@ -16,12 +17,14 @@ export function SignInScreen({
   next = "/",
   initialMessage,
   demo = false,
+  oauthProviders = ["apple", "google"],
 }: {
   readonly chatGptEnabled?: boolean;
   readonly supabaseEnabled?: boolean;
   readonly next?: string;
   readonly initialMessage?: string;
   readonly demo?: boolean;
+  readonly oauthProviders?: readonly ("apple" | "google")[];
 }) {
   const returnPath = sharedPublicationReturnPath(next);
   const [message, setMessage] = useState<string | null>(initialMessage ?? null);
@@ -83,7 +86,7 @@ export function SignInScreen({
         <h1 className="my-0 text-3xl font-semibold tracking-tight">Sign in to continue.</h1>
         <p className="text-sm leading-relaxed text-muted-foreground">
           {supabaseEnabled
-            ? `Web study data is saved to your Recall account. Sign in securely with Apple, Google${chatGptEnabled ? ", or ChatGPT" : ""}.`
+            ? "Sign in to save your cards and study progress to your Recall account."
             : "Sign-in is unavailable right now. You can return to the shared area."}
         </p>
         {!supabaseEnabled ? (
@@ -97,31 +100,37 @@ export function SignInScreen({
           )
         ) : (
           <>
-            <div className="grid gap-3 pt-2">
-              <Button
-                type="button"
-                disabled={submitting}
-                onClick={() => void signInWithProvider("apple")}
-              >
-                Continue with Apple
-              </Button>
-              <Button
-                type="button"
-                variant="secondary"
-                disabled={submitting}
-                onClick={() => void signInWithProvider("google")}
-              >
-                Continue with Google
-              </Button>
-            </div>
-            <div className="flex items-center gap-3 pt-2 text-xs text-muted-foreground before:h-px before:flex-1 before:bg-border after:h-px after:flex-1 after:bg-border">
-              <span>or</span>
-            </div>
-            <ContinueWithChatGPT enabled={chatGptEnabled} next={returnPath} demo={demo} />
-            {!chatGptEnabled && (
-              <p className="text-sm text-muted-foreground">
-                ChatGPT sign-in is unavailable right now. Apple and Google sign-in remain available.
-              </p>
+            <EmailSignIn next={returnPath} demo={demo} />
+            {oauthProviders.length > 0 && (
+              <div className="grid gap-3 pt-2">
+                {oauthProviders.includes("apple") && (
+                  <Button
+                    type="button"
+                    disabled={submitting}
+                    onClick={() => void signInWithProvider("apple")}
+                  >
+                    Continue with Apple
+                  </Button>
+                )}
+                {oauthProviders.includes("google") && (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    disabled={submitting}
+                    onClick={() => void signInWithProvider("google")}
+                  >
+                    Continue with Google
+                  </Button>
+                )}
+              </div>
+            )}
+            {chatGptEnabled && (
+              <>
+                <div className="flex items-center gap-3 pt-2 text-xs text-muted-foreground before:h-px before:flex-1 before:bg-border after:h-px after:flex-1 after:bg-border">
+                  <span>or</span>
+                </div>
+                <ContinueWithChatGPT enabled={chatGptEnabled} next={returnPath} demo={demo} />
+              </>
             )}
             {message && <Alert variant="destructive">{message}</Alert>}
           </>

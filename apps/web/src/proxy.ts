@@ -1,4 +1,4 @@
-import type { NextRequest } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 import { createContentSecurityPolicy } from "@/lib/http/content-security-policy";
 import { refreshSupabaseSession } from "@/lib/supabase/session";
 
@@ -16,7 +16,12 @@ export async function proxy(request: NextRequest) {
   // this proxy keeps the local Next development server usable as the frontend.
   const apiOrigin = process.env.RECALL_API_URL?.trim();
   const isBackendRoute =
-    request.nextUrl.pathname.startsWith("/api/") || request.nextUrl.pathname.startsWith("/auth/");
+    request.nextUrl.pathname.startsWith("/api/") ||
+    (request.nextUrl.pathname.startsWith("/auth/") &&
+      !(
+        request.nextUrl.pathname === "/auth/confirm" &&
+        (request.nextUrl.searchParams.has("code") || request.nextUrl.searchParams.has("error"))
+      ));
   if (apiOrigin && isBackendRoute) {
     let upstream: URL;
     try {
@@ -74,6 +79,16 @@ export async function proxy(request: NextRequest) {
     }
     requestHeaders.set("x-forwarded-host", request.headers.get("host") ?? request.nextUrl.host);
     requestHeaders.set("x-forwarded-proto", request.nextUrl.protocol.slice(0, -1));
+    requestHeaders.delete("x-recall-proxy-key");
+    const proxySecret = process.env.RECALL_PROXY_SECRET?.trim();
+    if (proxySecret) requestHeaders.set("x-recall-proxy-key", proxySecret);
+    if (process.env.VERCEL === "1") {
+      // Let the hosting proxy stream API bodies instead of executing a second function.
+      const forwarded = NextResponse.rewrite(upstream, { request: { headers: requestHeaders } });
+      forwarded.headers.set("Content-Security-Policy", policy.header);
+      forwarded.headers.set("Cache-Control", "private, no-store");
+      return forwarded;
+    }
     const method = request.method.toUpperCase();
     let response: Response;
     try {

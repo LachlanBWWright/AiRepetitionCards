@@ -82,6 +82,10 @@ const config: StorybookConfig = {
       ...merged.resolve,
       alias: [
         {
+          find: /^expo-audio$/,
+          replacement: fileURLToPath(new URL("./ExpoAudioMock.ts", import.meta.url)),
+        },
+        {
           find: /^expo-crypto$/,
           replacement: fileURLToPath(new URL("./ExpoCryptoMock.ts", import.meta.url)),
         },

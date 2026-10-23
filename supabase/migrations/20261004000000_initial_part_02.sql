@@ -1,5 +1,5 @@
-
-
+-- Forward references in the split schema also need this on pooled connections.
+SET LOCAL check_function_bodies = false;
 CREATE FUNCTION public.moderator_set_deck_report_status(p_actor_id uuid, p_report_id uuid, p_status text) RETURNS boolean
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path = 'pg_catalog', 'public'

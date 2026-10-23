@@ -113,7 +113,7 @@ jobs:
           app=build/ios-simulator/Build/Products/Release-iphonesimulator/Recall.app
           test -s "$app/main.jsbundle"
           test -x "$app/Recall"
-          lipo -verify_arch arm64 "$app/Recall"
+          lipo "$app/Recall" -verify_arch arm64
           /usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Info.plist" | grep -Eq '^com\.recall\.study$'
           printf '### iOS artifact\n\nStandalone Apple Silicon simulator app includes its JS bundle. Simulator only; physical iPhone distribution requires signing credentials.\n' >> "$GITHUB_STEP_SUMMARY"
       - name: Archive simulator app preserving executable permissions
