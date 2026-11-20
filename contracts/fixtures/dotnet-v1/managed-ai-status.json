@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "accountId": "00000000-0000-4000-8000-000000000001",
+  "available": true,
+  "dailyLimitMicrousd": 1000000,
+  "usedMicrousd": 100,
+  "requestLimit": 30,
+  "requestsUsed": 1,
+  "expiresAt": "2027-01-01T00:00:00Z"
+}

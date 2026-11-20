@@ -16,6 +16,7 @@ import {
 import type { ActivityLibrary, Assessment, LearningActivity } from "@recall/domain";
 import type { Dispatch, SetStateAction } from "react";
 import { readRef } from "../read-ref";
+import { learningActivityEditorFields } from "./learning-activity-editor-fields";
 import { createLearningActivity } from "./use-learning-activities-create";
 
 type Run = <A>(
@@ -25,9 +26,10 @@ type Run = <A>(
 
 type EditorField = ReturnType<typeof activityAuthoringFields>[number];
 
-export const learningActivityBuiltinIds = new Set(
-  builtinActivityRegistry.map((plugin) => plugin.id),
-);
+export const learningActivityBuiltinIds = new Set([
+  ...builtinActivityRegistry.map((plugin) => plugin.id),
+  "recall.lua",
+]);
 
 export type LearningActivityEditorActionDependencies = {
   readonly areaId: string;
@@ -171,18 +173,7 @@ export function useLearningActivitiesEditorActions(
       setPluginId(entry.pluginId);
       setObjectiveId(entry.objectiveIds[0] ?? `area:${areaId}:practice`);
       editorFingerprint.current = "";
-      setFields(
-        builtinIds.has(entry.pluginId)
-          ? {
-              prompt: content.prompts.join("\n\n"),
-              rubric: content.rubric,
-              reference: content.reference,
-              options: content.options.map((option) => option.text).join("\n"),
-              correct: correctOptionIndexes(entry, content),
-              tests: JSON.stringify(entry.payload.tests ?? []),
-            }
-          : { payload: JSON.stringify(entry.payload, null, 2) },
-      );
+      setFields(learningActivityEditorFields(entry, content, correctOptionIndexes(entry, content)));
       setCreating(true);
     });
   }

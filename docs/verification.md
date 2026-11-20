@@ -8,6 +8,14 @@ run through `pnpm test:e2e`; native device and signed release verification remai
 
 The private `@recall/verification` package uses [Node's test runner](https://nodejs.org/download/release/v22.17.0/docs/api/test.html). Its [esbuild runner](https://esbuild.github.io/api/) bundles actual workspace TypeScript into a temporary directory, targets Node 22, executes under UTC and removes the bundles afterward. Tests are typechecked and included in strict zero-warning lint, formatting and source policy. Production clients never depend on this package.
 
+Verification compiles and executes at most four test files per batch, with one
+test worker at a time. Dependencies share ESM chunks within a batch. Source maps
+are separate files without embedded source copies, and esbuild stops before test
+execution. Each batch removes its bundles before the next build. This bounds
+compiler and worker concurrency instead of retaining a separate dependency bundle
+and inline source map for every test in the suite. `pnpm test` first runs a small
+compiler regression that checks shared output size and executes the generated tests.
+
 The runner selects the `react-server` package-export condition so real server adapters can be imported in their intended server context. Adapter fixtures replace HTTP transport and use synthetic environment values; no app server or live service is started.
 
 Run one file with `pnpm --filter @recall/verification test import-security.test.ts`. Unknown filenames fail instead of silently running a different suite.

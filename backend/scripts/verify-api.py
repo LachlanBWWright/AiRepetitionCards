@@ -8,6 +8,7 @@ Supabase RECALL_INTEGRATION_* settings, or --local-supabase to read local CLI st
 import argparse
 import json
 import os
+import secrets
 from pathlib import Path
 import subprocess
 import sys
@@ -30,6 +31,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--publishing", action="store_true")
     parser.add_argument("--study", action="store_true")
+    parser.add_argument("--interactive", action="store_true")
     parser.add_argument("--local-supabase", action="store_true",
                         help="Read credentials from the running local Supabase CLI without printing them.")
     parser.add_argument("--port", type=int, default=5019)
@@ -37,6 +39,9 @@ def main():
     root = Path(__file__).resolve().parents[2]
     origin = f"http://127.0.0.1:{args.port}"
     environment = dict(os.environ, ASPNETCORE_ENVIRONMENT="Development", API_RATE_LIMIT_MODE="memory")
+    environment["RECALL_INTEGRATION_API_URL"] = origin
+    environment["RECALL_WEB_ORIGIN"] = "https://recall-proxy-test.example"
+    environment["RECALL_PROXY_SECRET"] = secrets.token_urlsafe(48)
     if args.local_supabase:
         status = subprocess.run(["pnpm", "exec", "supabase", "status", "-o", "json"],
                                 cwd=root, capture_output=True, text=True, check=False, timeout=30)
@@ -58,7 +63,7 @@ def main():
         except (json.JSONDecodeError, TypeError):
             print("Local Supabase status was invalid.", file=sys.stderr)
             return 1
-    if args.publishing or args.study:
+    if args.publishing or args.study or args.interactive:
         for suffix in ("URL", "PUBLISHABLE_KEY", "SERVICE_ROLE_KEY"):
             value = environment.get(f"RECALL_INTEGRATION_SUPABASE_{suffix}")
             if not value:
@@ -89,10 +94,13 @@ def main():
                 print("Development API did not become ready.", file=sys.stderr)
                 return 1
             checks = [["verify-openapi.py", f"{origin}/swagger/v1/swagger.json"]]
+            checks.append(["verify-web-proxy.py"])
             if args.publishing:
                 checks.append(["verify-deck-sharing.py"])
             if args.study:
                 checks.append(["verify-study-sync.py"])
+            if args.interactive:
+                checks.append(["verify-interactive-activities.py"])
             return run_checks(checks, root, environment)
         finally:
             process.terminate()

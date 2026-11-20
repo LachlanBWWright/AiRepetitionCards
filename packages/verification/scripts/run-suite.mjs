@@ -1,4 +1,4 @@
-import { build } from "esbuild";
+import { buildTests } from "./build-tests.mjs";
 import { mkdtemp, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
+const batchSize = 4;
 async function discoverTests(directory, prefix = "") {
   const entries = await readdir(directory, { withFileTypes: true });
   const groups = await Promise.all(
@@ -32,37 +33,34 @@ export async function runSuite(directory, requested) {
   } else {
     const output = await mkdtemp(path.join(tmpdir(), "recall-verification-"));
     try {
-      await build({
-        absWorkingDir: root,
-        entryPoints: files.map((name) => path.join(directory, name)),
-        outdir: output,
-        outbase: path.join(root, directory),
-        bundle: true,
-        platform: "node",
-        conditions: ["react-server"],
-        target: "node22",
-        format: "esm",
-        outExtension: { ".js": ".mjs" },
-        sourcemap: "inline",
-        banner: {
-          js: 'import { createRequire as recallCreateRequire } from "node:module"; const require = recallCreateRequire(import.meta.url);',
-        },
-        logLevel: "warning",
-      });
-      const result = await new Promise((resolve) => {
-        const child = spawn(
-          process.execPath,
-          ["--test", ...files.map((name) => path.join(output, name.replace(/\.ts$/, ".mjs")))],
-          {
-            stdio: "inherit",
-            cwd: root,
-            env: { ...process.env, TZ: "UTC" },
-          },
+      process.exitCode = 0;
+      for (let offset = 0; offset < files.length; offset += batchSize) {
+        const batch = files.slice(offset, offset + batchSize);
+        process.stdout.write(
+          `Verification batch ${String(offset / batchSize + 1)}/${String(Math.ceil(files.length / batchSize))}\n`,
         );
-        child.once("error", () => resolve(1));
-        child.once("exit", (code) => resolve(code ?? 1));
-      });
-      process.exitCode = result;
+        await buildTests(root, directory, batch, output);
+        const result = await new Promise((resolve) => {
+          const child = spawn(
+            process.execPath,
+            [
+              "--test",
+              "--test-concurrency=1",
+              "--enable-source-maps",
+              ...batch.map((name) => path.join(output, name.replace(/\.ts$/, ".mjs"))),
+            ],
+            {
+              stdio: "inherit",
+              cwd: root,
+              env: { ...process.env, TZ: "UTC" },
+            },
+          );
+          child.once("error", () => resolve(1));
+          child.once("exit", (code) => resolve(code ?? 1));
+        });
+        if (result !== 0) process.exitCode = result;
+        await rm(output, { recursive: true, force: true });
+      }
     } catch {
       process.stderr.write("Regression runner could not compile or execute its checks.\n");
       process.exitCode = 1;

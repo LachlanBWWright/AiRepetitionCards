@@ -73,8 +73,7 @@ contextBridge.exposeInMainWorld("recallDesktop", {
   },
   auth: {
     getStatus: (): Promise<unknown> => ipcRenderer.invoke("auth:status"),
-    requestMagicLink: (email: string): Promise<unknown> =>
-      ipcRenderer.invoke("auth:magic-link", email),
+    signInWithGoogle: (): Promise<unknown> => ipcRenderer.invoke("auth:google"),
     signOut: (): Promise<unknown> => ipcRenderer.invoke("auth:sign-out"),
     onStateChanged: (callback: (state: unknown) => void): (() => void) => {
       const listener = (_event: Electron.IpcRendererEvent, state: unknown) => {
@@ -97,6 +96,8 @@ contextBridge.exposeInMainWorld("recallDesktop", {
       readonly method: string;
       readonly body: string | null;
       readonly expectedOwnerId?: string;
+      readonly aiFunding?: "managed";
+      readonly aiRequestId?: string;
     }) => ipcRenderer.invoke("desktop-api:request", request),
     requestMedia: (request: {
       readonly path: string;

@@ -13,17 +13,24 @@ export function sqliteCheckpoints(database: SQLite.SQLiteDatabase): WorkspaceChe
     durable: true,
     read: Effect.tryPromise({
       try: async (): Promise<unknown> => {
-        const row = await database.getFirstAsync<{ entries: string }>(
-          "SELECT entries FROM workspace_checkpoints WHERE id = 1",
-        );
-        if (!row) return [];
-        const count = workspaceChunkCount(row.entries);
-        if (count === undefined) return JSON.parse(row.entries) as unknown;
-        const chunks = await database.getAllAsync<{ part: number; payload: string }>(
-          "SELECT part,payload FROM workspace_checkpoint_chunks ORDER BY part",
-        );
-        const serialized = joinWorkspaceChunks(chunks, count);
-        return serialized === undefined ? null : (JSON.parse(serialized) as unknown);
+        const result: { value: unknown } = { value: [] };
+        await database.withExclusiveTransactionAsync(async (transaction) => {
+          const row = await transaction.getFirstAsync<{ entries: string }>(
+            "SELECT entries FROM workspace_checkpoints WHERE id = 1",
+          );
+          if (!row) return;
+          const count = workspaceChunkCount(row.entries);
+          if (count === undefined) {
+            result.value = JSON.parse(row.entries) as unknown;
+            return;
+          }
+          const chunks = await transaction.getAllAsync<{ part: number; payload: string }>(
+            "SELECT part,payload FROM workspace_checkpoint_chunks ORDER BY part",
+          );
+          const serialized = joinWorkspaceChunks(chunks, count);
+          result.value = serialized === undefined ? null : (JSON.parse(serialized) as unknown);
+        });
+        return result.value;
       },
       catch: () => ({ _tag: "LocalStoreFailure", operation: "read" }) as const,
     }).pipe(

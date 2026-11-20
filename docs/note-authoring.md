@@ -58,3 +58,19 @@ Previously divergent snapshots and independent destination edits still require a
 editor decision. Collection checks report these conflicts and show the conflicting field values.
 Its local content baseline covers all subjects, so concurrent destination edits reject a stale save
 instead of being overwritten.
+
+## Reusable appearance
+
+Card and template presentation now support separate question, answer and explanation
+appearance. Each override uses the same validated controls and layout presets as the
+card default: local typeface, size, spacing, left/center/right alignment, explicit reading
+direction and inline image size. Turning an override off inherits the card default.
+Template regeneration carries these settings to linked cards without changing review
+history. See [rich content](rich-content.md#field-appearance-and-layout-presets) for the
+font and portability details.
+
+### Media editing
+
+Web and Electron attachment pickers offer crop/resize for still PNG, JPEG and simple WebP images. Before creating a preview or invoking a codec, the editor checks image headers and limits images to 16 megapixels and 8192 pixels on either side. GIF, animated PNG and extended/animated WebP use the original-attachment path without an editor preview. Crop output is a new PNG.
+
+Audio trimming supports structurally validated PCM WAV only: up to 5 minutes, 2 channels, 96 kHz and 20 MB. Unsupported, malformed or oversized media has no editor preview or edit action; supported original attachments can still be attached through the ordinary validation pipeline. Compressed audio can be attached unchanged. The editor never modifies the source file; users explicitly choose Attach original or Attach edited copy, then save the card/note. Generated image/WAV bytes synchronize and render on mobile; native editing controls are not available.

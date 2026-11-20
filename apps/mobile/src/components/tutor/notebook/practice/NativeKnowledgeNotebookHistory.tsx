@@ -1,5 +1,6 @@
+import { NativeCollapsibleTrigger, NativeCollapsibleContent } from "@recall/ui-native";
 import type { KnowledgeNotebook } from "@recall/application";
-import { NativeButton } from "../../../ui/NativeButton";
+
 import { Text, View } from "react-native";
 import { NotebookSection } from "../NativeKnowledgeNotebookTypes";
 import type { NativeNotebookModel } from "../useNativeKnowledgeNotebookModel";
@@ -23,15 +24,14 @@ export function NativeKnowledgeNotebookHistory({ model }: { readonly model: Nati
           ) : null}
         </View>
       ) : null}
-      <NativeButton
-        label={showEvidence ? "Hide history" : "Answer history"}
-        onPress={() => {
+      <NativeCollapsibleTrigger
+        open={showEvidence}
+        title="Answer history"
+        onToggle={() => {
           setShowEvidence((current) => !current);
         }}
-        className={"py-[9px] px-[4px]"}
-        labelClassName="text-recall-darkGreen text-[11px] font-bold"
       />
-      {showEvidence && notebook.evidence.length > 0 ? (
+      <NativeCollapsibleContent open={showEvidence && notebook.evidence.length > 0}>
         <View className={"gap-[7px] py-[12px] border-t border-t-recall-line"}>
           <Text className={"text-recall-ink font-bold text-[13px]"}>Recent recorded evidence</Text>
           {notebook.evidence
@@ -41,7 +41,7 @@ export function NativeKnowledgeNotebookHistory({ model }: { readonly model: Nati
               <NativeKnowledgeNotebookEvidence key={entry.id} notebook={notebook} entry={entry} />
             ))}
         </View>
-      ) : null}
+      </NativeCollapsibleContent>
     </View>
   );
 }

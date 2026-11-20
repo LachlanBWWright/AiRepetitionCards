@@ -1,3 +1,4 @@
+import { Label } from "@recall/ui-web/components/label";
 import { Alert, Input } from "@recall/ui-web";
 import {
   DialogDescription,
@@ -50,7 +51,7 @@ export function AccountActionDeleteConfirmation({
           This permanently deletes your account and synced learning data. Download an account export
           first if you want a copy.
         </DialogDescription>
-        <label htmlFor="delete-account-confirmation">Type DELETE to confirm</label>
+        <Label htmlFor="delete-account-confirmation">Type DELETE to confirm</Label>
         <Input
           id="delete-account-confirmation"
           autoComplete="off"
@@ -62,12 +63,12 @@ export function AccountActionDeleteConfirmation({
           required
         />
         {message && <Alert variant="destructive">{message}</Alert>}
-        <DialogFooter className="gap-2 sm:justify-end">
+        <DialogFooter>
           <Button variant="secondary" type="button" disabled={deleting} onClick={onCancel}>
             Cancel
           </Button>
           <Button
-            variant="danger"
+            variant="destructive"
             type="submit"
             disabled={deleting || (!accountDeleted && confirmation !== "DELETE")}
           >

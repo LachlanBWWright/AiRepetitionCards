@@ -36,7 +36,7 @@ export function NativeWorkspaceDrafts({
           </Text>
           <NativeButton
             label="Continue editing"
-            tone="soft"
+            variant="secondary"
             onPress={() => {
               onContinueEditing();
             }}
@@ -50,7 +50,7 @@ export function NativeWorkspaceDrafts({
               }}
             />
           )}
-          <NativeButton label="Discard draft" tone="soft" onPress={onDiscardDraft} />
+          <NativeButton label="Discard draft" variant="secondary" onPress={onDiscardDraft} />
         </View>
       )}
       {drafts.length > 0 && (
@@ -83,7 +83,7 @@ function DraftRow({
     <View className="gap-2">
       <NativeButton
         label={draftLabel(draft)}
-        tone="soft"
+        variant="default"
         disabled={locked}
         onPress={() => {
           onResume(draft);

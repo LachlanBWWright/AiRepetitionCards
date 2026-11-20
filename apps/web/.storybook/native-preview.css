@@ -1,0 +1,20 @@
+@reference "../src/app/globals.css";
+/* RN Web's reset is unlayered. Keep native utilities unlayered and scoped
+   so they can override that reset without changing Next.js stories. */
+@scope ([data-native-preview]) {
+  @tailwind utilities;
+}
+/* NativeWind's web runtime forwards native className values to React Native Web. */
+@source "../../mobile/src";
+@source "../../../packages/ui-native/src";
+@theme inline {
+  --color-recall-paper: var(--recall-paper);
+  --color-recall-surface: var(--recall-surface);
+  --color-recall-ink: var(--recall-ink);
+  --color-recall-muted: var(--recall-muted);
+  --color-recall-line: var(--recall-line);
+  --color-recall-green: var(--recall-green);
+  --color-recall-action: var(--recall-action);
+  --color-recall-danger: var(--recall-danger);
+  --color-recall-danger-foreground: var(--recall-danger-foreground);
+}

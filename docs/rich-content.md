@@ -20,6 +20,11 @@ commands, extension loading and automatic package loading are disabled. Every eq
 a fresh parser; macro definitions cannot affect another card. Input and macro expansion are
 bounded. This is mathematical TeX, rather than a general LaTeX document compiler.
 
+The **Equation** composer offers inline/display layouts, reusable examples, a live preview,
+and syntax feedback before insertion. It respects the card field's character limit. Code spans
+and fenced code blocks protect literal math syntax; currency and escaped delimiters stay text.
+See [card content](card-content.md) for notation and the separate answer/explanation workflow.
+
 ## Conditional sections
 
 Templates support nested positive and inverse sections:
@@ -43,5 +48,23 @@ the existing confirmation and history-preservation workflow. Appearance is porta
 private sync, backups and published decks and is validated at both client and backend boundaries.
 The style vocabulary contains fixed choices; arbitrary CSS, HTML and scripts are not supported.
 
-Math SVG is drawn using the established light card-ink color. Device fonts differ between
+Math SVG is drawn using the established light card-ink color. System serif and native monospace fonts differ between
 platforms. Native equation layout and text selection still need physical-device acceptance.
+
+## Field appearance and layout presets
+
+The shared Appearance editor on web, Electron and mobile offers comfortable reading, large
+centered, compact code and right-to-left reading presets. Choosing a preset copies its
+validated values, which remain independently editable and are saved with the card or template.
+Question, answer and explanation can each override the card appearance; disabling an override
+returns that field to the card default. Alignment includes right alignment, and reading
+direction offers automatic, left-to-right and right-to-left. Older cards retain their existing
+appearance and automatic direction. Image size choices bound inline images to 160, 280 or
+480 pixels while retaining aspect ratio and fitting the available width.
+
+Geist Sans is bundled locally for web/Electron and native card text. Geist Mono is bundled
+for web/Electron; native monospace and serif choices use platform fonts. Font licenses ship
+with the assets. There are no remote font requests or arbitrary user font URLs. The fixed
+font vocabulary deliberately does not import arbitrary Anki font files. Native text falls
+back to a system font while its bundled font loads. Per-field choices survive private sync,
+portable backup and published deck normalization, including reusable note templates.

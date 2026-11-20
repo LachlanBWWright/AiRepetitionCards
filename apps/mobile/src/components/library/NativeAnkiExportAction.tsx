@@ -54,7 +54,7 @@ export function NativeAnkiExportAction({
     <View className="gap-2">
       <NativeButton
         label={busy ? "Preparing Anki…" : "Export Anki .apkg"}
-        tone="soft"
+        variant="default"
         disabled={busy || disabled || !area}
         onPress={() => void run()}
       />

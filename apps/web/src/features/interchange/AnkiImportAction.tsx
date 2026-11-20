@@ -1,11 +1,18 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useAnkiImportReader } from "./useAnkiImportReader";
+import { readAnkiDraft, clearAnkiDraft } from "./anki-import-draft";
+
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { AnkiImportBody } from "./AnkiImportBody";
 import { Dialog, DialogContent, DialogTitle } from "@recall/ui-web/components/dialog";
 import { Effect, Either } from "effect";
-import { importAnkiApkg, type AnkiImportError, type AnkiImportProposal } from "@recall/application";
+import {
+  type AnkiImportProgress,
+  type AnkiImportError,
+  type AnkiImportProposal,
+} from "@recall/application";
 import { readAnkiSqliteInBrowser } from "./browser-anki-sqlite-reader";
 import { readAnkiSqliteOnDesktop } from "./desktop-anki-sqlite-reader";
 import { isDesktopRuntime } from "@/lib/desktop-api";
@@ -15,11 +22,19 @@ type ImportFailure =
   | "read-failed"
   | "save-failed"
   | "ambiguous-matches"
-  | "partial-note-family";
+  | "partial-note-family"
+  | "draft-delete-failed"
+  | "source-cleanup-failed";
 export type AnkiImportState =
   | { readonly _tag: "closed" }
-  | { readonly _tag: "ready" }
-  | { readonly _tag: "reading"; readonly fileName: string }
+  | { readonly _tag: "ready"; readonly draftName?: string }
+  | {
+      readonly _tag: "reading";
+      readonly fileName: string;
+      readonly progress?: AnkiImportProgress | undefined;
+      readonly draftSaved?: boolean | undefined;
+      readonly paused?: boolean;
+    }
   | { readonly _tag: "review"; readonly fileName: string; readonly proposal: AnkiImportProposal }
   | { readonly _tag: "saving" }
   | { readonly _tag: "error"; readonly reason: ImportFailure };
@@ -30,57 +45,33 @@ type Props = {
   readonly initialState?: AnkiImportState;
 };
 
-function titleFromFileName(fileName: string): string {
-  return fileName
-    .replace(/\.(?:apkg|colpkg)$/i, "")
-    .replace(/[_-]+/g, " ")
-    .trim()
-    .slice(0, 80);
-}
-
 export function AnkiImportAction({ color, onAccept, initialState }: Props) {
   const [state, setState] = useState<AnkiImportState>(initialState ?? { _tag: "closed" });
   const inputRef = useRef<HTMLInputElement>(null);
-  const readSequence = useRef(0);
-
-  function close(): void {
-    readSequence.current += 1;
-    setState({ _tag: "closed" });
-  }
-
-  async function readFile(file: File): Promise<void> {
-    if (file.size > 50_000_000) {
-      setState({ _tag: "error", reason: "limits-exceeded" });
-      return;
-    }
-    const sequence = ++readSequence.current;
-    setState({ _tag: "reading", fileName: file.name });
-    const decoded = await Effect.runPromise(
-      Effect.either(
-        Effect.tryPromise({
-          try: () => file.arrayBuffer(),
-          catch: () => ({ _tag: "AnkiFileReadFailure" }) as const,
-        }).pipe(
-          Effect.flatMap((buffer) =>
-            importAnkiApkg(
-              new Uint8Array(buffer),
-              { title: titleFromFileName(file.name), color, now: new Date() },
-              isDesktopRuntime() ? readAnkiSqliteOnDesktop : readAnkiSqliteInBrowser,
-            ),
-          ),
-        ),
-      ),
+  const draftRevision = useRef(0);
+  const [persistDraft, setPersistDraft] = useState(false);
+  const [draft, setDraft] = useState<File | null>(null);
+  const reader = useAnkiImportReader({
+    color,
+    persistDraft,
+    setState,
+    readSqlite: isDesktopRuntime() ? readAnkiSqliteOnDesktop : readAnkiSqliteInBrowser,
+  });
+  useEffect(() => {
+    let active = true;
+    const revision = draftRevision.current;
+    void Effect.runPromise(readAnkiDraft().pipe(Effect.catchAll(() => Effect.succeed(null)))).then(
+      (file) => {
+        if (active && revision === draftRevision.current) setDraft(file);
+      },
     );
-    if (sequence !== readSequence.current) return;
-    if (Either.isLeft(decoded)) {
-      const error = decoded.left;
-      setState({
-        _tag: "error",
-        reason: error._tag === "AnkiFileReadFailure" ? "read-failed" : error.reason,
-      });
-      return;
-    }
-    setState({ _tag: "review", fileName: file.name, proposal: decoded.right });
+    return () => {
+      active = false;
+    };
+  }, []);
+  function close(): void {
+    reader.cancel();
+    setState({ _tag: "closed" });
   }
 
   async function accept(proposal: AnkiImportProposal): Promise<void> {
@@ -98,16 +89,32 @@ export function AnkiImportAction({ color, onAccept, initialState }: Props) {
       setState({ _tag: "error", reason });
       return;
     }
+    await Effect.runPromise(clearAnkiDraft().pipe(Effect.ignore));
+    draftRevision.current += 1;
+    setDraft(null);
     setState({ _tag: "closed" });
   }
 
+  async function discardDraft(): Promise<void> {
+    const revision = ++draftRevision.current;
+    const result = await Effect.runPromise(Effect.either(clearAnkiDraft()));
+    if (revision !== draftRevision.current) return;
+    if (Either.isLeft(result)) {
+      setState({ _tag: "error", reason: "draft-delete-failed" });
+      return;
+    }
+    setDraft(null);
+    setState({ _tag: "ready" });
+  }
+  const visibleState =
+    state._tag === "ready" && draft ? { ...state, draftName: draft.name } : state;
   return (
     <>
       <Button
-        variant="outline"
+        variant="default"
         type="button"
         onClick={() => {
-          setState({ _tag: "ready" });
+          setState({ _tag: "ready", ...(draft ? { draftName: draft.name } : {}) });
         }}
       >
         Import Anki deck
@@ -121,13 +128,17 @@ export function AnkiImportAction({ color, onAccept, initialState }: Props) {
         onChange={(event) => {
           const file = event.currentTarget.files?.[0];
           event.currentTarget.value = "";
-          if (file) void readFile(file);
+          if (file) {
+            draftRevision.current += 1;
+            setDraft(file);
+            void reader.readFile(file);
+          }
         }}
       />
       <Dialog
         open={state._tag !== "closed"}
         onOpenChange={(open) => {
-          if (!open && state._tag !== "reading" && state._tag !== "saving") close();
+          if (!open && state._tag !== "saving") close();
         }}
       >
         {state._tag !== "closed" && (
@@ -136,10 +147,12 @@ export function AnkiImportAction({ color, onAccept, initialState }: Props) {
             showCloseButton={false}
           >
             <Button
-              className="absolute right-4 top-4 size-9 rounded-full border border-border bg-background text-xl text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+              variant="ghost"
+              size="icon"
+              className="absolute right-4 top-4"
               type="button"
               aria-label="Close Anki import"
-              disabled={state._tag === "reading" || state._tag === "saving"}
+              disabled={state._tag === "saving"}
               onClick={close}
             >
               ×
@@ -152,14 +165,23 @@ export function AnkiImportAction({ color, onAccept, initialState }: Props) {
               Import an Anki deck
             </DialogTitle>
             <AnkiImportBody
-              state={state}
+              state={visibleState}
+              persistDraft={persistDraft}
+              onPersistDraftChange={setPersistDraft}
               onChoosePackage={() => {
                 inputRef.current?.click();
               }}
               onReset={() => {
-                setState({ _tag: "ready" });
+                setState({ _tag: "ready", ...(draft ? { draftName: draft.name } : {}) });
               }}
               onAccept={accept}
+              onTogglePause={reader.togglePause}
+              onResumeDraft={() => {
+                if (draft) void reader.readFile(draft);
+              }}
+              onDiscardDraft={() => {
+                void discardDraft();
+              }}
             />
           </DialogContent>
         )}

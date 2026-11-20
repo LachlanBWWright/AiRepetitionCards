@@ -1,3 +1,5 @@
+import { Alert, AlertDescription } from "@recall/ui-web/components/alert";
+import { Label } from "@recall/ui-web/components/label";
 import type { SpeechFieldSettings as Settings } from "@recall/domain";
 import { useSpeechVoices } from "@recall/react";
 import { Checkbox } from "@recall/ui-web/components/checkbox";
@@ -25,9 +27,9 @@ export function SpeechFieldSettings({
     <SelectItem key={voice.id} value={voice.id}>{`${voice.name} (${voice.language})`}</SelectItem>
   ));
   return (
-    <fieldset className="grid gap-2 rounded border p-3">
+    <fieldset className="grid gap-4 rounded border p-3">
       <legend>{side === "front" ? "Question" : "Answer"} speech</legend>
-      <label className="flex gap-2">
+      <Label className="flex gap-2">
         <Checkbox
           checked={speech !== undefined}
           onCheckedChange={(checked) => {
@@ -35,10 +37,10 @@ export function SpeechFieldSettings({
           }}
         />
         Enable read aloud
-      </label>
+      </Label>
       {speech && (
         <>
-          <label>
+          <Label className="grid gap-2">
             Language code
             <Input
               value={speech.language}
@@ -48,10 +50,10 @@ export function SpeechFieldSettings({
                 update({ ...speech, language: event.target.value });
               }}
             />
-          </label>
+          </Label>
           <Button
             type="button"
-            variant="secondary"
+            variant="default"
             onClick={() => {
               void voices.refresh();
             }}
@@ -64,7 +66,7 @@ export function SpeechFieldSettings({
               update({ ...speech, voice: voice === "default" ? undefined : voice });
             }}
           >
-            <SelectTrigger aria-label={`${side} voice`}>
+            <SelectTrigger className="w-full" aria-label={`${side} voice`}>
               <SelectValue placeholder="Default voice" />
             </SelectTrigger>
             <SelectContent>
@@ -72,7 +74,7 @@ export function SpeechFieldSettings({
               {voiceOptions}
             </SelectContent>
           </Select>
-          <label>
+          <Label className="grid gap-2">
             Speed
             <Input
               type="number"
@@ -85,8 +87,8 @@ export function SpeechFieldSettings({
                 if (rate >= 0.25 && rate <= 2) update({ ...speech, rate });
               }}
             />
-          </label>
-          <label className="flex gap-2">
+          </Label>
+          <Label className="flex gap-2">
             <Checkbox
               checked={speech.autoplay}
               onCheckedChange={(checked) => {
@@ -94,8 +96,12 @@ export function SpeechFieldSettings({
               }}
             />
             Read automatically when shown
-          </label>
-          {voices.error && <p role="status">{voices.error}</p>}
+          </Label>
+          {voices.error && (
+            <Alert variant="destructive">
+              <AlertDescription>{voices.error}</AlertDescription>
+            </Alert>
+          )}
         </>
       )}
     </fieldset>

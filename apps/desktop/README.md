@@ -28,6 +28,17 @@ The trusted dashboard can copy share links to the clipboard. Clipboard reads and
 ## ChatGPT usage
 
 Recall connects one ChatGPT account at a time. Sign out before connecting another account.
+The connection is saved in OS-encrypted storage under
+`userData/chatgpt-local/credentials.enc` and restored on restart, including the state
+needed to save replacement refresh tokens. Keep using the same application profile;
+development and packaged applications can use different user-data directories.
+
+Browser sign-in ends on a Recall-styled callback page with return-to-app guidance.
+The page removes callback parameters from the address bar and does not load external
+assets. Confirm the connection in Recall; receiving a browser callback alone does not
+mean token verification and secure storage have finished. Cancelled or invalid sign-ins
+show recovery guidance instead.
+
 Older stores retain only the current connection (or the first saved registration when none
 was active). Removing legacy local connections does not revoke their remote grants; manage
 those in ChatGPT settings. Recall study data and token history are preserved.

@@ -1,6 +1,8 @@
-import { NativeButton } from "../ui/NativeButton";
+import { NativeButton } from "@recall/ui-native";
+import { NativeButtonPrimitive } from "@recall/ui-native";
+
 import { useEffect, useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Text, View } from "react-native";
 import { Effect, Either, Fiber } from "effect";
 import { NativeTextField } from "../ui/NativeTextField";
 import {
@@ -37,22 +39,14 @@ function KindFilterButton({
   readonly onSelect: (value: WorkspaceSearchKind | null) => void;
 }) {
   return (
-    <Pressable
-      accessibilityRole="button"
+    <NativeButton
+      label={value ? labels[value] : "All"}
+      variant="default"
       accessibilityState={{ selected }}
       onPress={() => {
         onSelect(value);
       }}
-      className="min-h-[44px] justify-center px-[8px]"
-    >
-      <Text
-        className={
-          selected ? "font-bold text-recall-ink" : "text-[12px] leading-[18px] text-recall-muted"
-        }
-      >
-        {value ? labels[value] : "All"}
-      </Text>
-    </Pressable>
+    />
   );
 }
 export type NativeWorkspaceSearchPanelProps = {
@@ -159,7 +153,7 @@ export function NativeWorkspaceSearchPanel({
       )}
       <NativeButton
         label="Refresh search"
-        tone="soft"
+        variant="default"
         disabled={loading || !workspace}
         onPress={() => {
           setRefresh(refresh + 1);
@@ -174,7 +168,8 @@ export function NativeWorkspaceSearchPanel({
         </Text>
       )}
       {results.map((result) => (
-        <Pressable
+        <NativeButtonPrimitive
+          variant="default"
           key={result.id}
           accessibilityRole="button"
           disabled={disabled}
@@ -182,14 +177,14 @@ export function NativeWorkspaceSearchPanel({
           onPress={() => {
             onNavigate(result);
           }}
-          className={"gap-[5px] py-[14px] border-t border-recall-line"}
+          className="flex-col items-stretch gap-1"
         >
-          <Text className={"text-[14px] font-semibold text-recall-ink"}>{result.title}</Text>
-          <Text className={"text-[12px] leading-[18px] text-recall-muted"}>
+          <Text className={"text-[14px] font-semibold text-white"}>{result.title}</Text>
+          <Text className={"text-[12px] leading-[18px] text-white"}>
             {result.areaTitle} · {labels[result.kind]}
           </Text>
-          <Text className={"text-[13px] leading-[19px] text-recall-ink"}>{result.snippet}</Text>
-        </Pressable>
+          <Text className={"text-[13px] leading-[19px] text-white"}>{result.snippet}</Text>
+        </NativeButtonPrimitive>
       ))}
       {!query.trim() && (
         <Text className={"text-[12px] leading-[18px] text-recall-muted"}>

@@ -18,9 +18,9 @@ import {
 } from "@recall/domain";
 import type { StoredMediaAsset } from "@recall/local-store";
 
-export const MAX_PORTABLE_DECK_PACKAGE_BYTES = 25_000_000;
-export const maxFiles = 128;
-export const maxExpandedBytes = 40_000_000;
+export const MAX_PORTABLE_DECK_PACKAGE_BYTES = 100_000_000;
+export const maxFiles = 2_010;
+export const maxExpandedBytes = 100_000_000;
 const shaSchema = Schema.String.pipe(Schema.pattern(/^[a-f0-9]{64}$/));
 export const PrivateHistorySchema = Schema.Struct({
   version: Schema.Literal(1),

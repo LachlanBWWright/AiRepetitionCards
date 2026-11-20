@@ -1,8 +1,8 @@
 # Study release validation
 
 The local Supabase database now records the complete split initial chain and the
-study migrations through `20261024000000_atomic_linked_notes.sql`. This is local
-validation; no hosted environment was deployed.
+study migrations through `20261024000000_atomic_linked_notes.sql`. These checks
+were local. The subsequent hosted setup is documented in [free hosting](free-hosting.md).
 
 ## Reconciling the legacy local database
 
@@ -54,3 +54,13 @@ publishing acceptance.
 Hosted release still needs an explicit target, that environment's backup and
 migration review, and its configured authentication, Redis and proxy acceptance.
 See [the deployment runbook](deployment-runbook.md).
+
+## Daily-use changes verified on 2026-10-25
+
+The Release API build and isolated local Supabase HTTP verifier passed with the new
+study-day start, learning look-ahead and leech-action settings, including invalid-input
+rejection. Automated regressions exercise the two-client offline/restart/retry journey,
+AI proposal approval, and account-scoped optional conversation retention/deletion.
+See [daily-use acceptance](daily-use-acceptance.md) for the reproducible commands and
+the separate signed-device and hosted release gates. These local results do not
+certify physical-device upgrades or production readiness.

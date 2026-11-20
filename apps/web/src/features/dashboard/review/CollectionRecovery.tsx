@@ -49,7 +49,7 @@ export function CollectionRecovery({
       </div>
       <div className="flex flex-wrap gap-2">
         {recovery.canCheckStorage && (
-          <Button variant="ghost" disabled={recovery.busy} onClick={recovery.checkStorage}>
+          <Button variant="default" disabled={recovery.busy} onClick={recovery.checkStorage}>
             Check storage integrity
           </Button>
         )}
@@ -74,7 +74,7 @@ export function CollectionRecovery({
           </SelectContent>
         </Select>
         <Button
-          variant="secondary"
+          variant="default"
           disabled={!entry || recovery.busy}
           onClick={() => {
             if (entry) setConfirm(entry);
@@ -82,7 +82,7 @@ export function CollectionRecovery({
         >
           Restore content
         </Button>
-        <Button variant="ghost" disabled={recovery.busy} onClick={recovery.repair}>
+        <Button variant="default" disabled={recovery.busy} onClick={recovery.repair}>
           Repair missing objective links
         </Button>
         {recovery.canPurge && (

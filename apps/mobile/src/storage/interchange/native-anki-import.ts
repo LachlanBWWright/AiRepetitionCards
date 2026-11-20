@@ -1,10 +1,15 @@
 import { Effect } from "effect";
 import * as DocumentPicker from "expo-document-picker";
 import { File } from "expo-file-system";
-import { importAnkiApkg, type AnkiImportError, type AnkiImportProposal } from "@recall/application";
+import {
+  MAX_ANKI_PACKAGE_BYTES,
+  importAnkiApkg,
+  type AnkiImportError,
+  type AnkiImportProposal,
+} from "@recall/application";
 import { readAnkiSqliteDatabase } from "./anki-sqlite-reader";
 
-const maxPackageBytes = 50_000_000;
+const maxPackageBytes = MAX_ANKI_PACKAGE_BYTES;
 
 export type NativeAnkiImportFailure =
   | AnkiImportError
@@ -56,6 +61,10 @@ export function pickAnkiImport(options: {
         reason: "file-too-large",
       } as const);
     }
-    return yield* importAnkiApkg(bytes, { ...options, now: new Date() }, readAnkiSqliteDatabase);
+    return yield* importAnkiApkg(
+      bytes,
+      { ...options, now: new Date(), control: { checkpoint: () => Effect.yieldNow() } },
+      readAnkiSqliteDatabase,
+    );
   });
 }

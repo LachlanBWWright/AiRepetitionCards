@@ -1,4 +1,5 @@
-import { NativeButton } from "../ui/NativeButton";
+import { NativeCollapsible } from "@recall/ui-native";
+
 import { useState } from "react";
 import { Text, View } from "react-native";
 import { summarizeReviews } from "@recall/application";
@@ -83,14 +84,13 @@ export function NativePracticeInsights({
   const ratingLabels = { again: "Again", hard: "Hard", good: "Good", easy: "Easy" } as const;
   return (
     <View className={"gap-[12px] py-[18px] border-t border-recall-line"}>
-      <NativeButton
-        tone="soft"
-        label={expanded ? "Hide review history" : "View review history"}
-        onPress={() => {
+      <NativeCollapsible
+        open={expanded}
+        title="Review history"
+        onToggle={() => {
           setExpanded((value) => !value);
         }}
-      />
-      {expanded && (
+      >
         <>
           <Text className={"text-recall-ink text-[14px]"}>
             {today.inWindow} reviewed today · {week.inWindow} in the last 7 days
@@ -129,7 +129,7 @@ export function NativePracticeInsights({
             </Text>
           )}
         </>
-      )}
+      </NativeCollapsible>
     </View>
   );
 }

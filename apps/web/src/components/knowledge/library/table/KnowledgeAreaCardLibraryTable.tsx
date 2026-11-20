@@ -1,3 +1,10 @@
+import {
+  Table,
+  TableHeader,
+  TableRow,
+  TableHead,
+  TableBody,
+} from "@recall/ui-web/components/table";
 import type { CardVersion, LearningArea, Assessment, Workspace } from "@recall/domain";
 import type { WorkspaceAuthoringCommand } from "@recall/application";
 import { KnowledgeAreaCardLibraryTableRow } from "./KnowledgeAreaCardLibraryTableRow";
@@ -53,9 +60,9 @@ export function KnowledgeAreaCardLibraryTable({
 
   return (
     <div className="overflow-x-auto rounded-xl border border-[var(--line)] bg-[var(--surface)]">
-      <table className="w-full min-w-[420px] border-collapse text-sm" aria-label="Cards">
-        <thead className="border-b border-[var(--line)] bg-transparent text-left text-xs font-medium text-[var(--muted)]">
-          <tr>
+      <Table className="w-full table-fixed border-collapse text-sm" aria-label="Cards">
+        <TableHeader className="border-b border-[var(--line)] bg-transparent text-left text-xs font-medium text-[var(--muted)]">
+          <TableRow>
             {onBulk && (
               <KnowledgeAreaCardLibrarySelectionHeader
                 allSelected={cards.every((card) => selectedIds.includes(card.id))}
@@ -64,15 +71,15 @@ export function KnowledgeAreaCardLibraryTable({
                 onChange={selectVisibleCards}
               />
             )}
-            <th className="px-4 py-4" scope="col">
+            <TableHead className="px-4 py-4" scope="col">
               Question
-            </th>
-            <th className="w-14 px-3 py-4" scope="col">
+            </TableHead>
+            <TableHead className="w-14 px-3 py-4" scope="col">
               <span className="sr-only">Card actions</span>
-            </th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-[var(--line)]">
+            </TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody className="divide-y divide-[var(--line)]">
           {cards.map((card) => (
             <KnowledgeAreaCardLibraryTableRow
               key={card.id}
@@ -92,8 +99,8 @@ export function KnowledgeAreaCardLibraryTable({
               baselineForVersion={baselineForVersion}
             />
           ))}
-        </tbody>
-      </table>
+        </TableBody>
+      </Table>
     </div>
   );
 }

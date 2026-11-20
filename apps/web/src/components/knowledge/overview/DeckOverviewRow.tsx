@@ -29,10 +29,11 @@ export function DeckOverviewRow({
 }) {
   const summary = summarizeStudySession(area, [], now);
   return (
-    <li className="flex items-center">
+    <li className="flex items-center gap-2 py-2">
       <Button
-        variant="link"
-        className="group h-auto min-w-0 flex-1 justify-start gap-4 rounded-none px-4 py-5 text-left text-foreground no-underline hover:bg-accent/40 hover:no-underline sm:px-5"
+        size="row"
+        variant="default"
+        className="group min-w-0 flex-1 justify-start gap-4 text-left"
         disabled={disabled}
         onClick={() => {
           onOpen(area.id);
@@ -45,15 +46,15 @@ export function DeckOverviewRow({
           aria-hidden="true"
         />
         <span className="min-w-0 flex-1 space-y-1 whitespace-normal">
-          <span className="block break-words text-base font-semibold">{area.title}</span>
-          <span className="block text-sm font-normal text-muted-foreground">
+          <span className="text-base block break-words font-semibold">{area.title}</span>
+          <span className="text-sm block font-normal">
             {area.cards.length} {area.cards.length === 1 ? "card" : "cards"}
           </span>
         </span>
-        <span className="shrink-0 text-sm font-normal text-muted-foreground">
+        <span className="text-sm shrink-0 font-normal">
           {summary.remaining > 0 ? `${String(summary.remaining)} due` : "Nothing due"}
         </span>
-        <ChevronRight className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+        <ChevronRight className="size-4 shrink-0" aria-hidden="true" />
       </Button>
       <DeckOverviewActions
         area={area}
@@ -84,9 +85,9 @@ function DeckOverviewActions({
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button
-          variant="outline"
+          variant="default"
           size="sm"
-          className="mr-4 shrink-0 gap-2"
+          className="shrink-0 gap-2"
           disabled={disabled}
           aria-label={`Manage ${area.title}`}
         >

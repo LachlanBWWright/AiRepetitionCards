@@ -143,7 +143,10 @@ export async function reviewWorkspaceCard({
             recordReview({
               workspace: current,
               ...attempt,
-              studyDay: localStudyDay(Date.parse(attempt.ratedAt)),
+              studyDay: localStudyDay(
+                Date.parse(attempt.ratedAt),
+                current.schedulerSettings?.studyDayStartHour,
+              ),
             }),
           ),
         );

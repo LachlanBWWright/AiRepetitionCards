@@ -108,8 +108,9 @@ The **Workload simulator** in statistics models repeated answers and failures fr
 states. Choose the retention target, 1–180 days, new introductions per day, total answers per day
 (including learning), and additional new cards. It estimates daily answers, time and end-of-day
 backlog, using recorded answer durations or a 15-second default. It is a deterministic seeded
-scenario with at most 5000 cards. It uses 24-hour days and the displayed limits, rather than calendar
-budgets, sibling burying or reduced-load weekdays. It never changes live schedules or history.
+scenario with at most 5000 cards. It uses device-local study-day boundaries, sibling burying,
+and reduced-load weekday rules. Scenario limits override saved daily budgets; active search
+filters and pause-new-when-overdue are excluded. It never changes live schedules or history.
 Re-run after changing inputs or study data; one scenario is an estimate, not a guarantee.
 
 Experimental fitting now uses the latest 20% of timestamps as a temporal holdout. Those observations
@@ -145,3 +146,20 @@ adjustments, undo snapshots and imported baselines without repeatedly uploading 
 Imported baselines are bounded to 50,000 records; other metadata arrays to 200,000 each. Capacity
 failures are explicit and never discard old entries. See [collection storage and browser](collection-browser.md)
 for the required migration, local SQLite chunk storage, content budgets and search syntax.
+
+## Study-day boundaries, learning ahead and leech handling
+
+Workspace **Review settings** includes a local start hour from 0 to 23, shared across subjects.
+Daily budgets, sibling burying and statistics use that boundary, including DST-length days.
+Existing schedules and answer timestamps are unchanged. The default remains midnight.
+
+**Learn ahead** accepts 0–60 minutes per policy/preset. Zero disables it. When the ordinary
+queue has no eligible cards, the earliest unsuspended learning/relearning card inside the window
+can be reviewed early. Queries and sibling burying still apply; due review/new cards take priority.
+Early learning answers are real answers and use the normal durable save and schedule replay.
+
+**Repeatedly failed cards** offers flag-only (default) or automatic suspension. Choosing suspension
+affects future review lapses at or above the configured threshold; it never retroactively suspends
+existing cards. Undo removes a suspension created by that answer. A later manual suspension/resume
+decision takes precedence. These controls synchronize as private settings. Updated clients and the
+updated ASP.NET study-settings validator are required before sharing them between devices.

@@ -1,3 +1,4 @@
+import { AppAgentHandover } from "./AppAgentHandover";
 import { View } from "react-native";
 import { Effect, Either } from "effect";
 import * as Crypto from "expo-crypto";
@@ -21,10 +22,7 @@ export function AppSubjectAI({ model }: { readonly model: AppModel }) {
           const visible = ai && model.activeAreaId === area.id;
           const materials =
             model.subjectMode === "overview" && model.subjectSection === "materials";
-          const namespace =
-            model.chatGPT.tutorMode === "chatgpt"
-              ? `knowledge-notebook:${model.tutorScope}`
-              : "knowledge-notebook";
+          const namespace = `knowledge-notebook:${model.tutorScope}`;
           return (
             <SubjectAI
               key={`${model.tutorScope}:${area.id}`}
@@ -57,7 +55,11 @@ function SubjectAI({
     <View className={visible ? "min-h-0 flex-1" : "hidden"}>
       {model.subjectMode === "tutor" && (
         <View className="min-h-0 flex-1">
-          <AppSubjectTutor area={area} model={model} />
+          <AppSubjectTutor
+            key={`${model.accountUserId ?? "local"}:${model.tutorScope}`}
+            area={area}
+            model={model}
+          />
         </View>
       )}
       {(model.subjectMode === "improve" || materials) && (
@@ -65,6 +67,9 @@ function SubjectAI({
           <NativeKnowledgeNotebookPanel
             key={materials ? "materials" : "improve"}
             sessionOnly={!materials}
+            renderHandover={(history) => (
+              <AppAgentHandover model={model} areaId={area.id} conversation={history} />
+            )}
             experience="chat"
             area={area}
             searchTarget={

@@ -31,8 +31,8 @@ export function NativeProposedCardPreview({
       </View>
       <View className="flex-row flex-wrap gap-2 border-t border-recall-line p-3">
         <NativeButton label="Add card" disabled={acceptDisabled} onPress={onAccept} />
-        <NativeButton label="Edit" tone="soft" disabled={disabled} onPress={onEdit} />
-        <NativeButton label="Discard" tone="soft" disabled={disabled} onPress={onDiscard} />
+        <NativeButton label="Edit" variant="secondary" disabled={disabled} onPress={onEdit} />
+        <NativeButton label="Discard" variant="secondary" disabled={disabled} onPress={onDiscard} />
       </View>
     </View>
   );

@@ -1,9 +1,7 @@
-import { ActivityIndicator, Pressable, Text, View } from "react-native";
-import { designTokens } from "@recall/design-tokens";
+import { NativeCollapsibleTrigger, NativeCollapsibleContent } from "@recall/ui-native";
+import { NativeButton } from "@recall/ui-native";
 
-const palette = designTokens.color;
-const accountActionClass =
-  "flex-1 min-h-[38px] justify-center items-center px-[8px] border-b border-recall-line";
+import { Text, View } from "react-native";
 
 export function ServerVersionAction({
   resolving,
@@ -15,18 +13,12 @@ export function ServerVersionAction({
   readonly onUseServer: () => void;
 }) {
   return (
-    <Pressable
-      accessibilityRole="button"
+    <NativeButton
+      label={resolving ? "Loading server version…" : "Use server version"}
+      variant="secondary"
       disabled={disabled}
       onPress={onUseServer}
-      className="min-h-[40px] justify-center items-center px-[12px] border-b border-recall-line"
-    >
-      {resolving ? (
-        <ActivityIndicator color={palette.darkGreen} />
-      ) : (
-        <Text className="text-recall-darkGreen font-bold text-[12px]">Use server version</Text>
-      )}
-    </Pressable>
+    />
   );
 }
 
@@ -39,16 +31,7 @@ export function AccountFileAction({
   readonly disabled: boolean;
   readonly onPress: () => void;
 }) {
-  return (
-    <Pressable
-      accessibilityRole="button"
-      disabled={disabled}
-      onPress={onPress}
-      className={accountActionClass}
-    >
-      <Text className="text-recall-darkGreen font-bold text-[12px]">{label}</Text>
-    </Pressable>
-  );
+  return <NativeButton label={label} variant="secondary" disabled={disabled} onPress={onPress} />;
 }
 
 export function AccountBusyAction({
@@ -63,18 +46,12 @@ export function AccountBusyAction({
   readonly onPress: () => void;
 }) {
   return (
-    <Pressable
-      accessibilityRole="button"
+    <NativeButton
+      label={busy ? "Working…" : label}
+      variant="secondary"
       disabled={disabled}
       onPress={onPress}
-      className="min-h-[40px] justify-center items-center px-[12px] border-b border-recall-line"
-    >
-      {busy ? (
-        <ActivityIndicator color={palette.darkGreen} />
-      ) : (
-        <Text className="text-recall-darkGreen font-bold text-[12px]">{label}</Text>
-      )}
-    </Pressable>
+    />
   );
 }
 
@@ -101,17 +78,9 @@ export function AccountActions({
 }) {
   return (
     <>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityState={{ expanded }}
-        onPress={onToggle}
-        className="flex-row justify-between items-center min-h-[44px] gap-[12px]"
-      >
-        <Text className="text-recall-ink text-[15px] font-bold">Account actions</Text>
-        <Text className="text-recall-muted text-[12px]">{expanded ? "⌃" : "⌄"}</Text>
-      </Pressable>
-      {expanded ? (
-        <View className="gap-[10px] pb-[12px]">
+      <NativeCollapsibleTrigger open={expanded} title="Account actions" onToggle={onToggle} />
+      <NativeCollapsibleContent open={expanded}>
+        <View className="gap-4 pb-3">
           <AccountFileAction label="Export account data" disabled={fileBusy} onPress={onExport} />
           <AccountBusyAction
             label="Sign out"
@@ -119,16 +88,14 @@ export function AccountActions({
             disabled={busy || syncBusy || resolvingConflict}
             onPress={onSignOut}
           />
-          <Pressable
-            accessibilityRole="button"
+          <NativeButton
+            label="Delete account"
+            variant="destructive"
             disabled={fileBusy || syncBusy || resolvingConflict}
             onPress={onDelete}
-            className="min-h-[40px] justify-center items-center px-[12px] rounded-[10px] bg-[#3a2025]"
-          >
-            <Text className="text-[#fca5a5] font-bold text-[12px]">Delete account</Text>
-          </Pressable>
+          />
         </View>
-      ) : null}
+      </NativeCollapsibleContent>
     </>
   );
 }
@@ -145,7 +112,7 @@ export function AccountConflictNotice({
   readonly onUseServer: () => void;
 }) {
   return (
-    <View className="gap-[10px] py-[12px] border-t border-recall-line">
+    <View className="gap-4 py-6 border-t border-recall-line">
       <Text className="text-recall-ink font-bold text-[13px]">
         Server version is ready to review
       </Text>

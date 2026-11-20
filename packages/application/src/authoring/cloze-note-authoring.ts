@@ -64,6 +64,7 @@ export function clozeSourceIdentity(area: LearningArea, card: Assessment): strin
         card.media ?? [],
         card.objectiveIds ?? [],
         card.presentation,
+        card.explanation,
       ]);
 }
 
@@ -136,7 +137,7 @@ function linkClozeSource(
     const templateId = previousTemplate?.id ?? "cloze";
     const sharedTypeId = stableSyncId(`cloze-type:${JSON.stringify(content.presentation ?? null)}`);
     const sharedType = area.noteLibrary?.types.find((item) => item.id === sharedTypeId);
-    const type: NoteType = previousType ??
+    const baseType: NoteType = previousType ??
       sharedType ?? {
         ...CLOZE_NOTE_TYPE,
         id: sharedTypeId,
@@ -145,10 +146,23 @@ function linkClozeSource(
           presentation: content.presentation,
         })),
       };
+    const type: NoteType = {
+      ...baseType,
+      fields: baseType.fields.some((field) => field.name === "Explanation")
+        ? baseType.fields
+        : [...baseType.fields, { name: "Explanation" }],
+      templates: baseType.templates.map((template) =>
+        template.id === templateId ? { ...template, explanation: "{{Explanation}}" } : template,
+      ),
+    };
     const note = {
       id: noteId,
       typeId: type.id,
-      fields: { ...(previousNote?.fields ?? {}), [sourceField]: first.text },
+      fields: {
+        ...(previousNote?.fields ?? {}),
+        [sourceField]: first.text,
+        Explanation: prepared.explanation ?? "",
+      },
       tags: prepared.tags,
       objectiveIds: prepared.objectiveIds,
       media: prepared.media,
@@ -177,11 +191,9 @@ function linkClozeSource(
         `${preview.templateId}:${String(preview.deletionIndex ?? 0)}`,
       ),
     }));
-    return yield* saveStudyNote(
-      linked,
-      { areaId: area.id, note, ...(previousType || sharedType ? {} : { type }), cardIds },
-      now,
-    ).pipe(Effect.mapError(authoringFailure));
+    return yield* saveStudyNote(linked, { areaId: area.id, note, type, cardIds }, now).pipe(
+      Effect.mapError(authoringFailure),
+    );
   });
 }
 

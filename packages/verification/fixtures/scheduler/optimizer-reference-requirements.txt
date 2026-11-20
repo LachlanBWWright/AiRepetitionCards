@@ -1,0 +1,5 @@
+--extra-index-url https://download.pytorch.org/whl/cpu
+fsrs[optimizer]==6.3.0
+torch==2.14.1+cpu
+pandas==3.1.0
+tqdm==4.66.5

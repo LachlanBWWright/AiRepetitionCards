@@ -9,13 +9,13 @@ import {
   builtinActivityRegistry,
   decodeActivityPluginPayloadJson,
   exportUnsupportedActivity,
-  inspectActivityPluginCompatibility,
   previewActivityPluginMigration,
   validateAuthoredActivity,
 } from "@recall/application";
 import type { ActivityPluginMigrationPreview, ActivityRegistry } from "@recall/application";
 import { Effect, Either } from "effect";
-import { Button, Input, Label, Textarea } from "@recall/ui-web";
+import { Button, Input, Label, RadioGroup, Textarea } from "@recall/ui-web";
+import { ActivityPluginOption } from "./ActivityPluginOption";
 import { SavedActivityPluginRow } from "./SavedActivityPluginRow";
 
 export type ActivityPluginToolsProps = {
@@ -174,36 +174,17 @@ export function WebActivityPluginTools(props: ActivityPluginToolsProps) {
         Only already installed plugins can validate activity data. Imported content cannot install
         code or run automatic grading.
       </p>
-      <div className="grid gap-2 sm:grid-cols-2">
-        {available.map((plugin) => {
-          const compatibility = inspectActivityPluginCompatibility(
-            plugin,
-            props.platform,
-            plugin.capabilities.assessment,
-          );
-          return (
-            <button
-              key={plugin.id}
-              type="button"
-              disabled={props.disabled}
-              aria-pressed={pluginId === plugin.id}
-              className="rounded-md border p-3 text-left"
-              onClick={() => {
-                setPluginId(plugin.id);
-              }}
-            >
-              <span className="block font-medium">
-                {plugin.label} · v{plugin.version}
-              </span>
-              <span className="block text-sm text-muted-foreground">
-                {compatibility.platform} · {plugin.capabilities.assessment} assessment ·{" "}
-                {plugin.capabilities.offline ? "offline" : "online"}
-                {plugin.capabilities.execution ? " · code execution capability" : ""}
-              </span>
-            </button>
-          );
-        })}
-      </div>
+      <RadioGroup
+        value={pluginId}
+        onValueChange={setPluginId}
+        disabled={props.disabled}
+        aria-label="Activity plugin"
+        className="grid gap-2 sm:grid-cols-2"
+      >
+        {available.map((plugin) => (
+          <ActivityPluginOption key={plugin.id} plugin={plugin} platform={props.platform} />
+        ))}
+      </RadioGroup>
       {selected && (
         <div className="grid gap-2">
           <Label htmlFor="plugin-tool-title">Activity title</Label>

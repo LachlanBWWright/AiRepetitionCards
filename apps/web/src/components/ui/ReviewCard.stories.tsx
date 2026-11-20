@@ -1,3 +1,5 @@
+import { Effect } from "effect";
+import { ReviewCardHelp } from "@/features/dashboard/review/assistance/ReviewCardHelp";
 import { defaultReviewerSettings } from "@recall/domain";
 import { useState } from "react";
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
@@ -163,4 +165,22 @@ function CustomReviewerPractice() {
 export const CustomReviewerControls: Story = {
   args: Question.args,
   render: () => <CustomReviewerPractice />,
+};
+
+export const WithReviewTools: Story = {
+  args: {
+    ...Question.args,
+    onFlag: () => undefined,
+    helpAction:
+      biology && exampleCard ? (
+        <ReviewCardHelp
+          workspace={mockWorkspace}
+          area={biology}
+          card={exampleCard}
+          save={() => Effect.succeed(mockWorkspace)}
+          disabled={false}
+          onInteractionChange={() => undefined}
+        />
+      ) : null,
+  },
 };

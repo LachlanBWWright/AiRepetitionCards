@@ -27,6 +27,7 @@ export const CardContentSchema = Schema.Struct({
   kind: Schema.Union(Schema.Literal("basic"), Schema.Literal("cloze")),
   front: Schema.String,
   back: Schema.String,
+  explanation: Schema.optional(Schema.String.pipe(Schema.maxLength(10_000))),
   cloze: Schema.optional(ClozeContentSchema),
   objectiveIds: Schema.Array(ObjectiveIdSchema),
   tags: Schema.Array(Schema.String),
@@ -113,6 +114,10 @@ export function prepareStudyCardContent(
             ),
           )
         : undefined;
+    const explanation =
+      input.explanation === undefined
+        ? previous?.explanation
+        : input.explanation.trim() || undefined;
     const front = rendered?.front ?? input.front.trim();
     const back = rendered?.back ?? input.back.trim();
     if (!front || !back) {
@@ -129,6 +134,7 @@ export function prepareStudyCardContent(
       ...(imageOcclusion || previous?.imageOcclusion ? { imageOcclusion } : {}),
       front,
       back,
+      ...(explanation || previous?.explanation ? { explanation } : {}),
       cloze: rendered ? { text: rendered.text, deletionIndex: rendered.deletionIndex } : undefined,
       objectiveIds: objectives.map((objective) => objective.id),
       objective:

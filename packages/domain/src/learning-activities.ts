@@ -1,3 +1,13 @@
+import { ActivityJsonObjectSchema } from "./activities/json";
+import {
+  ActivityInteractionSchema,
+  ActivityRuntimeProvenanceSchema,
+} from "./activities/interaction";
+export * from "./activities/json";
+export * from "./activities/interactive";
+export * from "./activities/coding";
+export * from "./activities/interaction";
+export * from "./activities/lua";
 import { Schema } from "effect";
 
 const id = Schema.String.pipe(
@@ -18,70 +28,7 @@ const time = Schema.String.pipe(
   ),
 );
 const unit = Schema.Number.pipe(Schema.finite(), Schema.between(0, 1));
-/** A bounded JSON payload, never executable plugin code. Plugins validate its specific shape. */
-export type ActivityJson =
-  | null
-  | string
-  | number
-  | boolean
-  | readonly ActivityJson[]
-  | { readonly [key: string]: ActivityJson };
-/** Validate iteratively before schema traversal so deeply nested or cyclic input cannot exhaust the stack. */
-export function isBoundedActivityJson(input: unknown): input is ActivityJson {
-  const pending: { readonly value: unknown; readonly depth: number; readonly exit?: boolean }[] = [
-    { value: input, depth: 0 },
-  ];
-  const ancestors = new WeakSet();
-  let visited = 0;
-  while (pending.length > 0) {
-    const entry = pending.pop();
-    if (!entry) return false;
-    const { value, depth } = entry;
-    if (entry.exit && typeof value === "object" && value !== null) {
-      ancestors.delete(value);
-      continue;
-    }
-    visited += 1;
-    if (depth > 32 || visited > 50_000) return false;
-    if (value === null || typeof value === "boolean" || typeof value === "string") continue;
-    if (typeof value === "number") {
-      if (!Number.isFinite(value)) return false;
-      continue;
-    }
-    if (typeof value !== "object" || ancestors.has(value)) return false;
-    if (
-      !Array.isArray(value) &&
-      Object.getPrototypeOf(value) !== Object.prototype &&
-      Object.getPrototypeOf(value) !== null
-    )
-      return false;
-    const descriptors = Object.getOwnPropertyDescriptors(value);
-    if (Object.getOwnPropertySymbols(value).length > 0) return false;
-    ancestors.add(value);
-    pending.push({ value, depth, exit: true });
-    for (const [key, descriptor] of Object.entries(descriptors)) {
-      if (Array.isArray(value) && key === "length") continue;
-      if (!("value" in descriptor) || !descriptor.enumerable) return false;
-      if (Array.isArray(value) && !/^(0|[1-9][0-9]*)$/.test(key)) return false;
-      pending.push({ value: descriptor.value, depth: depth + 1 });
-      if (pending.length > 100_000) return false;
-    }
-    if (Array.isArray(value) && Object.keys(descriptors).length !== value.length + 1) return false;
-  }
-  return true;
-}
-export const ActivityJsonSchema: Schema.Schema<ActivityJson> = Schema.declare(
-  isBoundedActivityJson,
-).annotations({
-  jsonSchema: {
-    type: ["null", "string", "number", "boolean", "array", "object"],
-    description:
-      "JSON value; runtime validation additionally enforces depth <= 32, <= 50000 visited values, and finite numbers.",
-  },
-});
-const payload = Schema.Record({ key: Schema.String, value: ActivityJsonSchema }).pipe(
-  Schema.filter((value) => JSON.stringify(value).length <= 100_000),
-);
+const payload = ActivityJsonObjectSchema;
 export const LearningActivitySchema = Schema.Struct({
   id,
   sourceId: Schema.optional(id),
@@ -111,6 +58,7 @@ export const UnderstandingEvidenceSchema = Schema.Struct({
 });
 export type UnderstandingEvidence = typeof UnderstandingEvidenceSchema.Type;
 export const ActivityResponseSchema = Schema.Struct({
+  interaction: Schema.optional(ActivityInteractionSchema),
   presentedPrompts: Schema.optional(
     Schema.Array(text.pipe(Schema.minLength(1))).pipe(Schema.minItems(1), Schema.maxItems(10)),
   ),
@@ -132,6 +80,7 @@ export const ActivityResultSchema = Schema.Struct({
 });
 export type ActivityResult = typeof ActivityResultSchema.Type;
 export const LearningAttemptSchema = Schema.Struct({
+  runtime: Schema.optional(ActivityRuntimeProvenanceSchema),
   id,
   activity: LearningActivitySchema,
   response: ActivityResponseSchema,
@@ -163,27 +112,6 @@ export const ActivityDraftSchema = Schema.Struct({
   updatedAt: time,
 }).pipe(Schema.filter((draft) => Date.parse(draft.startedAt) <= Date.parse(draft.updatedAt)));
 export type ActivityDraft = typeof ActivityDraftSchema.Type;
-export const CodingPayloadSchema = Schema.Struct({
-  prompts: Schema.Array(Schema.String.pipe(Schema.minLength(1), Schema.maxLength(20_000))).pipe(
-    Schema.minItems(1),
-    Schema.maxItems(10),
-  ),
-  rubric: Schema.String.pipe(Schema.minLength(1), Schema.maxLength(20_000)),
-  reference: Schema.String.pipe(Schema.maxLength(20_000)),
-  language: Schema.Literal("javascript"),
-  tests: Schema.Array(
-    Schema.Struct({
-      input: Schema.Array(ActivityJsonSchema).pipe(Schema.maxItems(10)),
-      expected: ActivityJsonSchema,
-    }),
-  ).pipe(Schema.minItems(1), Schema.maxItems(20)),
-});
-export const CodingExecutionSchema = Schema.Struct({
-  passed: Schema.Number.pipe(Schema.int(), Schema.nonNegative()),
-  total: Schema.Number.pipe(Schema.int(), Schema.between(1, 20)),
-  failures: Schema.Array(Schema.String.pipe(Schema.maxLength(2000))).pipe(Schema.maxItems(20)),
-}).pipe(Schema.filter((value) => value.passed <= value.total));
-export type CodingExecution = typeof CodingExecutionSchema.Type;
 export const ActivityEditorDraftSchema = Schema.Struct({
   id,
   areaId: id,

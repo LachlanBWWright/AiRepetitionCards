@@ -5,7 +5,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@recall/ui-web/components/collapsible";
-import { ChevronDown } from "lucide-react";
+
 import { CardVersionHistory } from "../../history/CardVersionHistory";
 
 type KnowledgeAreaCardLibraryQuestionProps = {
@@ -30,22 +30,13 @@ export function KnowledgeAreaCardLibraryQuestion({
 }: KnowledgeAreaCardLibraryQuestionProps) {
   return (
     <Collapsible>
-      <CollapsibleTrigger asChild>
-        <button
-          type="button"
-          className="group flex w-full items-start justify-between gap-3 rounded-sm text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--primary)]"
-        >
-          <span className="[overflow-wrap:anywhere]" style={{ whiteSpace: "pre-wrap" }}>
-            {card.front}
-            {flagged && (
-              <span className="ml-2 text-xs text-muted-foreground">Flagged for editing</span>
-            )}
-          </span>
-          <ChevronDown
-            className="mt-0.5 size-4 shrink-0 text-[var(--muted)] transition-transform group-data-[state=open]:rotate-180"
-            aria-hidden="true"
-          />
-        </button>
+      <CollapsibleTrigger type="button" variant="content">
+        <span className="[overflow-wrap:anywhere]" style={{ whiteSpace: "pre-wrap" }}>
+          {card.front}
+          {flagged && (
+            <span className="ml-2 text-xs text-muted-foreground">Flagged for editing</span>
+          )}
+        </span>
       </CollapsibleTrigger>
       <CollapsibleContent className="grid gap-2 pt-3 font-normal text-[var(--muted)]">
         <p className="m-0" style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>

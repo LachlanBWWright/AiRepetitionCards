@@ -19,15 +19,16 @@ export function askSubjectTutor(
     },
   };
   return api.request(request).pipe(
-    Effect.map((response) => {
-      const reply =
-        response.action === "question"
-          ? [response.result.explanation, response.result.question].filter(Boolean).join("\n\n")
-          : "";
+    Effect.flatMap((response) => {
+      if (response.action !== "question")
+        return Effect.fail({ _tag: "TutorApiFailure", reason: "invalid-response" } as const);
+      const reply = [response.result.explanation, response.result.question]
+        .filter(Boolean)
+        .join("\n\n");
       const history: SubjectDialogue = reply
         ? [...nextHistory, { role: "assistant", content: reply }]
         : nextHistory;
-      return { sessionId: response.sessionId, history };
+      return Effect.succeed({ sessionId: response.sessionId, history });
     }),
   );
 }

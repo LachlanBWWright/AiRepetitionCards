@@ -18,7 +18,7 @@ export function NativeNoteTemplateDeck({
         <NativeButton
           key={area.id}
           label={area.title}
-          tone="soft"
+          variant="default"
           selected={(template?.deckAreaId ?? model.area.id) === area.id}
           disabled={disabled}
           onPress={() => {

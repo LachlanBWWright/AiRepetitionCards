@@ -32,7 +32,7 @@ const clientCommands = {
   mobile: {
     appDirectory: path.join(repositoryRoot, "apps", "mobile"),
     executable: "expo",
-    args: ["start"],
+    args: ["start", "--max-workers", "2"],
   },
 };
 const publicSupabaseKeys = [

@@ -1,5 +1,6 @@
+import { useId } from "react";
 import type { AreaSettings } from "@recall/application";
-import { Textarea } from "@recall/ui-web";
+import { Textarea, FieldLabel, Field, FieldDescription } from "@recall/ui-web";
 import {
   Accordion,
   AccordionContent,
@@ -39,7 +40,7 @@ export function KnowledgeAreaSettingsAiInstructions({
       <AccordionItem value="ai-instructions" className="border-b-0">
         <AccordionTrigger id={`${prefix}-ai`}>AI instructions</AccordionTrigger>
         <AccordionContent>
-          <div className="grid gap-4">
+          <div className="flex flex-col gap-4">
             {instructions.map((instruction) => (
               <InstructionField
                 key={instruction.key}
@@ -65,10 +66,13 @@ function InstructionField({
   readonly onChange: (ai: AreaSettings["ai"]) => void;
 }) {
   const { key, label, help } = instruction;
+  const fieldId = useId();
   return (
-    <label className="grid gap-1.5">
-      {label}
+    <Field className="gap-2">
+      <FieldLabel htmlFor={fieldId}>{label}</FieldLabel>
       <Textarea
+        id={fieldId}
+        aria-describedby={`${fieldId}-description`}
         rows={3}
         maxLength={2000}
         value={ai[key] ?? ""}
@@ -80,9 +84,9 @@ function InstructionField({
           });
         }}
       />
-      <small>
+      <FieldDescription id={`${fieldId}-description`}>
         {help} {(ai[key] ?? "").length}/2,000 characters
-      </small>
-    </label>
+      </FieldDescription>
+    </Field>
   );
 }

@@ -1,5 +1,6 @@
-import { Pressable, Text, TextInput, View } from "react-native";
-import { designTokens } from "@recall/design-tokens";
+import { NativeSelect, NativeTextField } from "@recall/ui-native";
+
+import { Pressable, Text } from "react-native";
 import type { KnowledgeArea } from "@recall/domain";
 
 type Visibility = "unlisted" | "public";
@@ -21,8 +22,6 @@ type NativePublishingPanelPublishFieldsProps = {
   readonly reuseConfirmed: boolean;
   readonly onReuseConfirmedChange: (value: boolean) => void;
 };
-
-const palette = designTokens.color;
 
 export function NativePublishingPanelPublishFields({
   area,
@@ -48,73 +47,61 @@ export function NativePublishingPanelPublishFields({
       <Text className={"text-recall-ink text-[14px] font-bold mt-[4px]"}>
         Publish {area ? `“${area.title}”` : "an area"}
       </Text>
-      <View className={"flex-row gap-[8px]"}>
-        {(["unlisted", "public"] as const).map((item) => (
-          <Pressable
-            key={item}
-            accessibilityRole="button"
-            accessibilityState={{ selected: visibility === item }}
-            onPress={() => {
-              onVisibilityChange(item);
-            }}
-            className={`flex-1 items-center py-[9px] rounded-[9px] bg-recall-paper ${visibility === item ? "bg-recall-green" : ""}`}
-          >
-            <Text className={"text-recall-darkGreen text-[12px] font-bold capitalize"}>{item}</Text>
-          </Pressable>
-        ))}
-      </View>
+      <NativeSelect
+        label="Visibility"
+        value={visibility}
+        options={[
+          { label: "Unlisted · link access", value: "unlisted" },
+          { label: "Public access", value: "public" },
+        ]}
+        onValueChange={(value) => {
+          if (value === "unlisted" || value === "public") onVisibilityChange(value);
+        }}
+      />
       <Text className={"text-recall-muted text-[12px] leading-[18px]"}>
         {visibility === "public"
           ? "Anyone can find and view this area."
           : "Anyone with the share token can view this area."}
       </Text>
-      <TextInput
-        accessibilityLabel="Release notes"
+      <NativeTextField
+        label="Release notes (optional)"
         onChangeText={onReleaseNotesChange}
         placeholder="What changed in this release? (optional)"
-        placeholderTextColor={palette.muted}
         maxLength={4_000}
         multiline
-        className={"min-h-[72px] px-[12px] py-[10px] rounded-[9px] bg-recall-paper text-recall-ink"}
+        inputClassName="min-h-[72px]"
         value={releaseNotes}
       />
-      <TextInput
-        accessibilityLabel="Attribution"
+      <NativeTextField
+        label="Attribution"
         onChangeText={onAttributionChange}
         placeholder="Attribution (optional)"
-        placeholderTextColor={palette.muted}
         maxLength={200}
-        className={"min-h-[42px] px-[12px] rounded-[9px] bg-recall-paper text-recall-ink"}
         value={attribution}
       />
-      <Text className="text-xs font-semibold text-recall-muted">Difficulty (optional)</Text>
-      <View className="flex-row gap-2">
-        {(["", "beginner", "intermediate", "advanced"] as const).map((value) => (
-          <Pressable
-            key={value || "unspecified"}
-            accessibilityRole="button"
-            accessibilityState={{ selected: difficulty === value }}
-            onPress={() => {
-              onDifficultyChange(value);
-            }}
-            className={`flex-1 items-center rounded-[9px] py-[9px] ${difficulty === value ? "bg-recall-green" : "bg-recall-paper"}`}
-          >
-            <Text className="text-xs font-bold capitalize text-recall-darkGreen">
-              {value || "unspecified"}
-            </Text>
-          </Pressable>
-        ))}
-      </View>
-      <TextInput
-        accessibilityLabel="License"
+      <NativeSelect
+        label="Difficulty (optional)"
+        value={difficulty || "unspecified"}
+        options={[
+          { label: "Unspecified", value: "unspecified" },
+          { label: "Beginner", value: "beginner" },
+          { label: "Intermediate", value: "intermediate" },
+          { label: "Advanced", value: "advanced" },
+        ]}
+        onValueChange={(value) => {
+          if (value === "unspecified") onDifficultyChange("");
+          else if (value === "beginner" || value === "intermediate" || value === "advanced")
+            onDifficultyChange(value);
+        }}
+      />
+      <NativeTextField
+        label="License"
         onChangeText={(value) => {
           onLicenseChange(value);
           onReuseConfirmedChange(false);
         }}
         placeholder="Choose a license explicitly"
-        placeholderTextColor={palette.muted}
         maxLength={120}
-        className={"min-h-[42px] px-[12px] rounded-[9px] bg-recall-paper text-recall-ink"}
         value={license}
       />
       {needsReuseConfirmation && (

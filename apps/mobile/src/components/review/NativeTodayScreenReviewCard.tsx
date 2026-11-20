@@ -1,3 +1,6 @@
+import { NativeButtonPrimitive, NativeButtonText } from "@recall/ui-native";
+import { cardFieldAppearance } from "@recall/application";
+import { NativeCardExplanation } from "./NativeCardExplanation";
 import { useNativeReviewerControls } from "./useNativeReviewerControls";
 import { defaultReviewerSettings, type ReviewerSettings } from "@recall/domain";
 import { occlusionAnswerLabel, occlusionSafeMediaUrls } from "@recall/application";
@@ -7,7 +10,7 @@ import { NativeCardRichText } from "../authoring/rich/NativeCardRichText";
 import { NativeTypedReviewAnswer } from "./NativeTypedReviewAnswer";
 import type { Assessment } from "@recall/domain";
 import type { ReviewRating } from "@recall/scheduler";
-import { Image, Pressable, Text, View } from "react-native";
+import { Image, Text, View } from "react-native";
 import { NativeAudioAttachment } from "../media/NativeAudioAttachment";
 import { NativeButton } from "../ui/NativeButton";
 import { Card } from "../../../components/ui/card";
@@ -22,6 +25,7 @@ const ratings = [
 export type NativeTodayScreenReviewCardProps = {
   readonly card: Assessment;
   readonly automationPaused?: boolean;
+  readonly interactionPaused?: boolean;
   readonly reviewerSettings?: ReviewerSettings | undefined;
   readonly flagged: boolean;
   readonly onFlag?: (id: string) => void;
@@ -39,16 +43,14 @@ type RatingButtonsProps = Pick<
   "reviewDelays" | "ratingColors" | "reviewPending" | "onReview"
 >;
 
-function RatingButtons({
-  reviewDelays,
-  ratingColors,
-  reviewPending,
-  onReview,
-}: RatingButtonsProps) {
+function RatingButtons({ reviewDelays, reviewPending, onReview }: RatingButtonsProps) {
   return (
     <View className="flex-row flex-wrap gap-[8px]">
       {ratings.map(([rating, label]) => (
-        <Pressable
+        <NativeButtonPrimitive
+          variant="secondary"
+          size="rating"
+          className="flex-1"
           key={rating}
           accessibilityRole="button"
           disabled={reviewPending}
@@ -56,19 +58,14 @@ function RatingButtons({
           onPress={() => {
             onReview(rating);
           }}
-          className="grow basis-[45%] items-center justify-center min-h-[47px] rounded-[14px]"
-          style={[
-            {
-              backgroundColor: ratingColors[rating],
-              opacity: reviewPending ? 0.5 : 1,
-            },
-          ]}
         >
-          <Text className="text-recall-ink text-[15px] font-bold">{label}</Text>
+          <NativeButtonText variant="secondary">{label}</NativeButtonText>
           {reviewDelays[rating] && (
-            <Text className="text-sm text-recall-ink">{reviewDelays[rating]}</Text>
+            <NativeButtonText variant="secondary" detail>
+              {reviewDelays[rating]}
+            </NativeButtonText>
           )}
-        </Pressable>
+        </NativeButtonPrimitive>
       ))}
     </View>
   );
@@ -78,6 +75,7 @@ export function NativeTodayScreenReviewCard({
   card,
   reviewerSettings = defaultReviewerSettings,
   automationPaused = false,
+  interactionPaused = false,
   flagged,
   onFlag,
   showAnswer,
@@ -88,21 +86,22 @@ export function NativeTodayScreenReviewCard({
   onReview,
   onShowAnswer,
 }: NativeTodayScreenReviewCardProps) {
+  const locked = reviewPending || interactionPaused;
   const controls = useNativeReviewerControls({
     cardId: card.id,
     revealed: showAnswer,
-    disabled: reviewPending || automationPaused,
+    disabled: locked || automationPaused,
     settings: reviewerSettings,
     onReveal: onShowAnswer,
     onRate: onReview,
   });
   return (
-    <View>
+    <View className="gap-4">
       {onFlag && (
         <NativeButton
           label={flagged ? "Flagged for editing" : "Improve later"}
-          tone="soft"
-          disabled={reviewPending}
+          variant="secondary"
+          disabled={locked}
           onPress={() => {
             onFlag(card.id);
           }}
@@ -119,14 +118,24 @@ export function NativeTodayScreenReviewCard({
           {controls.canAutoAdvance && (
             <NativeButton
               label={controls.running ? "Stop auto-advance" : "Start auto-advance"}
-              tone="soft"
-              disabled={reviewPending}
+              variant="secondary"
+              disabled={locked}
               onPress={controls.toggle}
             />
           )}
         </View>
       )}
-      <Card className="rounded-[12px] bg-recall-surface border border-recall-line p-[23px] min-h-[260px] justify-between">
+      <Card className="rounded-[12px] bg-recall-surface border border-recall-line p-6 min-h-[300px] gap-6">
+        {showAnswer && (
+          <View className="border-b border-recall-line pb-4" accessibilityLabel="Original question">
+            <NativeCardRichText
+              text={card.front}
+              variant="body"
+              appearance={cardFieldAppearance(card.presentation, "front")}
+              mediaUrls={occlusionSafeMediaUrls(card.imageOcclusion, mediaUris)}
+            />
+          </View>
+        )}
         <View className="flex-row justify-between items-center">
           <Text className="text-recall-muted text-[12px]">
             {showAnswer ? "Answer" : "Question"}
@@ -134,17 +143,25 @@ export function NativeTodayScreenReviewCard({
         </View>
         <View {...controls.panHandlers}>
           <NativeCardRichText
-            appearance={card.presentation?.appearance}
+            appearance={cardFieldAppearance(card.presentation, showAnswer ? "back" : "front")}
             text={showAnswer ? occlusionAnswerLabel(card.imageOcclusion, card.back) : card.front}
             mediaUrls={occlusionSafeMediaUrls(card.imageOcclusion, mediaUris)}
           />
         </View>
+        {showAnswer && card.explanation && (
+          <NativeCardExplanation
+            key={card.id}
+            text={card.explanation}
+            mediaUrls={occlusionSafeMediaUrls(card.imageOcclusion, mediaUris)}
+            appearance={cardFieldAppearance(card.presentation, "explanation")}
+          />
+        )}
         <NativeReviewSpeech card={card} revealed={showAnswer} />
         <NativeTypedReviewAnswer
           key={card.id}
           card={card}
           revealed={showAnswer}
-          disabled={reviewPending}
+          disabled={locked}
           onReveal={onShowAnswer}
         />
         {card.media?.map((reference) => {
@@ -185,12 +202,12 @@ export function NativeTodayScreenReviewCard({
             <RatingButtons
               reviewDelays={reviewDelays}
               ratingColors={ratingColors}
-              reviewPending={reviewPending}
+              reviewPending={locked}
               onReview={onReview}
             />
           </View>
         ) : (
-          <NativeButton label="Show answer" disabled={reviewPending} onPress={onShowAnswer} />
+          <NativeButton label="Show answer" disabled={locked} onPress={onShowAnswer} />
         )}
       </Card>
     </View>

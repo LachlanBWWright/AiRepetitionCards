@@ -14,6 +14,7 @@ import {
 } from "@recall/ui-web/components/select";
 import {
   Dialog,
+  DialogTrigger,
   DialogContent,
   DialogHeader,
   DialogTitle,
@@ -134,9 +135,9 @@ export function DeckSharingPanelDetail({
           <h3 className="mt-1 text-xl font-semibold">{detail.deck.title}</h3>
           <Button
             type="button"
-            variant="link"
+            variant="ghost"
             size="icon"
-            className="shrink-0 text-muted-foreground"
+            className="shrink-0"
             aria-label="Close deck details"
             disabled={busy}
             onClick={onClose}
@@ -199,21 +200,18 @@ export function DeckSharingPanelDetail({
       {currentArea?.forkedFromVersionId &&
         currentArea.sourceId === detail.deck.id &&
         detail.deck.status === "active" && (
-          <Button variant="outline" disabled={busy} onClick={onToggleFollowing}>
+          <Button variant="default" disabled={busy} onClick={onToggleFollowing}>
             {following ? "Stop following updates" : "Follow updates for this copy"}
           </Button>
         )}
       {detail.canManage && (
         <Dialog open={managing} onOpenChange={onManageOpenChange}>
-          <Button
-            variant="outline"
-            onClick={() => {
-              onManageOpenChange(true);
-            }}
-          >
-            <Settings className="size-4" aria-hidden="true" />
-            Manage published deck
-          </Button>
+          <DialogTrigger asChild>
+            <Button variant="default">
+              <Settings className="size-4" aria-hidden="true" />
+              Manage published deck
+            </Button>
+          </DialogTrigger>
           <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Manage published deck</DialogTitle>
@@ -253,7 +251,7 @@ export function DeckSharingPanelDetail({
               Save details
             </Button>
             <Button
-              variant={detail.deck.status === "active" ? "destructive" : "outline"}
+              variant={detail.deck.status === "active" ? "destructive" : "default"}
               disabled={busy}
               onClick={() => {
                 onSetStatus(detail.deck.status === "active" ? "withdrawn" : "active");
@@ -266,16 +264,12 @@ export function DeckSharingPanelDetail({
       )}
       {!detail.canManage && (
         <Dialog open={reporting} onOpenChange={onReportOpenChange}>
-          <Button
-            variant="link"
-            className="justify-start px-0 text-muted-foreground"
-            onClick={() => {
-              onReportOpenChange(true);
-            }}
-          >
-            <Flag className="size-4" aria-hidden="true" />
-            Report a problem
-          </Button>
+          <DialogTrigger asChild>
+            <Button variant="default" className="justify-start">
+              <Flag className="size-4" aria-hidden="true" />
+              Report a problem
+            </Button>
+          </DialogTrigger>
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Report this version</DialogTitle>
@@ -299,7 +293,7 @@ export function DeckSharingPanelDetail({
             <Button disabled={busy || !reportMessage.trim() || !canReview} onClick={onSubmitReport}>
               Submit report
             </Button>
-            <Button variant="outline" disabled={busy} onClick={onToggleBlock}>
+            <Button variant="default" disabled={busy} onClick={onToggleBlock}>
               {blocked ? "Unblock publisher" : "Block publisher"}
             </Button>
           </DialogContent>

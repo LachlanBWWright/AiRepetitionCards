@@ -16,10 +16,10 @@ export function TutorProposalActions({
   onDiscard,
 }: Props) {
   return (
-    <div>
+    <div className="flex flex-wrap gap-2">
       <Button
         variant="secondary"
-        size="small"
+        size="default"
         type="button"
         disabled={busy || !hasProposalId || approvalSaved}
         onClick={onDiscard}
@@ -27,8 +27,8 @@ export function TutorProposalActions({
         Discard
       </Button>
       <Button
-        variant="secondary"
-        size="small"
+        variant="default"
+        size="default"
         type="button"
         disabled={busy || !hasProposalId || !duplicatesAllowed}
         onClick={onApprove}

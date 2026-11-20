@@ -24,7 +24,7 @@ export function RecallDashboardSearchDialog({ model }: { readonly model: RecallD
         />
         <DialogFooter>
           <Button
-            variant="secondary"
+            variant="default"
             onClick={() => {
               setSearchOpen(false);
             }}

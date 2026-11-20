@@ -6,6 +6,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./chatgpt-inference": "./src/chatgpt-inference.ts",
+    "./chatgpt-callback-page": "./src/chatgpt-callback-page.ts",
     "./chatgpt-plan-errors": "./src/chatgpt-plan-errors.ts"
   },
   "dependencies": {

@@ -265,3 +265,5 @@ export function recallProbability(
 }
 
 export { rescheduleDueDate } from "./reschedule-due";
+
+export { benchmarkSchedulerFit } from "./fit-benchmark";

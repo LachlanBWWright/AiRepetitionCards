@@ -1,3 +1,4 @@
+import { Label } from "@recall/ui-web/components/label";
 import {
   Accordion,
   AccordionContent,
@@ -44,9 +45,7 @@ export function OcclusionMaskFields({
       />
       <Accordion type="single" collapsible>
         <AccordionItem value="coordinates" className="border-0">
-          <AccordionTrigger className="py-2 text-xs text-muted-foreground">
-            Precise position
-          </AccordionTrigger>
+          <AccordionTrigger className="text-muted-foreground">Precise position</AccordionTrigger>
           <AccordionContent>
             <MaskCoordinates mask={mask} onChange={onChange} />
           </AccordionContent>
@@ -55,7 +54,7 @@ export function OcclusionMaskFields({
       {mask.shape === "polygon" && mask.points.length < 32 && (
         <Button
           type="button"
-          variant="secondary"
+          variant="default"
           onClick={() => {
             onChange({ ...mask, points: [...mask.points, { x: 0.1, y: 0.5 }] });
           }}
@@ -66,7 +65,7 @@ export function OcclusionMaskFields({
       {mask.shape === "polygon" && mask.points.length > 3 && (
         <Button
           type="button"
-          variant="secondary"
+          variant="default"
           onClick={() => {
             onChange({ ...mask, points: mask.points.slice(0, -1) });
           }}
@@ -74,7 +73,7 @@ export function OcclusionMaskFields({
           Remove last vertex
         </Button>
       )}
-      <Button type="button" variant="secondary" disabled={!canRemove} onClick={onRemove}>
+      <Button type="button" variant="default" disabled={!canRemove} onClick={onRemove}>
         Remove mask
       </Button>
     </fieldset>
@@ -94,7 +93,7 @@ function CoordinateField({
   readonly onChange: (mask: OcclusionMask) => void;
 }) {
   return (
-    <label>
+    <Label className="grid gap-2">
       Point {pointIndex + 1} {axis}
       <Input
         type="number"
@@ -113,7 +112,7 @@ function CoordinateField({
             });
         }}
       />
-    </label>
+    </Label>
   );
 }
 

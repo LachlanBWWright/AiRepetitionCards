@@ -17,7 +17,7 @@ export const failure = (
 /** Convert validated AI text to authored content, preserving caller-selected metadata. */
 export function refinementCardContent(
   input: unknown,
-  metadata: Pick<CardContent, "tags" | "media" | "objectiveIds">,
+  metadata: Pick<CardContent, "tags" | "media" | "objectiveIds" | "explanation">,
 ): Effect.Effect<CardContent, WorkspaceAuthoringFailure> {
   return Effect.gen(function* () {
     const card = yield* Schema.decodeUnknown(CardProposalSchema)(input).pipe(

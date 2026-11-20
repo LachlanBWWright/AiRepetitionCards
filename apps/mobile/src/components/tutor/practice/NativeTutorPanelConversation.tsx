@@ -1,13 +1,13 @@
 import { useState } from "react";
 import type { ReactNode } from "react";
-import { Text, TextInput, View } from "react-native";
+import { Text, View } from "react-native";
+import { NativeSelect, NativeTextField } from "@recall/ui-native";
+import { NativeCardRichText } from "../../authoring/rich/NativeCardRichText";
 import type { AnswerEvaluation, TutorSessionState } from "@recall/ai-core";
 import type { KnowledgeArea } from "@recall/domain";
-import { designTokens } from "@recall/design-tokens";
 import { NativeButton } from "../../ui/NativeButton";
+import { NativeCollapsibleContent, NativeCollapsibleTrigger } from "@recall/ui-native";
 import { NativeTutorEvaluation } from "./NativeTutorPanelEvidence";
-
-const palette = designTokens.color;
 
 export interface NativeTutorConversationState {
   readonly area: KnowledgeArea;
@@ -42,21 +42,21 @@ export function NativeTutorPanelConversation({
   children,
 }: NativeTutorPanelConversationProps) {
   const [showConversation, setShowConversation] = useState(false);
+  const [composer, setComposer] = useState("question");
   const latestReply =
     conversation.reply ||
     [...conversation.history].reverse().find((item) => item.role === "assistant")?.content;
 
   return (
     <>
-      <NativeButton
-        label={showConversation ? "Close tutor conversation" : "Ask the tutor"}
-        onPress={() => {
+      <NativeCollapsibleTrigger
+        open={showConversation}
+        title="Ask the tutor"
+        onToggle={() => {
           setShowConversation((current) => !current);
         }}
-        className="py-[9px] px-[4px]"
-        labelClassName="text-recall-darkGreen text-[11px] font-bold"
       />
-      <View className={showConversation ? "gap-[10px]" : "hidden"}>
+      <NativeCollapsibleContent open={showConversation}>
         {!conversation.apiAvailable ? (
           <Text className="text-recall-muted text-[11px] leading-[16px]">
             Connect AI in settings to ask questions.
@@ -67,40 +67,46 @@ export function NativeTutorPanelConversation({
             disabled={conversation.busy || !conversation.apiAvailable}
             onPress={onResume}
             label={conversation.busy ? "Loading…" : "Resume tutor"}
-            className="min-h-[38px] justify-center items-center px-[12px] rounded-[10px] bg-transparent"
-            labelClassName="text-recall-darkGreen text-[11px] font-bold"
           />
         ) : null}
-        {latestReply ? (
-          <Text className="text-recall-ink text-[13px] leading-[19px]">{latestReply}</Text>
-        ) : null}
-        <View className="flex-row gap-[8px] items-center">
-          <TextInput
-            accessibilityLabel="Ask the tutor"
-            onChangeText={onQuestionChange}
-            placeholder="Ask about this area…"
-            placeholderTextColor={palette.muted}
-            className="flex-1 min-h-[42px] px-[11px] rounded-[10px] bg-recall-paper text-recall-ink"
-            value={conversation.question}
+        {latestReply ? <NativeCardRichText text={latestReply} variant="body" /> : null}
+        {conversation.sessionId && !conversation.quizActive && (
+          <NativeSelect
+            label="Conversation action"
+            value={composer}
+            options={[
+              { value: "question", label: "Ask a question" },
+              { value: "answer", label: "Answer the tutor" },
+            ]}
+            onValueChange={setComposer}
           />
-          <NativeButton
-            disabled={
-              conversation.busy || !conversation.apiAvailable || !conversation.question.trim()
-            }
-            onPress={onAsk}
-            label="Ask"
-            className="min-h-[40px] justify-center px-[13px] rounded-[10px] bg-recall-darkGreen"
-            labelClassName="text-recall-surface text-[12px] font-bold"
-          />
-        </View>
-        {conversation.sessionId && !conversation.quizActive ? (
-          <View className="flex-row gap-[8px] items-center">
-            <TextInput
+        )}
+        {composer === "question" || !conversation.sessionId || conversation.quizActive ? (
+          <View className="gap-2">
+            <NativeTextField
+              label="Your question"
+              accessibilityLabel="Ask the tutor"
+              onChangeText={onQuestionChange}
+              placeholder="Ask about this area…"
+              multiline
+              value={conversation.question}
+            />
+            <NativeButton
+              disabled={
+                conversation.busy || !conversation.apiAvailable || !conversation.question.trim()
+              }
+              onPress={onAsk}
+              label="Ask"
+            />
+          </View>
+        ) : (
+          <View className="gap-2">
+            <NativeTextField
+              label="Your answer"
               accessibilityLabel="Answer the tutor"
               onChangeText={onAnswerChange}
               placeholder="Try an answer…"
-              placeholderTextColor={palette.muted}
-              className="flex-1 min-h-[42px] px-[11px] rounded-[10px] bg-recall-paper text-recall-ink"
+              multiline
               value={conversation.answer}
             />
             <NativeButton
@@ -109,16 +115,14 @@ export function NativeTutorPanelConversation({
               }
               onPress={onEvaluate}
               label="Check"
-              className="min-h-[38px] justify-center items-center px-[12px] rounded-[10px] bg-transparent"
-              labelClassName="text-recall-darkGreen text-[11px] font-bold"
             />
           </View>
-        ) : null}
+        )}
         {conversation.evaluation && !conversation.quizActive ? (
           <NativeTutorEvaluation evaluation={conversation.evaluation} area={conversation.area} />
         ) : null}
         {children}
-      </View>
+      </NativeCollapsibleContent>
     </>
   );
 }

@@ -1,4 +1,10 @@
 import { Button } from "@/components/ui/Button";
+
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@recall/ui-web/components/collapsible";
 import { Alert } from "@recall/ui-web/components/alert";
 import type { RecallDashboardModel } from "../state/useRecallDashboardController";
 export function RecallDashboardReviewRecoveryLayout({
@@ -27,13 +33,13 @@ export function RecallDashboardReviewRecoveryLayout({
       >
         Retry review save
       </Button>
-      <details className="text-sm">
-        <summary>More recovery options</summary>
-        <div className="mt-2 flex flex-wrap gap-2">
+      <Collapsible className="text-sm">
+        <CollapsibleTrigger>More recovery options</CollapsibleTrigger>
+        <CollapsibleContent className="mt-2 flex flex-wrap gap-2">
           <Button onClick={exportWorkspaceSnapshot}>Export unsaved work</Button>
           <Button onClick={() => void exportWorkspaceBackup()}>Export workspace backup</Button>
-        </div>
-      </details>
+        </CollapsibleContent>
+      </Collapsible>
     </Alert>
   );
 }

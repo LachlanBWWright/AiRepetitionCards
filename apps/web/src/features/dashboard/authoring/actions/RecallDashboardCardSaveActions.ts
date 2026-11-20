@@ -44,6 +44,7 @@ export function createRecallDashboardCardSaveActions(
     | "cardKind"
     | "front"
     | "back"
+    | "explanation"
     | "clozeText"
     | "clozeIndex"
     | "cardObjectiveIds"
@@ -84,6 +85,7 @@ export function createRecallDashboardCardSaveActions(
     cardKind,
     front,
     back,
+    explanation,
     clozeText,
     clozeIndex,
     cardObjectiveIds,
@@ -144,6 +146,7 @@ export function createRecallDashboardCardSaveActions(
         kind: cardKind,
         front,
         back,
+        explanation,
         cloze:
           cardKind === "cloze" ? { text: clozeText, deletionIndex: Number(clozeIndex) } : undefined,
         objectiveIds: cardObjectiveIds,

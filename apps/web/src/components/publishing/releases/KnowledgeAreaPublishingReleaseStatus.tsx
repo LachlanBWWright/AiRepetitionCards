@@ -1,3 +1,4 @@
+import { Alert, AlertDescription } from "@recall/ui-web/components/alert";
 import type { ReactNode } from "react";
 import type { DeckQualityIssue } from "@recall/application";
 import { DeckQualityPanel } from "@/components/knowledge/overview/DeckQualityPanel";
@@ -19,9 +20,11 @@ export function KnowledgeAreaPublishingReleaseStatus({ preview, issues, qualityS
         </p>
       )}
       {qualityStatus === "failed" && (
-        <p className="text-sm text-destructive" role="alert">
-          Deck quality could not be validated, so publishing is paused.
-        </p>
+        <Alert variant="destructive">
+          <AlertDescription>
+            Deck quality could not be validated, so publishing is paused.
+          </AlertDescription>
+        </Alert>
       )}
     </>
   );

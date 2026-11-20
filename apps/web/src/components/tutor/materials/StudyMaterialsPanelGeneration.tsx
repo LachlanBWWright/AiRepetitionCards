@@ -92,9 +92,9 @@ export function StudyMaterialsPanelGeneration({
       .map((section) => ({ material, section })),
   );
   return (
-    <div className="grid gap-5 rounded-xl border bg-card p-5 sm:p-6">
+    <div className="flex min-w-0 flex-col gap-4">
       <h4 className="text-sm font-semibold">Generate cards</h4>
-      <Label>
+      <Label className="flex flex-col items-stretch gap-2">
         Study goal
         <Textarea
           disabled={disabled}
@@ -105,7 +105,7 @@ export function StudyMaterialsPanelGeneration({
           }}
         />
       </Label>
-      <Label>
+      <Label className="flex flex-col items-stretch gap-2">
         Depth
         <Select
           disabled={disabled}
@@ -125,7 +125,7 @@ export function StudyMaterialsPanelGeneration({
           </SelectContent>
         </Select>
       </Label>
-      <Label>
+      <Label className="flex flex-col items-stretch gap-2">
         Link cards to concept
         <Select
           disabled={disabled}
@@ -146,7 +146,7 @@ export function StudyMaterialsPanelGeneration({
           </SelectContent>
         </Select>
       </Label>
-      <Label>
+      <Label className="flex flex-col items-stretch gap-2">
         Maximum cards
         <Input
           type="number"
@@ -176,7 +176,7 @@ export function StudyMaterialsPanelGeneration({
       >
         Generate cards
       </Button>
-      <Button type="button" variant="outline" onClick={onStop}>
+      <Button type="button" variant="default" onClick={onStop}>
         Stop after current request
       </Button>
       {suggestions.map((suggestion) => (
@@ -185,7 +185,7 @@ export function StudyMaterialsPanelGeneration({
           <p>{suggestion.description}</p>
           <Button
             type="button"
-            variant="outline"
+            variant="default"
             disabled={disabled || isSuggestionAlreadyPresent(notebook, suggestion)}
             onClick={() => {
               onAddSuggestion(suggestion);

@@ -1,5 +1,7 @@
 "use client";
 
+import { FieldLabel } from "@recall/ui-web";
+
 import {
   findCardDuplicates,
   type CardDuplicateCandidate,
@@ -63,16 +65,21 @@ export function CardDuplicateWarnings({
   });
   if (matches.length === 0) return null;
   return (
-    <section aria-labelledby={`${fieldId}-title`} className="my-4">
+    <section aria-labelledby={`${fieldId}-title`} className="flex flex-col gap-4">
       <h3 className="text-lg font-semibold" id={`${fieldId}-title`}>
         Check existing cards
       </h3>
-      <ul className="my-6 list-none space-y-0 p-0">
+      <ul className="flex min-w-0 list-none flex-col gap-4 p-0">
         {matches.map((match) => (
-          <li key={match.candidate.id} className="border-b py-4 last:border-b-0">
+          <li key={match.candidate.id} className="min-w-0 border-b py-4 last:border-b-0">
             <p className="whitespace-pre-wrap [overflow-wrap:anywhere]">{match.candidate.front}</p>
-            <p>
-              <Badge variant="secondary">{match.reason}</Badge>
+            <p className="flex min-w-0 flex-wrap items-center gap-x-1 gap-y-2 [overflow-wrap:anywhere]">
+              <Badge
+                variant="secondary"
+                className="max-w-full whitespace-normal [overflow-wrap:anywhere]"
+              >
+                {match.reason}
+              </Badge>
               {match.candidate.areaTitle ? ` · ${match.candidate.areaTitle}` : ""}
             </p>
             <DuplicateAnswer answer={match.candidate.back} />
@@ -86,7 +93,7 @@ export function CardDuplicateWarnings({
           </li>
         ))}
       </ul>
-      <label className="flex items-center gap-2" htmlFor={`${fieldId}-keep`}>
+      <FieldLabel className="flex items-center gap-2" htmlFor={`${fieldId}-keep`}>
         <Checkbox
           id={`${fieldId}-keep`}
           checked={keepBoth}
@@ -96,7 +103,7 @@ export function CardDuplicateWarnings({
           }}
         />
         Keep both cards
-      </label>
+      </FieldLabel>
     </section>
   );
 }
@@ -104,11 +111,7 @@ export function CardDuplicateWarnings({
 function DuplicateAnswer({ answer }: { readonly answer: string }) {
   return (
     <Collapsible>
-      <CollapsibleTrigger asChild>
-        <Button size="small" variant="secondary">
-          Compare answer
-        </Button>
-      </CollapsibleTrigger>
+      <CollapsibleTrigger>Compare answer</CollapsibleTrigger>
       <CollapsibleContent>
         <p className="whitespace-pre-wrap">{answer}</p>
       </CollapsibleContent>
@@ -127,8 +130,8 @@ function OpenCandidateButton({
 }) {
   return (
     <Button
-      size="small"
-      variant="secondary"
+      size="default"
+      variant="default"
       disabled={disabled}
       onClick={() => {
         onOpen(candidate);

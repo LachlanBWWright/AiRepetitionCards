@@ -1,3 +1,7 @@
+import { NativeCollapsible } from "@recall/ui-native";
+import { cardFieldAppearance } from "@recall/application";
+import type { NoteCardPreview } from "@recall/application";
+import { NativeCardExplanation } from "../../review/NativeCardExplanation";
 import { NativeNoteOwnershipImpact } from "./NativeNoteOwnershipImpact";
 import { NativeNoteLifecycleImpact } from "./NativeNoteLifecycleEditor";
 import { NativeNoteAttachments } from "./NativeNoteAttachments";
@@ -33,7 +37,7 @@ export function NativeNoteLibraryEditor(props: Props) {
               key={type.id}
               label={type.name}
               selected={model.type.id === type.id}
-              tone={model.type.id === type.id ? "dark" : "soft"}
+              variant="default"
               className="flex-1 min-w-24"
               disabled={locked}
               onPress={() => {
@@ -47,7 +51,7 @@ export function NativeNoteLibraryEditor(props: Props) {
         <NativeButton
           key={note.id}
           label={`Open: ${Object.values(note.fields).find(Boolean)?.slice(0, 55) ?? note.id}`}
-          tone="soft"
+          variant="default"
           disabled={locked}
           onPress={() => {
             model.selectNote(note.id);
@@ -58,7 +62,7 @@ export function NativeNoteLibraryEditor(props: Props) {
         <NativeButton
           key={image.id}
           label={`Insert existing image ${String(index + 1)} in first field`}
-          tone="soft"
+          variant="default"
           disabled={locked}
           onPress={() => {
             model.insertImage(image.id);
@@ -95,37 +99,35 @@ export function NativeNoteLibraryEditor(props: Props) {
         value={model.tagsText}
         onChangeText={model.setTagsText}
       />
-      <NativeButton
-        label={customizing ? "Hide type editor ▴" : "Customize fields and templates ▾"}
-        tone="soft"
-        disabled={locked}
-        onPress={() => {
+      <NativeCollapsible
+        open={customizing}
+        title="Customize fields and templates"
+        onToggle={() => {
           setCustomizing(!customizing);
         }}
-      />
-      {customizing && <NativeNoteTypeEditor model={model} disabled={locked} />}
-      <NativeButton
-        label={preview ? "Hide generated cards ▴" : "Preview generated cards ▾"}
-        tone="soft"
-        onPress={() => {
+        disabled={locked}
+      >
+        <NativeNoteTypeEditor model={model} disabled={locked} />
+      </NativeCollapsible>
+      <NativeCollapsible
+        open={preview}
+        title="Preview generated cards"
+        onToggle={() => {
           setPreview(!preview);
         }}
-      />
-      {preview &&
-        (Either.isLeft(model.preview) ? (
+      >
+        {Either.isLeft(model.preview) ? (
           <Text>{model.preview.left.message}</Text>
         ) : (
           model.preview.right.map((card, index) => (
-            <View
+            <NativeNotePreviewCard
               key={`${card.templateId}:${String(card.deletionIndex ?? 0)}`}
-              className="border border-recall-line p-2"
-            >
-              <Text className="font-bold">Card {index + 1}</Text>
-              <NativeCardRichText text={card.front} appearance={card.presentation?.appearance} />
-              <NativeCardRichText text={card.back} appearance={card.presentation?.appearance} />
-            </View>
+              card={card}
+              index={index}
+            />
           ))
-        ))}
+        )}
+      </NativeCollapsible>
       <NativeNoteOwnershipImpact model={model} disabled={locked} />
       <NativeNoteLifecycleImpact model={model} disabled={locked} />
       <NativeButton
@@ -146,7 +148,7 @@ export function NativeNoteLibraryEditor(props: Props) {
       />
       <NativeButton
         label="Save and add another"
-        tone="soft"
+        variant="default"
         disabled={
           locked ||
           Either.isLeft(model.preview) ||
@@ -162,6 +164,35 @@ export function NativeNoteLibraryEditor(props: Props) {
         }}
       />
       {model.message ? <Text accessibilityLiveRegion="polite">{model.message}</Text> : null}
+    </View>
+  );
+}
+
+function NativeNotePreviewCard({
+  card,
+  index,
+}: {
+  readonly card: NoteCardPreview;
+  readonly index: number;
+}) {
+  return (
+    <View className="border border-recall-line p-2">
+      <Text className="font-bold">Card {index + 1}</Text>
+      <NativeCardRichText
+        text={card.front}
+        appearance={cardFieldAppearance(card.presentation, "front")}
+      />
+      <NativeCardRichText
+        text={card.back}
+        appearance={cardFieldAppearance(card.presentation, "back")}
+      />
+      {card.explanation && (
+        <NativeCardExplanation
+          text={card.explanation}
+          mediaUrls={{}}
+          appearance={cardFieldAppearance(card.presentation, "explanation")}
+        />
+      )}
     </View>
   );
 }

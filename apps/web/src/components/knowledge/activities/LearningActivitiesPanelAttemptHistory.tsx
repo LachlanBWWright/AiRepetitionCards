@@ -1,4 +1,5 @@
-import { Button } from "@recall/ui-web";
+import { Button, Collapsible, CollapsibleContent, CollapsibleTrigger } from "@recall/ui-web";
+
 import type { useLearningActivities } from "../../../hooks/use-learning-activities";
 
 type Attempt = ReturnType<typeof useLearningActivities>["library"]["attempts"][number];
@@ -14,11 +15,9 @@ export function ActivityAttemptHistory({
 }) {
   if (attempts.length === 0) return null;
   return (
-    <details className="grid gap-2 rounded-lg border p-3">
-      <summary className="cursor-pointer font-semibold">
-        Attempt history ({attempts.length})
-      </summary>
-      <div className="mt-3 grid gap-3">
+    <Collapsible className="grid gap-2 rounded-lg border p-3">
+      <CollapsibleTrigger>Attempt history ({attempts.length})</CollapsibleTrigger>
+      <CollapsibleContent className="mt-3 grid gap-3">
         {attempts
           .slice()
           .reverse()
@@ -27,12 +26,12 @@ export function ActivityAttemptHistory({
             <AttemptHistoryEntry key={attempt.id} attempt={attempt} />
           ))}
         {attempts.length > historyLimit && (
-          <Button variant="secondary" onClick={onShowMore}>
+          <Button variant="default" onClick={onShowMore}>
             Show more attempts
           </Button>
         )}
-      </div>
-    </details>
+      </CollapsibleContent>
+    </Collapsible>
   );
 }
 

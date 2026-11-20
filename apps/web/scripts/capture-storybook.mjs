@@ -11,9 +11,19 @@ import { requestedStories as requestedStories5 } from "./capture-storybook-catal
 import { requestedStories as requestedStories6 } from "./capture-storybook-catalog-06.mjs";
 
 const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const outputDir = path.resolve(appRoot, "../../artifacts/storybook-screenshots");
+const outputGroup = process.env.RECALL_SCREENSHOT_GROUP ?? "storybook-screenshots";
+if (!/^[a-z0-9][a-z0-9/-]*$/.test(outputGroup)) {
+  process.stderr.write(
+    "Screenshot group must be a relative artifact folder using letters, digits, dashes and slashes.\n",
+  );
+  process.exit(1);
+}
+const outputDir = path.resolve(appRoot, "../../artifacts", outputGroup);
 const port = Number(process.env.STORYBOOK_PORT ?? 6006);
-const baseUrl = `http://127.0.0.1:${port}`;
+const baseUrl = process.env.RECALL_STORYBOOK_URL ?? `http://127.0.0.1:${port}`;
+const requestedIds = new Set(
+  (process.env.RECALL_SCREENSHOT_STORIES ?? "").split(",").filter(Boolean),
+);
 const requested = [
   requestedStories1,
   requestedStories2,
@@ -22,48 +32,6 @@ const requested = [
   requestedStories5,
   requestedStories6,
 ].flat();
-
-const screenRoots = {
-  "Workspace/Search": "main",
-  "Cards/Duplicate review": "main",
-  "Cards/Version history": "main",
-  "Screens/Native Workspace Search": '[data-testid="native-workspace-search"]',
-  "Screens/Native Card History": '[data-testid="native-card-history"]',
-  "Screens/Recall Dashboard": ".app-shell",
-  "Screens/Sign In": ".auth-page .auth-panel",
-  "Screens/ChatGPT Account Connection": ".auth-page .auth-panel",
-  "Screens/Native App Shell": '[aria-label="Main navigation"]',
-  "Screens/Native AI Tutor": '[data-testid="native-tutor-panel"]',
-  "Screens/Native Publishing": '[data-testid="native-publishing-panel"]',
-  "Screens/Native Account": '[data-testid="native-account-panel"]',
-  "Screens/Native Workspace Authoring": '[data-testid="native-workspace-authoring"]',
-  "Screens/Native Practice Insights": 'main:has-text("Recent reviews")',
-  "Screens/Mobile Client": '[data-testid="mobile-screen"]',
-  "Screens/Knowledge Area Sharing": ".publication-panel",
-  "Screens/Anki Import": ".anki-import-dialog",
-  "Screens/AI Tutor": ".component-catalog .tutor-panel",
-  "Screens/Tutor Privacy": ".component-catalog .tutor-panel",
-  "Screens/Desktop ChatGPT Plan": ".component-catalog",
-  "Screens/Desktop ChatGPT Research":
-    '.component-catalog section[aria-labelledby="chatgpt-research-title"]',
-  "Screens/Knowledge Notebook": ".component-catalog .tutor-panel",
-  "Screens/AI Budget Settings": '.component-catalog section[aria-label="AI budget settings"]',
-  "Screens/Daily Study Reminders":
-    '.component-catalog section[aria-label="Daily reminder settings"]',
-  "Screens/Card Assistance": '.component-catalog section[aria-label="Card assistance"]',
-  "Screens/Study Materials": ".component-catalog .tutor-panel",
-  "Screens/Account": ".component-catalog .account-action",
-  "Screens/Card Library": '.component-catalog section:has-text("Your cards")',
-  "Knowledge/Area settings": "main:has(.knowledge-area-settings)",
-  "Knowledge/Review settings": 'main:has-text("Review settings")',
-  "Native UI/Primitives": '#storybook-root > div:has-text("Your study space")',
-};
-
-function screenRoot(shot) {
-  if (shot.title === "Design System/Review Card" && shot.name === "Multiline answer")
-    return ".study-card";
-  return screenRoots[shot.title];
-}
 
 async function waitForScreenState(page, shot) {
   if (shot.title === "Screens/Native App Shell") {
@@ -87,8 +55,17 @@ async function waitForScreenState(page, shot) {
   if (shot.title !== "Screens/Native AI Tutor") return;
   const root = page.locator('[data-testid="native-tutor-panel"]');
   if (/proposal|throttled|limiter/.test(shot.name)) {
+    const conversation = root.getByRole("button", { name: "Ask the tutor", exact: true });
+    if (
+      !(await root
+        .getByRole("textbox", { name: "Proposed card question", exact: true })
+        .isVisible()) &&
+      (await conversation.count()) &&
+      (await conversation.getAttribute("aria-expanded")) !== "true"
+    )
+      await conversation.click();
     await root
-      .getByText("Proposed card · approval required", { exact: true })
+      .getByRole("textbox", { name: "Proposed card question", exact: true })
       .waitFor({ state: "visible", timeout: 20_000 });
   } else if (shot.name.includes("tentative")) {
     await root
@@ -114,7 +91,7 @@ let browser;
 async function waitForStorybook() {
   const deadline = Date.now() + 90_000;
   while (Date.now() < deadline) {
-    if (server.exitCode !== null) {
+    if (server && server.exitCode !== null) {
       return { ok: false, message: `Storybook exited with code ${server.exitCode}` };
     }
     try {
@@ -133,23 +110,24 @@ let runError;
 try {
   await rm(outputDir, { recursive: true, force: true });
   await mkdir(outputDir, { recursive: true });
-  server = spawn(
-    process.execPath,
-    [
-      path.resolve(appRoot, "node_modules/storybook/dist/bin/dispatcher.js"),
-      "dev",
-      "--ci",
-      "--no-open",
-      "--host",
-      "127.0.0.1",
-      "--port",
-      String(port),
-    ],
-    {
-      cwd: appRoot,
-      stdio: "inherit",
-    },
-  );
+  if (!process.env.RECALL_STORYBOOK_URL)
+    server = spawn(
+      process.execPath,
+      [
+        path.resolve(appRoot, "node_modules/storybook/dist/bin/dispatcher.js"),
+        "dev",
+        "--ci",
+        "--no-open",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        String(port),
+      ],
+      {
+        cwd: appRoot,
+        stdio: "inherit",
+      },
+    );
 
   const startup = await waitForStorybook();
   if (!startup.ok) {
@@ -157,6 +135,11 @@ try {
   } else {
     const entries = Object.values(startup.index?.entries ?? {});
     browser = await chromium.launch({ headless: true });
+    const indexedIds = new Set(
+      entries.filter((entry) => entry.type === "story").map((entry) => entry.id),
+    );
+    const missingIds = [...requestedIds].filter((id) => !indexedIds.has(id));
+    if (missingIds.length) runError = `Storybook IDs not found: ${missingIds.join(", ")}`;
     const requestedKeys = new Set(requested.map((shot) => `${shot.title}\0${shot.name}`));
     const additionalStories = entries
       .filter((entry) => entry.type === "story")
@@ -173,13 +156,26 @@ try {
           ? { width: 390, height: 1000 }
           : { width: 1440, height: 1000 },
       }));
-    const screenshots = [...requested, ...additionalStories];
+    const primaryShots = [...requested, ...additionalStories];
+    const screenshots = primaryShots.flatMap((shot) => [
+      shot,
+      {
+        ...shot,
+        file: shot.file.replace(
+          /\.png$/,
+          shot.viewport.width < 720 ? "-desktop.png" : "-phone.png",
+        ),
+        viewport: { width: shot.viewport.width < 720 ? 1440 : 390, height: 1000 },
+      },
+    ]);
+    const captureResults = [];
     const failedStories = [];
 
     for (const shot of screenshots) {
       const story = entries.find(
         (entry) => entry.type === "story" && entry.title === shot.title && entry.name === shot.name,
       );
+      if (requestedIds.size > 0 && (!story || !requestedIds.has(story.id))) continue;
       if (!story) {
         failedStories.push(`${shot.title} · ${shot.name}: story not found in Storybook index`);
         continue;
@@ -201,13 +197,27 @@ try {
         await page.goto(`${baseUrl}/iframe.html?id=${story.id}&viewMode=story`, {
           waitUntil: "networkidle",
         });
-        const screenSelector = screenRoot(shot) ?? "#storybook-root";
-        try {
-          await page.locator(screenSelector).waitFor({ state: "visible", timeout: 1_500 });
-        } catch {
-          await page.locator("#storybook-root").waitFor({ state: "visible", timeout: 5_000 });
-        }
+        await page.waitForFunction(
+          () => {
+            const root = document.querySelector("#storybook-root");
+            return (
+              (document.body.classList.contains("sb-show-main") ||
+                document.body.classList.contains("sb-show-errordisplay")) &&
+              (root?.childElementCount ||
+                document.querySelector('[role="dialog"], .sb-errordisplay'))
+            );
+          },
+          undefined,
+          { timeout: 10_000 },
+        );
         await waitForScreenState(page, shot);
+        await page.evaluate(() => document.fonts.ready);
+        const storyError = await page.evaluate(() =>
+          document.body.classList.contains("sb-show-errordisplay")
+            ? document.querySelector(".sb-errordisplay")?.textContent
+            : null,
+        );
+        if (storyError) captureError = storyError.trim().slice(0, 1000);
         if (shot.title === "Screens/Recall Dashboard" && shot.viewport.width < 720) {
           await page.addStyleTag({
             content: ".mobile-footer { position: static !important; inset: auto !important; }",
@@ -231,6 +241,20 @@ try {
         fullPage: true,
         animations: "disabled",
       });
+      const dimensions = await page.evaluate(() => ({
+        contentWidth: document.documentElement.scrollWidth,
+        contentHeight: document.documentElement.scrollHeight,
+      }));
+      captureResults.push({
+        storyId: story.id,
+        title: shot.title,
+        name: shot.name,
+        file: shot.file,
+        viewport: shot.viewport,
+        ...dimensions,
+        horizontalOverflow: dimensions.contentWidth > shot.viewport.width,
+        errors: [...(captureError ? [captureError] : []), ...criticalRenderErrors],
+      });
       await page.close();
       console.log(
         `Saved ${path.relative(path.resolve(appRoot, "../.."), path.join(outputDir, shot.file))}`,
@@ -238,7 +262,11 @@ try {
     }
 
     {
-      const screenshotList = screenshots
+      await writeFile(
+        path.join(outputDir, "manifest.json"),
+        JSON.stringify(captureResults, null, 2),
+      );
+      const screenshotList = captureResults
         .map((shot) => `- [${shot.title} · ${shot.name}](./${shot.file})`)
         .join("\n");
       const failureList = failedStories.length
@@ -246,10 +274,10 @@ try {
         : "\nAll stories rendered without browser errors.\n";
       await writeFile(
         path.join(outputDir, "README.md"),
-        `# Storybook screenshots\n\nGenerated ${screenshots.length} screenshots from all indexed Storybook stories with deterministic mock data. Rebuild them with \`pnpm screenshots\` from the repository root.\n\n${screenshotList}\n${failureList}`,
+        `# Storybook screenshots\n\nGenerated ${captureResults.length} screenshots across desktop and phone widths from selected Storybook stories with deterministic mock data. See manifest.json for viewport dimensions, overflow and render diagnostics. Rebuild them with \`pnpm screenshots\` from the repository root.\n\n${screenshotList}\n${failureList}`,
       );
       if (failedStories.length > 0) {
-        runError = `${failedStories.length} of ${screenshots.length} Storybook stories reported render errors. See artifacts/storybook-screenshots/README.md.`;
+        runError = `${failedStories.length} of ${captureResults.length} Storybook captures reported render errors. See ${path.relative(path.resolve(appRoot, "../.."), path.join(outputDir, "README.md"))}.`;
       }
     }
   }

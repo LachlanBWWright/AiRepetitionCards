@@ -51,7 +51,11 @@ export function mimeFor(name: string, bytes: Uint8Array): MediaReference["mimeTy
   return undefined;
 }
 
-type SanitizedField = { readonly text: string; readonly references: readonly MediaReference[] };
+type SanitizedField = {
+  readonly text: string;
+  readonly references: readonly MediaReference[];
+  readonly omittedRemoteMedia: number;
+};
 export function sanitizeField(
   input: string,
   mediaByName: ReadonlyMap<string, StoredMediaAsset>,
@@ -59,10 +63,15 @@ export function sanitizeField(
   if (input.length > MAX_FIELD_CHARS) return undefined;
   const references = new Map<string, MediaReference>();
   const invalidMedia = { value: false };
+  let omittedRemoteMedia = 0;
   let text = input
     .replace(/<\s*(script|style|iframe|object|embed|svg|math)\b[^>]*>[\s\S]*?<\s*\/\s*\1\s*>/gi, "")
     .replace(/<\s*(script|style|iframe|object|embed|svg|math)\b[^>]*\/?>/gi, "");
   text = text.replace(/\[sound:([^\]\r\n]+)\]/gi, (_match, rawName: string) => {
+    if (/^(?:https?:\/\/|\/\/)/i.test(rawName.trim())) {
+      omittedRemoteMedia += 1;
+      return "[Remote audio not included]";
+    }
     const asset = mediaByName.get(rawName.trim());
     if (!asset || !asset.reference.mimeType.startsWith("audio/")) {
       invalidMedia.value = true;
@@ -74,6 +83,10 @@ export function sanitizeField(
   text = text.replace(/<img\b([^>]*)>/gi, (_match, attrs: string) => {
     const src = /\bsrc\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i.exec(attrs);
     const rawName = (src?.[1] ?? src?.[2] ?? src?.[3] ?? "").trim();
+    if (/^(?:https?:\/\/|\/\/)/i.test(rawName)) {
+      omittedRemoteMedia += 1;
+      return "[Remote image not included]";
+    }
     const asset = mediaByName.get(rawName);
     if (!asset || !asset.reference.mimeType.startsWith("image/")) {
       invalidMedia.value = true;
@@ -99,5 +112,5 @@ export function sanitizeField(
     .replace(/&nbsp;/gi, " ")
     .trim();
   if (invalidMedia.value) return "invalid-media";
-  return text ? { text, references: [...references.values()] } : undefined;
+  return text ? { text, references: [...references.values()], omittedRemoteMedia } : undefined;
 }

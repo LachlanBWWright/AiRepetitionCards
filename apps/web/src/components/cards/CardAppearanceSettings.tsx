@@ -1,5 +1,10 @@
+import { Label } from "@recall/ui-web/components/label";
 import type { CardAppearance } from "@recall/domain";
-import { CARD_APPEARANCE_OPTIONS, DEFAULT_CARD_APPEARANCE } from "@recall/application";
+import {
+  CARD_APPEARANCE_OPTIONS,
+  CARD_LAYOUT_PRESETS,
+  DEFAULT_CARD_APPEARANCE,
+} from "@recall/application";
 import { Checkbox } from "@recall/ui-web/components/checkbox";
 import {
   Select,
@@ -18,6 +23,8 @@ const fields = [
   ["size", "Text size"],
   ["align", "Alignment"],
   ["lineSpacing", "Line spacing"],
+  ["direction", "Reading direction"],
+  ["imageSize", "Image size"],
 ] as const;
 function AppearanceField({
   appearance,
@@ -31,16 +38,16 @@ function AppearanceField({
   readonly onChange: Props["onChange"];
 }) {
   return (
-    <label className="grid gap-1 text-sm">
+    <Label className="grid gap-2 text-sm">
       {label}
       <Select
-        value={appearance[field]}
+        value={appearance[field] ?? (field === "direction" ? "auto" : "medium")}
         onValueChange={(next) => {
           const option = CARD_APPEARANCE_OPTIONS[field].find((item) => item.value === next);
           if (option) onChange({ ...appearance, [field]: option.value });
         }}
       >
-        <SelectTrigger aria-label={label}>
+        <SelectTrigger className="w-full" aria-label={label}>
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
@@ -51,15 +58,15 @@ function AppearanceField({
           ))}
         </SelectContent>
       </Select>
-    </label>
+    </Label>
   );
 }
 export function CardAppearanceSettings({ value, onChange }: Props) {
   const appearance = value ?? DEFAULT_CARD_APPEARANCE;
   return (
-    <fieldset className="grid gap-3 rounded border p-3">
+    <fieldset className="grid gap-4 rounded border p-3">
       <legend>Card appearance</legend>
-      <label className="flex items-center gap-2">
+      <Label className="flex items-center gap-2">
         <Checkbox
           checked={value !== undefined}
           onCheckedChange={(checked) => {
@@ -67,9 +74,10 @@ export function CardAppearanceSettings({ value, onChange }: Props) {
           }}
         />
         Customize card appearance
-      </label>
+      </Label>
       {value && (
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <LayoutPreset onChange={onChange} />
           {fields.map(([key, label]) => (
             <AppearanceField
               key={key}
@@ -82,5 +90,30 @@ export function CardAppearanceSettings({ value, onChange }: Props) {
         </div>
       )}
     </fieldset>
+  );
+}
+
+function LayoutPreset({ onChange }: Pick<Props, "onChange">) {
+  return (
+    <Label className="grid gap-2 text-sm">
+      Layout preset
+      <Select
+        onValueChange={(id) => {
+          const preset = CARD_LAYOUT_PRESETS.find((item) => item.id === id);
+          if (preset) onChange(preset.appearance);
+        }}
+      >
+        <SelectTrigger className="w-full" aria-label="Layout preset">
+          <SelectValue placeholder="Choose a preset" />
+        </SelectTrigger>
+        <SelectContent>
+          {CARD_LAYOUT_PRESETS.map((preset) => (
+            <SelectItem key={preset.id} value={preset.id}>
+              {preset.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </Label>
   );
 }

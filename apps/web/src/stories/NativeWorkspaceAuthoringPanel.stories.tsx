@@ -83,7 +83,7 @@ const meta = {
   globals: { viewport: { value: "recallMobile", isRotated: false } },
   decorators: [
     (Story) => (
-      <main style={{ minHeight: 844, padding: 16, background: "#faf9f6" }}>
+      <main data-native-preview className="min-h-[844px] bg-background p-4 text-foreground">
         <Story />
       </main>
     ),

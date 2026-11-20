@@ -22,6 +22,7 @@ const meta = {
     ),
   ],
   parameters: {
+    nativePreview: true,
     layout: "fullscreen",
     docs: {
       description: {

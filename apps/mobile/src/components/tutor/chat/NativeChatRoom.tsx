@@ -1,3 +1,4 @@
+import { NativeCardRichText } from "../../authoring/rich/NativeCardRichText";
 import { useRef, type ReactNode } from "react";
 import { KeyboardAvoidingView, Platform, ScrollView, Text, View } from "react-native";
 import { NativeButton, NativeTextField } from "@recall/ui-native";
@@ -7,6 +8,7 @@ export type NativeChatMessage = {
   readonly content: string;
 };
 export function NativeChatRoom(props: {
+  readonly tools?: ReactNode;
   readonly label: string;
   readonly greeting: string;
   readonly placeholder: string;
@@ -29,6 +31,7 @@ export function NativeChatRoom(props: {
       behavior={Platform.OS === "ios" ? "padding" : "height"}
       accessibilityLabel={`${props.label} conversation`}
     >
+      {props.tools}
       <ScrollView
         ref={scroll}
         className="flex-1"
@@ -78,7 +81,8 @@ export function NativeChatRoom(props: {
           <NativeButton
             label="↑"
             accessibilityLabel="Send message"
-            className="size-11 min-h-11 rounded-full px-0"
+            size="icon"
+
             disabled={props.disabled || props.busy || !props.value.trim()}
             onPress={props.onSend}
           />
@@ -99,12 +103,18 @@ function NativeChatBubble({ message }: { readonly message: NativeChatMessage }) 
           : "max-w-full"
       }
     >
-      <Text
-        accessibilityLabel={`${message.role === "learner" ? "You" : "Tutor"}: ${message.content}`}
-        className="text-base leading-7 text-recall-ink"
-      >
-        {message.content}
-      </Text>
+      {message.role === "assistant" ? (
+        <View accessible accessibilityLabel={`Tutor: ${message.content}`}>
+          <NativeCardRichText text={message.content} variant="body" />
+        </View>
+      ) : (
+        <Text
+          accessibilityLabel={`You: ${message.content}`}
+          className="text-base leading-7 text-recall-ink"
+        >
+          {message.content}
+        </Text>
+      )}
     </View>
   );
 }

@@ -10,11 +10,12 @@ public sealed partial class TutorApiOperations
 {
     private string? ConfiguredModel(string taskKey)
     {
+        if (configuration["MANAGED_AI_ENABLED"] == "true") return "managed";
         var taskModel = configuration[taskKey];
         return taskModel is not null && taskModel.Length > 0 ? taskModel : configuration["OPENAI_MODEL"];
     }
 
-    private bool ValidConfiguredModel(string? model) => !string.IsNullOrWhiteSpace(configuration["OPENAI_API_KEY"]) &&
+    private bool ValidConfiguredModel(string? model) => (configuration["MANAGED_AI_ENABLED"] == "true" || !string.IsNullOrWhiteSpace(configuration["OPENAI_API_KEY"])) &&
         !string.IsNullOrWhiteSpace(model) && model.Length <= 120 && model.Trim() == model && !model.Any(char.IsWhiteSpace);
 
     private static JsonElement CreateProposalSchema(IReadOnlyList<string> objectiveIds) => JsonSerializer.SerializeToElement(new
@@ -156,6 +157,7 @@ public sealed partial class TutorApiOperations
 
     private static IResult ProviderError(TutorProviderFailure failure) => failure.Kind switch
     {
+        TutorProviderFailureKind.ManagedNotEntitled => Error("Managed AI is unavailable for this account. Check your allowance in AI settings.", 403),
         TutorProviderFailureKind.RateLimited => Error("The tutor is busy. Try again shortly.", 429),
         TutorProviderFailureKind.SharedBudgetExceeded => Error("You have reached today’s hosted AI budget. Try again tomorrow.", 429),
         TutorProviderFailureKind.SharedBudgetUnavailable => Error("Hosted AI budgeting is temporarily unavailable. Try again later.", 503),

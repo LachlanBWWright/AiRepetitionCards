@@ -1,6 +1,6 @@
 "use client";
 
-import { Alert, AlertDescription } from "@recall/ui-web/components/alert";
+import { StudyMaterialsWorkflow } from "./StudyMaterialsWorkflow";
 import { useEffect, useRef, useState } from "react";
 import { Effect, Either } from "effect";
 import {
@@ -299,89 +299,90 @@ export function StudyMaterialsPanel({
     };
     run(addNotebookConcepts(notebook, [concept]).pipe(Effect.flatMap(save)));
   }
+  const sources = (view: "text" | "topics") => (
+    <StudyMaterialsPanelSources
+      view={view}
+      notebook={notebook}
+      coverage={coverage}
+      claimCoverage={claimCoverage}
+      disabled={disabled}
+      networkDisabled={networkDisabled}
+      goal={goal}
+      passageDrafts={passageDrafts}
+      onPassageDraftChange={(sectionId, value) => {
+        setPassageDrafts((previous) => ({ ...previous, [sectionId]: value }));
+      }}
+      onMaterialUpdate={update}
+      onMaterialRemove={(materialId) => {
+        run(removeNotebookMaterial(notebook, materialId).pipe(Effect.flatMap(save)));
+      }}
+      onPassageSave={(material, sectionId, value) => {
+        run(
+          updateNotebookMaterial(notebook, {
+            ...material,
+            sections: material.sections.map((item) =>
+              item.id === sectionId ? { ...item, text: value } : item,
+            ),
+          }).pipe(Effect.flatMap(save)),
+          () => {
+            setPassageDrafts((previous) => withoutPassageDraft(previous, sectionId));
+          },
+        );
+      }}
+      onPlan={plan}
+      onClaimChange={updateClaim}
+    />
+  );
   return (
-    <section className="space-y-6" aria-label="Study materials">
-      <header className="space-y-2">
-        <h3 className="text-xl font-semibold tracking-tight">Study materials</h3>
-        <p className="max-w-prose text-sm leading-6 text-muted-foreground">
-          Paste your notes or import a document to create source-backed cards.
-        </p>
-      </header>
-      <StudyMaterialsPanelPaste
-        disabled={disabled}
-        name={name}
-        text={text}
-        onNameChange={setName}
-        onTextChange={setText}
-        onPaste={paste}
-        fileInput={fileInput}
-        importing={importing}
-        ocrScans={ocrScans}
-        onOcrScansChange={setOcrScans}
-        ocrProgress={ocrProgress}
-        onFileSelected={importFile}
-        onCancelImport={() => importController.current?.abort()}
-      />
-      <StudyMaterialsPanelSources
-        notebook={notebook}
-        coverage={coverage}
-        claimCoverage={claimCoverage}
-        disabled={disabled}
-        networkDisabled={networkDisabled}
-        goal={goal}
-        passageDrafts={passageDrafts}
-        onPassageDraftChange={(sectionId, value) => {
-          setPassageDrafts((previous) => ({ ...previous, [sectionId]: value }));
-        }}
-        onMaterialUpdate={update}
-        onMaterialRemove={(materialId) => {
-          run(removeNotebookMaterial(notebook, materialId).pipe(Effect.flatMap(save)));
-        }}
-        onPassageSave={(material, sectionId, value) => {
-          run(
-            updateNotebookMaterial(notebook, {
-              ...material,
-              sections: material.sections.map((item) =>
-                item.id === sectionId ? { ...item, text: value } : item,
-              ),
-            }).pipe(Effect.flatMap(save)),
-            () => {
-              setPassageDrafts((previous) => withoutPassageDraft(previous, sectionId));
-            },
-          );
-        }}
-        onPlan={plan}
-        onClaimChange={updateClaim}
-      />
-      {materials.length > 0 && (
-        <StudyMaterialsPanelGeneration
-          notebook={notebook}
+    <StudyMaterialsWorkflow
+      sources={sources}
+      goal={goal}
+      onGoalChange={setGoal}
+      disabled={disabled}
+      notice={notice}
+      importPanel={
+        <StudyMaterialsPanelPaste
           disabled={disabled}
-          networkDisabled={networkDisabled}
-          goal={goal}
-          onGoalChange={setGoal}
-          depth={depth}
-          onDepthChange={setDepth}
-          conceptId={conceptId}
-          onConceptChange={setConceptId}
-          count={count}
-          onCountChange={setCount}
-          selectedCount={selected.length}
-          claimCoverage={claimCoverage}
-          passageDraftsExist={Object.keys(passageDrafts).length > 0}
-          suggestions={suggestions}
-          onGenerate={generate}
-          onStop={() => {
-            stopRequested.current = true;
-          }}
-          onAddSuggestion={addSuggestion}
+          name={name}
+          text={text}
+          onNameChange={setName}
+          onTextChange={setText}
+          onPaste={paste}
+          fileInput={fileInput}
+          importing={importing}
+          ocrScans={ocrScans}
+          onOcrScansChange={setOcrScans}
+          ocrProgress={ocrProgress}
+          onFileSelected={importFile}
+          onCancelImport={() => importController.current?.abort()}
         />
-      )}
-      {notice && (
-        <Alert variant="destructive">
-          <AlertDescription>{notice}</AlertDescription>
-        </Alert>
-      )}
-    </section>
+      }
+      generationPanel={
+        materials.length > 0 ? (
+          <StudyMaterialsPanelGeneration
+            notebook={notebook}
+            disabled={disabled}
+            networkDisabled={networkDisabled}
+            goal={goal}
+            onGoalChange={setGoal}
+            depth={depth}
+            onDepthChange={setDepth}
+            conceptId={conceptId}
+            onConceptChange={setConceptId}
+            count={count}
+            onCountChange={setCount}
+            selectedCount={selected.length}
+            claimCoverage={claimCoverage}
+            passageDraftsExist={Object.keys(passageDrafts).length > 0}
+            suggestions={suggestions}
+            onGenerate={generate}
+            onStop={() => {
+              stopRequested.current = true;
+            }}
+            onAddSuggestion={addSuggestion}
+          />
+        ) : null
+      }
+    />
   );
 }

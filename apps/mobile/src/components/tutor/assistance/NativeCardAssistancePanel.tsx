@@ -1,3 +1,4 @@
+import { NativeCollapsibleTrigger, NativeCollapsibleContent } from "@recall/ui-native";
 import { NativeButton } from "../../ui/NativeButton";
 import { useEffect, useRef, useState } from "react";
 import { Text, TextInput, View } from "react-native";
@@ -36,14 +37,16 @@ function RefinementCard({
   readonly index: number;
 }) {
   return (
-    <View key={index} className="gap-[10px]">
+    <View key={index} className="gap-3">
       <Text selectable className="text-recall-ink text-[14px]">
         {card.front}
       </Text>
       <Text selectable className="text-recall-ink text-[14px]">
         {card.back}
       </Text>
-      {detailsVisible ? <RefinementCardDetails card={card} /> : null}
+      <NativeCollapsibleContent open={detailsVisible}>
+        {<RefinementCardDetails card={card} />}
+      </NativeCollapsibleContent>
     </View>
   );
 }
@@ -85,15 +88,7 @@ function ApplyRefinementButton({
   readonly disabled: boolean;
   readonly onPress: () => void;
 }) {
-  return (
-    <NativeButton
-      label={label}
-      disabled={disabled}
-      onPress={onPress}
-      className="p-[10px] bg-transparent"
-      labelClassName="text-recall-surface text-[12px] font-bold"
-    />
-  );
+  return <NativeButton label={label} disabled={disabled} onPress={onPress} />;
 }
 
 function refinementActionLabel(proposalOnly: boolean, replacement: boolean | null): string {
@@ -133,8 +128,6 @@ function RefinementModeButton({
         onSelect(value);
       }}
       disabled={disabled}
-      className="p-[10px] bg-transparent"
-      labelClassName="text-recall-surface text-[12px] font-bold"
     />
   );
 }
@@ -266,7 +259,7 @@ export function NativeCardAssistancePanel({
   };
 
   return (
-    <View className={"gap-[10px]"}>
+    <View className={"gap-3"}>
       {Either.isLeft(local) ? (
         <Text accessibilityRole="alert" className={"text-recall-muted text-[13px] leading-[19px]"}>
           {local.left.message}
@@ -278,17 +271,16 @@ export function NativeCardAssistancePanel({
           </Text>
         ))
       )}
-      <NativeButton
-        label={expanded ? "Close improvements" : "Improve"}
-        onPress={() => {
+      <NativeCollapsibleTrigger
+        open={expanded}
+        title="Improve"
+        onToggle={() => {
           setExpanded(!expanded);
         }}
         disabled={working}
-        className={"p-[10px] bg-transparent"}
-        labelClassName="text-recall-surface text-[12px] font-bold"
       />
-      {expanded ? (
-        <View className={"gap-[10px]"}>
+      <NativeCollapsibleContent open={expanded}>
+        <View className={"gap-4"}>
           <Text className={"text-recall-muted text-[13px] leading-[19px]"}>
             Send this card and any source passages to your AI provider for suggestions.
           </Text>
@@ -296,11 +288,9 @@ export function NativeCardAssistancePanel({
             label="Check quality"
             onPress={() => void request("inspect")}
             disabled={disabled || working || !onInspect}
-            className={"p-[10px] bg-transparent"}
-            labelClassName="text-recall-surface text-[12px] font-bold"
           />
           {visibleInspection ? <InspectionSummary result={visibleInspection} /> : null}
-          <View className={"flex-row flex-wrap gap-[6px]"}>
+          <View className={"gap-2"}>
             {(["clearer", "shorter", "split", "example", "cloze"] as const).map((value) => (
               <RefinementModeButton
                 key={value}
@@ -311,35 +301,34 @@ export function NativeCardAssistancePanel({
               />
             ))}
           </View>
-          <NativeButton
-            label={custom ? "Hide instructions" : "Custom instructions"}
-            onPress={() => {
+          <NativeCollapsibleTrigger
+            open={custom}
+            title="Custom instructions"
+            onToggle={() => {
               setCustom(!custom);
             }}
-            className={"p-[10px] bg-transparent"}
-            labelClassName="text-recall-surface text-[12px] font-bold"
           />
-          {custom ? (
-            <TextInput
-              accessibilityLabel="Optional card refinement instructions"
-              placeholder="Optional instructions"
-              value={instructions}
-              onChangeText={setInstructions}
-              editable={!disabled && !working}
-              maxLength={1000}
-              multiline
-              className={"p-[10px] bg-recall-paper text-recall-ink rounded-[8px]"}
-            />
-          ) : null}
+          <NativeCollapsibleContent open={custom}>
+            {
+              <TextInput
+                accessibilityLabel="Optional card refinement instructions"
+                placeholder="Optional instructions"
+                value={instructions}
+                onChangeText={setInstructions}
+                editable={!disabled && !working}
+                maxLength={1000}
+                multiline
+                className={"w-full min-h-12 p-3 bg-recall-paper text-recall-ink rounded-xl"}
+              />
+            }
+          </NativeCollapsibleContent>
           <NativeButton
             label="Suggest changes"
             onPress={() => void request("refine")}
             disabled={disabled || working || !onRefine}
-            className={"p-[10px] bg-transparent"}
-            labelClassName="text-recall-surface text-[12px] font-bold"
           />
           {visiblePreview ? (
-            <View className={"gap-[10px]"}>
+            <View className={"gap-4"}>
               <Text className={"text-recall-ink text-[14px] font-bold"}>Original</Text>
               <Text selectable className={"text-recall-ink text-[14px]"}>
                 {visiblePreview.original.front}
@@ -349,11 +338,10 @@ export function NativeCardAssistancePanel({
               </Text>
               <Text className={"text-recall-ink text-[14px] font-bold"}>Proposed changes</Text>
               {visiblePreview.result.cards.map(renderRefinementCard)}
-              <NativeButton
-                label={detailsVisible ? "Hide reasons and sources" : "Reasons and sources"}
-                onPress={toggleDetails}
-                className={"p-[10px] bg-transparent"}
-                labelClassName="text-recall-surface text-[12px] font-bold"
+              <NativeCollapsibleTrigger
+                open={detailsVisible}
+                title="Reasons and sources"
+                onToggle={toggleDetails}
               />
               <Text className={"text-recall-muted text-[13px] leading-[19px]"}>
                 {refinementGuidance(proposalOnly, replacement)}
@@ -364,11 +352,10 @@ export function NativeCardAssistancePanel({
                 onPress={applyVisiblePreview}
               />
               <NativeButton
+                variant="secondary"
                 label="Discard refinement"
                 onPress={discardPreview}
                 disabled={disabled || working}
-                className={"p-[10px] bg-transparent"}
-                labelClassName="text-recall-surface text-[12px] font-bold"
               />
             </View>
           ) : preview ? (
@@ -377,7 +364,7 @@ export function NativeCardAssistancePanel({
             </Text>
           ) : null}
         </View>
-      ) : null}
+      </NativeCollapsibleContent>
       {notice ? (
         <Text accessibilityRole="alert" className={"text-recall-muted text-[13px] leading-[19px]"}>
           {notice}

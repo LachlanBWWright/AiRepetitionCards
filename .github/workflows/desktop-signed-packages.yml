@@ -74,6 +74,8 @@ jobs:
           NEXT_PUBLIC_SUPABASE_URL: ${{ vars.NEXT_PUBLIC_SUPABASE_URL }}
           NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ vars.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
           RECALL_API_URL: ${{ vars.RECALL_API_URL }}
+          RECALL_DESKTOP_UPDATE_URL: ${{ vars.RECALL_DESKTOP_UPDATE_URL }}
+          RECALL_DESKTOP_UPDATE_PUBLISHER: ${{ vars.RECALL_DESKTOP_UPDATE_PUBLISHER }}
         run: pnpm --filter desktop ${{ matrix.script }}
       - name: Build and sign Windows
         if: runner.os == 'Windows'
@@ -83,6 +85,8 @@ jobs:
           NEXT_PUBLIC_SUPABASE_URL: ${{ vars.NEXT_PUBLIC_SUPABASE_URL }}
           NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ vars.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
           RECALL_API_URL: ${{ vars.RECALL_API_URL }}
+          RECALL_DESKTOP_UPDATE_URL: ${{ vars.RECALL_DESKTOP_UPDATE_URL }}
+          RECALL_DESKTOP_UPDATE_PUBLISHER: ${{ vars.RECALL_DESKTOP_UPDATE_PUBLISHER }}
         run: pnpm --filter desktop ${{ matrix.script }}
       - name: Verify macOS signature, trust and stapled notarization
         if: runner.os == 'macOS'
@@ -125,6 +129,8 @@ jobs:
             apps/desktop/release/*.dmg
             apps/desktop/release/*.zip
             apps/desktop/release/*.exe
+            apps/desktop/release/*.yml
+            apps/desktop/release/*.blockmap
             apps/desktop/release/checksums.json
           if-no-files-found: error
           retention-days: 14

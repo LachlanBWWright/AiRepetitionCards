@@ -179,7 +179,7 @@ export function importPortableDeckPackage(
       );
       const cardsMatchCurrent = areaResult.right.cards.every((content) => {
         const card = value.currentArea.cards.find((item) => item.id === content.id);
-        if (!card) return false;
+        if (!card || (card.explanation ?? "") !== (content.explanation ?? "")) return false;
         if (content.kind === "basic")
           return card.front === content.front && card.back === content.back;
         return Boolean(

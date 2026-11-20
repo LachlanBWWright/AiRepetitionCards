@@ -1,3 +1,5 @@
+import { cardFieldAppearance } from "@recall/application";
+import { CardExplanation } from "@/components/cards/explanations/CardExplanation";
 import type { NoteCardPreview } from "@recall/application";
 import { Either } from "effect";
 import type { NoteAuthoringModel } from "@recall/react";
@@ -42,7 +44,7 @@ function PreviewCard({ card, name }: { readonly card: NoteCardPreview; readonly 
       <div className="grid gap-2 px-5 py-5">
         <p className="text-xs text-muted-foreground">Question</p>
         <CardRichText
-          appearance={card.presentation?.appearance}
+          appearance={cardFieldAppearance(card.presentation, "front")}
           text={card.front}
           className="[font-family:Georgia,serif] text-xl leading-relaxed"
         />
@@ -50,11 +52,17 @@ function PreviewCard({ card, name }: { readonly card: NoteCardPreview; readonly 
       <div className="grid gap-2 border-t border-border px-5 py-5">
         <p className="text-xs text-muted-foreground">Answer</p>
         <CardRichText
-          appearance={card.presentation?.appearance}
+          appearance={cardFieldAppearance(card.presentation, "back")}
           text={card.back}
           className="[font-family:Georgia,serif] text-lg leading-relaxed"
         />
       </div>
+      {card.explanation && (
+        <CardExplanation
+          text={card.explanation}
+          appearance={cardFieldAppearance(card.presentation, "explanation")}
+        />
+      )}
     </article>
   );
 }

@@ -29,7 +29,7 @@ export function StudyAreaSelect({
 }: StudyAreaSelectProps) {
   return (
     <Select value={value} disabled={disabled} onValueChange={onValueChange}>
-      <SelectTrigger className="w-64" aria-label={ariaLabel}>
+      <SelectTrigger className="w-full sm:w-64" aria-label={ariaLabel}>
         <SelectValue placeholder={placeholder} />
       </SelectTrigger>
       <SelectContent className="w-[var(--radix-select-trigger-width)]">

@@ -1,3 +1,4 @@
+import { useId } from "react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -7,7 +8,14 @@ import {
 } from "@recall/ui-web/components/dropdown-menu";
 import { DashboardView } from "../navigation/dashboard-navigation";
 import { isDesktopRuntime } from "@/lib/desktop-api";
-import { ChevronDown, Settings2, LogOut, UserRound } from "lucide-react";
+import {
+  Archive,
+  ChartNoAxesCombined,
+  ChevronDown,
+  Settings2,
+  LogOut,
+  UserRound,
+} from "lucide-react";
 import { SidebarMenu, SidebarMenuButton, SidebarMenuItem } from "@recall/ui-web/components/sidebar";
 import type { RecallDashboardModel } from "../state/useRecallDashboardController";
 
@@ -27,7 +35,14 @@ function SignOutMenuItem() {
   );
 }
 
-export function RecallDashboardSidebarMenu({ model }: { readonly model: RecallDashboardModel }) {
+export function RecallDashboardSidebarMenu({
+  model,
+  showSignInHint = false,
+}: {
+  readonly model: RecallDashboardModel;
+  readonly showSignInHint?: boolean;
+}) {
+  const hintId = useId();
   const {
     accountPanelOpen,
     setAccountPanelOpen,
@@ -42,6 +57,11 @@ export function RecallDashboardSidebarMenu({ model }: { readonly model: RecallDa
     demo,
     accountStatus,
   } = model;
+  const signInHint = showSignInHint && (
+    <span id={hintId} className="text-xs font-normal text-muted-foreground">
+      Sign in to sync
+    </span>
+  );
   return (
     <SidebarMenu>
       <SidebarMenuItem>
@@ -51,12 +71,15 @@ export function RecallDashboardSidebarMenu({ model }: { readonly model: RecallDa
               ref={accountMenuTrigger}
               keepMobileOpen
               tooltip="Account"
+              size={showSignInHint ? "lg" : "default"}
+              aria-describedby={showSignInHint ? hintId : undefined}
               isActive={accountPanelOpen}
               aria-expanded={accountPanelOpen}
             >
               <UserRound aria-hidden="true" />
               <span className="group-data-[state=collapsed]/sidebar:hidden flex min-w-0 flex-1 flex-col gap-0.5">
                 <strong>Account</strong>
+                {signInHint}
               </span>
               <ChevronDown
                 className="group-data-[state=collapsed]/sidebar:hidden ml-auto text-[var(--muted)]"
@@ -78,7 +101,8 @@ export function RecallDashboardSidebarMenu({ model }: { readonly model: RecallDa
                 model.setActiveView(DashboardView.Insights);
               }}
             >
-              Workspace data and review settings
+              <ChartNoAxesCombined aria-hidden="true" />
+              Workspace insights
             </DropdownMenuItem>
             <DropdownMenuItem
               onSelect={() => {
@@ -86,6 +110,7 @@ export function RecallDashboardSidebarMenu({ model }: { readonly model: RecallDa
                 setImportExportOpen(true);
               }}
             >
+              <Archive aria-hidden="true" />
               Workspace backup
             </DropdownMenuItem>
             <DropdownMenuItem

@@ -48,7 +48,11 @@ export function createAppAnkiActions(
       ),
     );
     if (Either.isLeft(picked)) {
-      setMessage("Anki import failed. Choose a supported .apkg package below 50 MB.");
+      setMessage(
+        picked.left.reason === "invalid-media"
+          ? "An attachment is missing, unsafe or unsupported. Re-export from Anki with media included, then try again."
+          : "Anki import failed. Choose a supported .apkg package below 100 MB.",
+      );
       return;
     }
     if (!picked.right) return;

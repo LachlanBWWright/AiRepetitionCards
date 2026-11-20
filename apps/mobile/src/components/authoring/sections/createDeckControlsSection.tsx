@@ -1,4 +1,4 @@
-import { formatTagInput } from "@recall/application";
+import { formatTagInput, studyQueue, localStudyDay } from "@recall/application";
 import { settingsFor } from "../NativeWorkspaceAuthoringPanel.types";
 import { NativeWorkspaceDeckControls } from "../library/NativeWorkspaceDeckControls";
 
@@ -46,7 +46,14 @@ export function createDeckControlsSection(
     setAreaMenu,
     locked,
     hasWorkspace: Boolean(workspace),
-    now,
+    dueCount: workspace
+      ? studyQueue(
+          workspace,
+          area,
+          now,
+          localStudyDay(now, workspace.schedulerSettings?.studyDayStartHour),
+        ).cards.length
+      : 0,
     onRename: () => {
       open(areaEditor("edit"));
     },

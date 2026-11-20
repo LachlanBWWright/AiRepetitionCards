@@ -76,13 +76,7 @@ export function NativeTutorQuiz({
           className="flex-1 min-h-[42px] px-[11px] rounded-[10px] bg-recall-paper text-recall-ink"
           value={answer}
         />
-        <NativeButton
-          disabled={busy || !answer.trim()}
-          onPress={onSubmit}
-          label="Submit"
-          className="min-h-[40px] justify-center px-[13px] rounded-[10px] bg-recall-darkGreen"
-          labelClassName="text-recall-surface text-[12px] font-bold"
-        />
+        <NativeButton disabled={busy || !answer.trim()} onPress={onSubmit} label="Submit" />
       </View>
     </View>
   );

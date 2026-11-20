@@ -195,7 +195,7 @@ test("invalid image bytes and empty attachments retain the draft and create no c
     await createArea(page);
     const before = await readWorkspace(page);
     const dialog = await draftCard(page, question, answer);
-    await dialog.getByText("Card details", { exact: true }).click();
+    await dialog.getByText("Tags, objectives and media", { exact: true }).click();
     const attachment = dialog.getByLabel("Attach image or audio (20 MB max)", { exact: true });
     await attachment.setInputFiles({
       name: "fake.png",
@@ -252,7 +252,7 @@ test("deleting the last area excludes its cards and notebooks from search and pe
     await page.getByRole("menuitem", { name: "Delete deck", exact: true }).click();
     await page
       .getByRole("alertdialog")
-      .getByRole("button", { name: "Confirm", exact: true })
+      .getByRole("button", { name: "Delete subject", exact: true })
       .click();
     const deleted = await waitForWorkspace(page, (workspace) => workspace?.areas.length === 0);
     assert.deepEqual(deleted.reviewEvents, before.reviewEvents);

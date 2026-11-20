@@ -25,3 +25,20 @@ Configure the deployment scheduler to send `POST /api/internal/tutor-retention` 
 [`apps/web/vercel.json`](../apps/web/vercel.json) schedules `GET /api/internal/tutor-retention` daily at 03:00 UTC on the deployed production project. Set `CRON_SECRET` in Vercel's production environment; Vercel sends it in the bearer authorization header, and the GET handler checks only that secret. The manual POST handler continues to check `TUTOR_RETENTION_JOB_SECRET`. Both share the existing bounded, owner-filtered cleanup. See [Vercel's cron authentication documentation](https://vercel.com/docs/cron-jobs/manage-cron-jobs#securing-cron-jobs).
 
 Deployment and administrative credentials are required before the job can execute. One invocation removes at most the configured batch; repeat manual POST invocations to drain a backlog. Expiry is applied when the job runs. Changing the day limit affects the next invocation; setting `0` disables deletion while preserving explicit erasure. The deployment scheduler has not been exercised in this implementation session.
+
+## Optional subject conversation retention
+
+Subject Tutor starts in session-only mode. **Keep this conversation on this device** explicitly
+opts into saving the latest 50 exchanges and the current draft, scoped to the Recall account,
+AI provider/account and subject. Browser/Electron retention uses device-local browser storage with
+a cross-tab write lock; native retention uses SQLite with the native write/erasure lane. Stored
+JSON is validated and bounded before use. Conflicting writes and corrupt records are preserved
+rather than silently overwritten. Account/provider changes remount the conversation scope.
+
+Turning retention off or choosing **Delete conversation and start fresh** deletes the saved record
+and clears the open conversation. Local-data erasure also removes retained records. Messages are
+excluded from content sync, published decks, workspace backups and account exports. This option
+controls local storage only: submitting a follow-up sends the selected bounded conversation context
+to the chosen AI provider, and provider-side processing/retention remains subject to that provider.
+Storage errors leave the open conversation available and show an error; an unavailable local store
+does not require enabling retention to use a session-only conversation.

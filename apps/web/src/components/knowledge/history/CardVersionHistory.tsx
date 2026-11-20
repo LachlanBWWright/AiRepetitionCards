@@ -1,6 +1,7 @@
 "use client";
 
 import type { CardVersion, Assessment } from "@recall/domain";
+import { ToggleGroup, ToggleGroupItem } from "@recall/ui-web";
 import { Effect, Either } from "effect";
 import { useId, useRef, useState } from "react";
 import { Button } from "../../ui/Button";
@@ -90,26 +91,30 @@ export function CardVersionHistory({
       <h3 className="text-base font-semibold" id={`${fieldId}-title`}>
         {currentCard ? "Earlier versions" : "Deleted card"}
       </h3>
-      <ul className="my-6 list-none space-y-0 p-0">
+      <ToggleGroup
+        type="single"
+        value={selection?.id ?? ""}
+        disabled={disabled || saving}
+        aria-label="Card version"
+        className="my-6 grid w-full gap-0"
+        onValueChange={(id) => {
+          const version = versions.find((entry) => entry.id === id);
+          if (version) setSelection({ id: version.id, baseline: baselineForVersion?.(version) });
+        }}
+      >
         {versions.map((version) => (
-          <li className="border-b py-4 last:border-b-0" key={version.id}>
-            <Button
-              size="small"
-              variant="secondary"
-              onClick={() => {
-                setSelection({ id: version.id, baseline: baselineForVersion?.(version) });
-              }}
-              disabled={disabled || saving}
-              aria-pressed={selection?.id === version.id}
-            >
-              <time dateTime={version.recordedAt}>
-                {new Date(version.recordedAt).toLocaleString()}
-              </time>{" "}
-              · {version.reason}
-            </Button>
-          </li>
+          <ToggleGroupItem
+            key={version.id}
+            value={version.id}
+            className="min-h-10 justify-start rounded-none border-b py-4 text-left whitespace-normal last:border-b-0"
+          >
+            <time dateTime={version.recordedAt}>
+              {new Date(version.recordedAt).toLocaleString()}
+            </time>{" "}
+            · {version.reason}
+          </ToggleGroupItem>
         ))}
-      </ul>
+      </ToggleGroup>
       {selected && (
         <div className="my-4">
           <h4 className="text-sm font-semibold">Selected version</h4>
@@ -131,7 +136,7 @@ export function CardVersionHistory({
           </p>
           {onRestore && (
             <Button
-              size="small"
+              size="default"
               disabled={disabled || saving}
               onClick={() => void restore(selected)}
             >
@@ -156,11 +161,7 @@ export function CardVersionHistory({
 function CurrentCardComparison({ front, back }: { readonly front: string; readonly back: string }) {
   return (
     <Collapsible>
-      <CollapsibleTrigger asChild>
-        <Button size="small" variant="secondary">
-          Compare current card
-        </Button>
-      </CollapsibleTrigger>
+      <CollapsibleTrigger>Compare current card</CollapsibleTrigger>
       <CollapsibleContent>
         <p style={{ whiteSpace: "pre-wrap" }}>{front}</p>
         <p style={{ whiteSpace: "pre-wrap" }}>{back}</p>

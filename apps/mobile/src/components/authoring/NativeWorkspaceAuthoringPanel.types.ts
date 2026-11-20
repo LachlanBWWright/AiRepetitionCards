@@ -9,7 +9,7 @@ import type {
 } from "@recall/application";
 import type { Assessment, LearningArea, Workspace, SchedulerSettings } from "@recall/domain";
 import type { MediaStore, StoredMediaAsset } from "@recall/local-store";
-import type { makeNativeTutorApi } from "../../storage/ai/native-tutor-api";
+import type { createTutorApi } from "@recall/application";
 
 export type Editor =
   | {
@@ -48,6 +48,7 @@ export type Editor =
     }
   | {
       readonly kind: "delete";
+      readonly actionLabel?: string;
       readonly command: unknown;
       readonly title: string;
       readonly baseline?: string;
@@ -76,7 +77,7 @@ export type NativeWorkspaceAuthoringPanelProps = {
   readonly now?: number;
   readonly workspace: Workspace | null;
   readonly activeAreaId: string | null;
-  readonly tutorApi?: ReturnType<typeof makeNativeTutorApi> | null;
+  readonly tutorApi?: ReturnType<typeof createTutorApi> | null;
   readonly disabled?: boolean;
   readonly disabledReason?: string;
   readonly createId: () => string;

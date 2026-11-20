@@ -82,16 +82,16 @@ export function NativeFilteredStudy({
           onValueChange={loadCollection}
         />
       )}
-      <NativeButton label="New collection" tone="soft" onPress={newCollection} />
+      <NativeButton label="New collection" variant="default" onPress={newCollection} />
       <NativeButton
         label="Save collection"
-        tone="soft"
+        variant="default"
         disabled={!save || !name.trim() || controls.busy || Either.isLeft(filtered)}
         onPress={saveCollection}
       />
       <NativeButton
         label="Delete collection"
-        tone="soft"
+        variant="default"
         disabled={
           !save || controls.busy || !settings.filteredDecks?.some((item) => item.id === deck.id)
         }
@@ -155,7 +155,7 @@ export function NativeFilteredStudy({
       />
       <NativeButton
         label="Filter scheduled reviews"
-        tone="soft"
+        variant="default"
         disabled={!save || controls.busy || !query.trim() || Either.isLeft(filtered)}
         onPress={filterReviews}
       />
@@ -168,14 +168,14 @@ export function NativeFilteredStudy({
       />
       <NativeButton
         label="Save search"
-        tone="soft"
+        variant="default"
         disabled={!canSaveSearch}
         onPress={saveSearch}
       />
       {settings.savedSearches?.some((search) => search.query === query) && (
         <NativeButton
           label="Delete this saved search"
-          tone="soft"
+          variant="default"
           disabled={!save || controls.busy}
           onPress={deleteSearch}
         />

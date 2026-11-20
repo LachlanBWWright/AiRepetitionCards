@@ -1,4 +1,5 @@
 "use client";
+import { useCodingActivity } from "./coding/use-coding-activity";
 import { useActivityClock } from "./use-activity-clock";
 
 import { useLearningActivitiesPersistence } from "./use-learning-activities-persistence";
@@ -32,6 +33,7 @@ import { useLearningActivitiesInitialAttempt } from "./use-learning-activities-i
 import { getLearningActivityRecommendations } from "./use-learning-activities-recommendations";
 
 export type LearningActivitiesProps = {
+  readonly activityIds?: readonly string[];
   readonly platform?: "web" | "native";
   readonly clock?: () => number;
   readonly storageLocation?: "tab" | "device" | "native";
@@ -257,7 +259,21 @@ export function useLearningActivities({
     setMessage,
   });
   const { hostedAssess, followUp, archive, sync, dismissQuestion } = libraryActions;
+  const coding = useCodingActivity({
+    activity,
+    response,
+    services,
+    disabled: disabled || busy,
+    result,
+    onSubmit: (value) => {
+      setResult(value);
+      const identity = attemptIdentity.current;
+      if (identity)
+        attemptIdentity.current = { ...identity, submittedAt: new Date().toISOString() };
+    },
+  });
   return {
+    coding,
     library,
     registry,
     activePlugin: activity ? findActivityPlugin(registry, activity) : undefined,
@@ -306,7 +322,7 @@ export function useLearningActivities({
     setStage,
     message,
     syncStatus,
-    busy,
+    busy: busy || coding.busy,
     create: editorActions.create,
     start,
     assess,

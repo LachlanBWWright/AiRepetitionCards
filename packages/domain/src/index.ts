@@ -54,6 +54,7 @@ export const AssessmentSchema = Schema.Struct({
   siblingId: Schema.optional(Schema.String.pipe(Schema.minLength(1), Schema.maxLength(20_100))),
   front: Schema.String.pipe(Schema.minLength(1)),
   back: Schema.String.pipe(Schema.minLength(1)),
+  explanation: Schema.optional(Schema.String.pipe(Schema.maxLength(10_000))),
   objective: Schema.String.pipe(Schema.minLength(1)),
   schedule: AssessmentScheduleSchema,
   cloze: Schema.optional(ClozeContentSchema),
@@ -252,6 +253,12 @@ export const WorkspaceSchema = Schema.Struct({
         synced: Schema.optional(Schema.Boolean),
       }),
     ),
+  ),
+  syncContentFingerprints: Schema.optional(
+    Schema.Record({
+      key: Schema.String,
+      value: Schema.String.pipe(Schema.pattern(/^[a-f0-9]{64}$/)),
+    }),
   ),
   syncContentHashes: Schema.optional(
     Schema.Record({

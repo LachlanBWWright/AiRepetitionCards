@@ -1,15 +1,16 @@
 "use client";
-import { Button as ShadcnButton } from "@recall/ui-web/components/button";
+
+import { ActivityAuthoringFields } from "./interactive/ActivityAuthoringFields";
 import { LearningActivityCardSelect } from "./LearningActivityCardSelect";
-import { ChevronDown } from "lucide-react";
+
 import {
   Collapsible,
   CollapsibleTrigger,
   CollapsibleContent,
 } from "@recall/ui-web/components/collapsible";
 import type { ActivityResponse, LearningActivity } from "@recall/domain";
-import { useState, type ChangeEvent, type ReactNode } from "react";
-import { Button, Input, Label, Textarea } from "@recall/ui-web";
+import { useMemo, useState, type ReactNode } from "react";
+import { Button, Input, Label } from "@recall/ui-web";
 import {
   Select,
   SelectContent,
@@ -17,7 +18,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@recall/ui-web/components/select";
-import { diagnoseLearningObjectives } from "@recall/application";
+import type { LuaRuntime } from "@recall/application";
+import {
+  createLuaActivityRegistry,
+  unavailableLuaRuntime,
+  builtinActivityRegistry,
+  diagnoseLearningObjectives,
+} from "@recall/application";
 import { ObjectiveDiagnostics } from "./ObjectiveDiagnostics";
 import { LearningActivitiesPanelAttempt } from "./LearningActivitiesPanelAttempt";
 import { ActivityAttemptHistory } from "./LearningActivitiesPanelAttemptHistory";
@@ -31,6 +38,7 @@ import {
 
 export function LearningActivitiesPanel(
   props: LearningActivitiesProps & {
+    readonly luaRuntime?: LuaRuntime;
     readonly renderContainer?: (content: ReactNode) => ReactNode;
     readonly renderInteraction?: (input: {
       readonly activity: LearningActivity;
@@ -40,7 +48,12 @@ export function LearningActivitiesPanel(
     }) => ReactNode;
   },
 ) {
-  const model = useLearningActivities(props);
+  const luaRuntime = props.luaRuntime ?? props.services?.lua ?? unavailableLuaRuntime;
+  const registry = useMemo(
+    () => createLuaActivityRegistry(luaRuntime, props.registry ?? builtinActivityRegistry),
+    [luaRuntime, props.registry],
+  );
+  const model = useLearningActivities({ ...props, registry });
   const [leaving, setLeaving] = useState(false);
   const [historyLimit, setHistoryLimit] = useState(20);
   const locked = props.disabled || model.busy;
@@ -74,10 +87,14 @@ export function LearningActivitiesPanel(
       "recall.coding",
     ].includes(model.activity.pluginId);
   const activities = model.library.activities.filter(
-    (activity) => activity.areaId === props.areaId,
+    (activity) =>
+      activity.areaId === props.areaId &&
+      (!props.activityIds || props.activityIds.includes(activity.id)),
   );
   const attempts = model.library.attempts.filter(
-    (attempt) => attempt.activity.areaId === props.areaId,
+    (attempt) =>
+      attempt.activity.areaId === props.areaId &&
+      (!props.activityIds || props.activityIds.includes(attempt.activity.id)),
   );
   const objectiveIds = Array.from(
     new Set([
@@ -137,7 +154,7 @@ export function LearningActivitiesPanel(
           </p>
         </div>
         <Button
-          variant="secondary"
+          variant="default"
           disabled={locked || !!model.activity || model.creating}
           onClick={model.newActivity}
         >
@@ -149,18 +166,7 @@ export function LearningActivitiesPanel(
         storageLocation={props.storageLocation ?? "tab"}
       />
       <Collapsible className="rounded-lg border">
-        <CollapsibleTrigger asChild>
-          <ShadcnButton
-            variant="secondary"
-            className="group w-full justify-between border-0 bg-transparent px-4 shadow-none"
-          >
-            Advanced activity tools
-            <ChevronDown
-              aria-hidden="true"
-              className="size-4 transition-transform group-data-[state=open]:rotate-180"
-            />
-          </ShadcnButton>
-        </CollapsibleTrigger>
+        <CollapsibleTrigger>Advanced activity tools</CollapsibleTrigger>
         <CollapsibleContent className="px-4 pb-4">
           <WebActivityPluginTools
             library={model.library}
@@ -176,7 +182,7 @@ export function LearningActivitiesPanel(
       </Collapsible>
       {props.services && (
         <Button
-          variant="secondary"
+          variant="default"
           disabled={locked || !!model.activity || model.creating}
           onClick={model.sync}
         >
@@ -186,7 +192,7 @@ export function LearningActivitiesPanel(
       {model.editorDrafts.map((draft) => (
         <Button
           key={draft.id}
-          variant="secondary"
+          variant="default"
           disabled={locked || !!model.activity || model.creating}
           onClick={() => {
             model.resumeEditor(draft.id);
@@ -199,7 +205,7 @@ export function LearningActivitiesPanel(
       {model.drafts.map((draft) => (
         <Button
           key={draft.id}
-          variant="secondary"
+          variant="default"
           disabled={locked || !!model.activity || model.creating}
           onClick={() => {
             model.resume(draft.id);
@@ -253,21 +259,20 @@ export function LearningActivitiesPanel(
               />
             </>
           )}
-          {model.authorFields.map((field) =>
-            renderActivityAuthorField({
-              field,
-              value: model.fieldValue(field.key),
-              disabled: locked,
-              onChange: (value) => {
-                model.setFields((current) => ({ ...current, [field.key]: value }));
-              },
-            }),
-          )}
-          <div className="flex gap-2">
+          <ActivityAuthoringFields
+            pluginId={model.pluginId}
+            fields={model.authorFields}
+            value={model.fieldValue}
+            disabled={locked}
+            onChange={(key, value) => {
+              model.setFields((current) => ({ ...current, [key]: value }));
+            }}
+          />
+          <div className="flex flex-wrap gap-2">
             <Button disabled={locked || !model.title.trim()} onClick={model.create}>
               {model.editing ? "Save activity changes" : "Save activity"}
             </Button>
-            <Button variant="secondary" disabled={locked} onClick={model.closeEditor}>
+            <Button variant="default" disabled={locked} onClick={model.closeEditor}>
               Save draft and close
             </Button>
           </div>
@@ -275,6 +280,7 @@ export function LearningActivitiesPanel(
       )}
       <LearningActivitiesPanelAttempt
         model={model}
+        luaRuntime={luaRuntime}
         locked={locked}
         customInteraction={customInteraction}
         acceptsSelfAssessment={Boolean(acceptsSelfAssessment)}
@@ -286,7 +292,7 @@ export function LearningActivitiesPanel(
       {activityCards}
       {activities.length === 0 && !model.creating && (
         <p className="text-sm text-muted-foreground">
-          Add a multiple-choice question, a rubric-based exercise, or a coding challenge.
+          Add an ordering, matching or tracing activity, a question, or a coding challenge.
         </p>
       )}
       <ActivityAttemptHistory
@@ -332,39 +338,10 @@ function ActivityObjectiveSelect({
   );
 }
 
-type ActivityAuthorField = ReturnType<typeof useLearningActivities>["authorFields"][number];
 function renderPluginChoice(plugin: { readonly id: string; readonly label: string }) {
   return (
     <SelectItem key={plugin.id} value={plugin.id}>
       {plugin.label}
     </SelectItem>
-  );
-}
-
-function renderActivityAuthorField({
-  field,
-  value,
-  disabled,
-  onChange,
-}: {
-  readonly field: ActivityAuthorField;
-  readonly value: string;
-  readonly disabled: boolean;
-  readonly onChange: (value: string) => void;
-}) {
-  const inputProps = {
-    id: `activity-field-${field.key}`,
-    disabled,
-    value,
-    maxLength: field.key === "payload" ? 100_000 : 20_000,
-    onChange: (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-      onChange(event.target.value);
-    },
-  };
-  return (
-    <div key={field.key} className="grid gap-2">
-      <Label htmlFor={inputProps.id}>{field.label}</Label>
-      {field.multiline ? <Textarea {...inputProps} /> : <Input {...inputProps} />}
-    </div>
   );
 }

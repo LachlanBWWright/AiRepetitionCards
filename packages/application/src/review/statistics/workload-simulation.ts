@@ -1,3 +1,5 @@
+import { localStudyDay } from "../study-day";
+import { siblingKey, siblingNoteKeys } from "../sibling-identity";
 import { SimulationHeap } from "./simulation-heap";
 import { Effect, Schema } from "effect";
 import {
@@ -22,6 +24,9 @@ export type WorkloadDay = {
   readonly introduced: number;
   readonly minutes: number;
   readonly backlog: number;
+  readonly startsAt: string;
+  readonly endsAt: string;
+  readonly buried: number;
 };
 export type WorkloadSimulation = {
   readonly days: readonly WorkloadDay[];
@@ -30,13 +35,16 @@ export type WorkloadSimulation = {
   readonly expectedRetention: number | null;
   readonly averageSeconds: number;
   readonly timingEstimated: boolean;
+  readonly targetRetention: number;
+  readonly assumptions: readonly string[];
 };
 type SimCard = {
   readonly key: string;
   readonly areaId: string;
+  readonly sibling?: string | undefined;
   readonly schedule: Assessment["schedule"];
 };
-/** Seeded scenario, never modifies schedules or creates review evidence. A day is 24 hours. */
+/** Seeded scenario, never modifies schedules or creates review evidence. Uses device-local study-day boundaries, including daylight-saving transitions. */
 export function simulateStudyWorkload(
   workspace: Workspace,
   now: number,
@@ -51,14 +59,25 @@ export function simulateStudyWorkload(
     const options = yield* Schema.decodeUnknown(OptionsSchema)(input).pipe(
       Effect.mapError(() => invalid),
     );
-    if (!Number.isFinite(now)) return yield* Effect.fail(invalid);
+    if (
+      !Number.isFinite(now) ||
+      !Number.isFinite(new Date(now).getTime()) ||
+      !Number.isFinite(new Date(now + 181 * 86400000).getTime())
+    )
+      return yield* Effect.fail(invalid);
     const placement = reviewPlacement(workspace);
     const scope = areaId ? new Set(studyScope(workspace, areaId)) : undefined;
     const areas = workspace.areas.filter((area) => !scope || scope.has(area.id));
+    const noteKeys = siblingNoteKeys(workspace);
     const cards: SimCard[] = areas.flatMap((area) =>
       area.cards
         .filter((card) => !workspace.schedulerSettings?.suspendedCardIds?.includes(card.id))
-        .map((card) => ({ key: card.id, areaId: area.id, schedule: card.schedule })),
+        .map((card) => ({
+          key: JSON.stringify([area.id, card.id]),
+          areaId: area.id,
+          sibling: siblingKey(card, area.id, noteKeys),
+          schedule: card.schedule,
+        })),
     );
     if (cards.length + options.additionalCards > 5000)
       return yield* Effect.fail({
@@ -108,15 +127,25 @@ export function simulateStudyWorkload(
       [...cards].sort((a, b) => a.key.localeCompare(b.key)).map((card) => [card.key, card]),
     );
     const days: WorkloadDay[] = [];
+    let boundary = localStudyDay(now, workspace.schedulerSettings?.studyDayStartHour);
+    let end = boundary.endsAt;
     for (let day = 0; day < options.days; day += 1) {
-      const start = now + day * 86400000,
-        end = start + 86400000;
-      const admitted = new Set(
-        [...simulated.values()]
-          .filter((card) => card.schedule.state === 0)
-          .slice(0, options.newPerDay)
-          .map((card) => card.key),
+      const start = day === 0 ? now : boundary.startsAt;
+      end = boundary.endsAt;
+      const answered = new Set(
+        events
+          .filter((event) => {
+            const at = Date.parse(event.effectiveReviewedAt ?? event.ratedAt);
+            return at >= boundary.startsAt && at <= start;
+          })
+          .map((event) => JSON.stringify([placement.areaId(event), event.cardId])),
       );
+      const answeredSiblings = new Set(
+        cards
+          .filter((card) => answered.has(card.key))
+          .flatMap((card) => (card.sibling ? [card.sibling] : [])),
+      );
+      const buried = new Set<string>();
       let reviews = 0;
       let clock = start;
       const introduced = new Set<string>();
@@ -125,18 +154,31 @@ export function simulateStudyWorkload(
           Date.parse(a.schedule.due) - Date.parse(b.schedule.due) || a.key.localeCompare(b.key),
       );
       for (const card of simulated.values())
-        if (
-          (card.schedule.state !== 0 || admitted.has(card.key)) &&
-          Date.parse(card.schedule.due) < end
-        )
-          queue.push(card);
+        if (Date.parse(card.schedule.due) < end) queue.push(card);
       while (reviews < options.reviewLimit) {
         const current = queue.pop();
         if (!current) break;
+        const policy = resolveStudySettings(workspace, current.areaId);
+        const bury =
+          current.schedule.state === 0
+            ? policy.buryNewSiblings
+            : current.schedule.state === 2
+              ? policy.buryReviewSiblings
+              : policy.buryLearningSiblings;
+        if (
+          (bury ?? policy.burySiblings ?? true) &&
+          current.sibling &&
+          answeredSiblings.has(current.sibling) &&
+          !answered.has(current.key)
+        ) {
+          buried.add(current.key);
+          continue;
+        }
+        if (current.schedule.state === 0 && introduced.size >= options.newPerDay) continue;
         clock = Math.max(clock, Date.parse(current.schedule.due));
         if (clock >= end) break;
         const parameters = {
-          ...resolveStudySettings(workspace, current.areaId),
+          ...policy,
           requestRetention: options.retention,
         };
         const probability = recallProbability(current.schedule, new Date(clock), parameters) ?? 1;
@@ -156,12 +198,17 @@ export function simulateStudyWorkload(
         });
         const updated = { ...current, schedule };
         simulated.set(current.key, updated);
+        answered.add(current.key);
+        if (current.sibling) answeredSiblings.add(current.sibling);
         if (Date.parse(schedule.due) < end) queue.push(updated);
         clock += averageSeconds * 1000;
         reviews += 1;
       }
       days.push({
         day: day + 1,
+        startsAt: new Date(start).toISOString(),
+        endsAt: new Date(end).toISOString(),
+        buried: buried.size,
         reviews,
         introduced: introduced.size,
         minutes: (reviews * averageSeconds) / 60,
@@ -169,8 +216,8 @@ export function simulateStudyWorkload(
           (card) => card.schedule.state !== 0 && Date.parse(card.schedule.due) < end,
         ).length,
       });
+      boundary = localStudyDay(end, workspace.schedulerSettings?.studyDayStartHour);
     }
-    const end = now + options.days * 86400000;
     const probabilities = [...simulated.values()].flatMap((card) => {
       const probability = recallProbability(
         card.schedule,
@@ -188,6 +235,34 @@ export function simulateStudyWorkload(
         : null,
       averageSeconds,
       timingEstimated: timed.length === 0,
+      targetRetention: options.retention,
+      assumptions: [
+        "The first study day starts now; later days use this device’s calendar and configured day-start hour, including daylight-saving changes.",
+        "Sibling burying follows each subject’s policy; learning retries of the same card remain available.",
+        "Reduced-load weekdays and policy time zones shift scheduled review due dates; they do not reduce the scenario’s daily answer limit.",
+        "Limits below override daily budgets. Existing answers today, active search filters, and pause-new-when-overdue are not modeled.",
+        "Seeded simulated answers estimate workload, not guaranteed recall. No review history or schedules are changed.",
+      ],
     };
   });
+}
+
+/** Same starting collection, limits and random seed for each requested retention. */
+export function compareStudyWorkload(
+  workspace: Workspace,
+  now: number,
+  input: unknown,
+  areaId?: string,
+) {
+  return Schema.decodeUnknown(OptionsSchema)(input).pipe(
+    Effect.mapError(() => ({
+      message: "Choose valid workload options before comparing retention.",
+    })),
+    Effect.flatMap((options) =>
+      Effect.forEach(
+        [...new Set([0.8, 0.9, 0.95, options.retention])].sort((a, b) => a - b),
+        (retention) => simulateStudyWorkload(workspace, now, { ...options, retention }, areaId),
+      ),
+    ),
+  );
 }

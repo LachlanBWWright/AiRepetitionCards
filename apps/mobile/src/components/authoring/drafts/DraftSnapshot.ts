@@ -28,6 +28,7 @@ export function snapshotLibraryDraft(
     !(
       content.front.trim() ||
       content.back.trim() ||
+      content.explanation?.trim() ||
       content.cloze?.text.trim() ||
       editor.tagsText.trim() ||
       content.media.length
@@ -42,6 +43,7 @@ export function snapshotLibraryDraft(
     JSON.stringify(source.imageOcclusion) === JSON.stringify(content.imageOcclusion) &&
     source.front === content.front &&
     source.back === content.back &&
+    (source.explanation ?? "") === (content.explanation ?? "") &&
     (source.cloze?.text ?? "") === (content.cloze?.text ?? "") &&
     (source.cloze?.deletionIndex ?? 1) === (content.cloze?.deletionIndex ?? 1) &&
     formatTagInput(source.tags ?? []) === editor.tagsText &&
@@ -59,6 +61,7 @@ export function snapshotLibraryDraft(
     cardKind: content.kind,
     front: content.front,
     back: content.back,
+    explanation: content.explanation ?? "",
     clozeText: content.cloze?.text ?? "",
     clozeIndex: String(content.cloze?.deletionIndex ?? 1),
     presentation: content.presentation,

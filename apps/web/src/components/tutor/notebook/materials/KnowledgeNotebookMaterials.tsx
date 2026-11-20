@@ -1,3 +1,8 @@
+import {
+  Collapsible,
+  CollapsibleTrigger,
+  CollapsibleContent,
+} from "@recall/ui-web/components/collapsible";
 import { NotebookMaterialSetup } from "./NotebookMaterialSetup";
 import { Alert, AlertDescription } from "@recall/ui-web/components/alert";
 import { Button, Input } from "@recall/ui-web";
@@ -41,14 +46,14 @@ function SuggestedConceptRow({
   readonly onAdd: (title: string, description: string) => void;
 }) {
   return (
-    <div className="flex items-start justify-between gap-4 border-b py-3">
-      <div className="space-y-1">
+    <div className="flex items-start justify-between gap-4 border-b">
+      <div className="flex flex-col gap-1">
         <p className="font-medium">{title}</p>
         <p className="text-sm text-muted-foreground">{description}</p>
       </div>
       <Button
-        variant="outline"
-        size="small"
+        variant="default"
+        size="default"
         disabled={disabled || isSuggestedConceptDuplicate(title, notebook)}
         onClick={() => {
           onAdd(title, description);
@@ -110,8 +115,8 @@ function AddConceptForm({
       </Label>
       <Button
         type="button"
-        variant="secondary"
-        size="small"
+        variant="default"
+        size="default"
         disabled={busy || unsaved || !conceptTitle.trim()}
         onClick={onAdd}
       >
@@ -141,49 +146,47 @@ function NotebookManagement({
   readonly onCancelClear: () => void;
 }) {
   return (
-    <section className="border-t pt-4">
+    <section className="flex flex-col gap-4 border-t pt-4">
       <h3 className="text-sm font-semibold leading-6">Manage notebook</h3>
-      <div className="space-y-4 pt-3">
-        <div className="flex flex-wrap gap-3 py-3">
-          <Button type="button" variant="secondary" size="small" onClick={onExport}>
-            Export notebook
-          </Button>
-          {unsaved && (
-            <Button
-              type="button"
-              variant="secondary"
-              size="small"
-              disabled={busy}
-              onClick={onRetrySave}
-            >
-              Retry saving notebook
-            </Button>
-          )}
+      <div className="flex flex-wrap gap-3">
+        <Button type="button" variant="default" size="default" onClick={onExport}>
+          Export notebook
+        </Button>
+        {unsaved && (
           <Button
             type="button"
-            variant="secondary"
-            size="small"
+            variant="default"
+            size="default"
             disabled={busy}
-            onClick={onConfirmClear}
+            onClick={onRetrySave}
           >
-            Clear notebook
+            Retry saving notebook
           </Button>
-        </div>
-        {clearConfirm && (
-          <Alert variant="destructive">
-            <AlertDescription>
-              Clear this notebook’s map, answers and proposals? Approved library cards and review
-              history remain. Export the notebook first if you want to keep it.
-            </AlertDescription>
-            <Button type="button" disabled={busy} onClick={onClear}>
-              Confirm clear notebook
-            </Button>
-            <Button type="button" disabled={busy} onClick={onCancelClear}>
-              Cancel
-            </Button>
-          </Alert>
         )}
+        <Button
+          type="button"
+          variant="default"
+          size="default"
+          disabled={busy}
+          onClick={onConfirmClear}
+        >
+          Clear notebook
+        </Button>
       </div>
+      {clearConfirm && (
+        <Alert variant="destructive">
+          <AlertDescription>
+            Clear this notebook’s map, answers and proposals? Approved library cards and review
+            history remain. Export the notebook first if you want to keep it.
+          </AlertDescription>
+          <Button type="button" disabled={busy} onClick={onClear}>
+            Confirm clear notebook
+          </Button>
+          <Button variant="secondary" type="button" disabled={busy} onClick={onCancelClear}>
+            Cancel
+          </Button>
+        </Alert>
+      )}
     </section>
   );
 }
@@ -212,7 +215,7 @@ function NotebookConceptArea({
   readonly onAdd: KnowledgeNotebookModel["addConcept"];
 }) {
   return (
-    <div className="space-y-4 pt-3">
+    <div className="flex flex-col gap-4">
       <ul className="list-none p-0">
         <KnowledgeNotebookConceptList
           concepts={notebook.concepts}
@@ -246,7 +249,6 @@ export function KnowledgeNotebookMaterials({ model }: { readonly model: Knowledg
     save,
     run,
     clock,
-    research,
     pendingQuestion,
     acceptSuggestedConcept,
     assessments,
@@ -264,11 +266,46 @@ export function KnowledgeNotebookMaterials({ model }: { readonly model: Knowledg
   const retrySave = () => {
     if (current.current) run(save(current.current));
   };
+  const confirmClear = () => {
+    setClearConfirm(true);
+  };
   const cancelClear = () => {
     setClearConfirm(false);
   };
+  const learningTargets = notebook ? (
+    <section className="flex flex-col gap-4">
+      <h3 className="text-sm font-semibold leading-6">Concepts ({notebook.concepts.length})</h3>
+      {pendingQuestion?.conceptSuggestions?.map((suggestion) => (
+        <SuggestedConceptRow
+          key={suggestion.title}
+          title={suggestion.title}
+          description={suggestion.description}
+          notebook={notebook}
+          disabled={busy || unsaved}
+          onAdd={acceptSuggestedConcept}
+        />
+      ))}
+
+      <NotebookConceptArea
+        notebook={notebook}
+        assessments={assessments}
+        libraryCards={knowledgeArea.cards}
+        busy={busy}
+        unsaved={unsaved}
+        conceptTitle={conceptTitle}
+        setConceptTitle={setConceptTitle}
+        parentId={parentId}
+        setParentId={setParentId}
+        onAdd={addConcept}
+      />
+    </section>
+  ) : null;
   return (
-    <TabsContent value="materials" forceMount className="space-y-8 data-[state=inactive]:hidden">
+    <TabsContent
+      value="materials"
+      forceMount
+      className="flex flex-col gap-6 data-[state=inactive]:hidden"
+    >
       {notebook ? (
         <StudyMaterialsPanel
           notebook={notebook}
@@ -283,49 +320,29 @@ export function KnowledgeNotebookMaterials({ model }: { readonly model: Knowledg
       ) : (
         <NotebookMaterialSetup model={model} />
       )}
-      {research && <div className="border-t pt-6">{research}</div>}
       {notebook && (
         <>
-          <section className="my-6 list-none p-0">
-            <h3 className="text-sm font-semibold leading-6">
-              Concepts ({notebook.concepts.length})
-            </h3>
-            {pendingQuestion?.conceptSuggestions?.map((suggestion) => (
-              <SuggestedConceptRow
-                key={suggestion.title}
-                title={suggestion.title}
-                description={suggestion.description}
-                notebook={notebook}
-                disabled={busy || unsaved}
-                onAdd={acceptSuggestedConcept}
+          <Collapsible defaultOpen={notebook.concepts.length === 0}>
+            <CollapsibleTrigger>Learning targets ({notebook.concepts.length})</CollapsibleTrigger>
+            <CollapsibleContent forceMount className="data-[state=closed]:hidden">
+              {learningTargets}
+            </CollapsibleContent>
+          </Collapsible>
+          <Collapsible defaultOpen={unsaved}>
+            <CollapsibleTrigger>Notebook tools</CollapsibleTrigger>
+            <CollapsibleContent>
+              <NotebookManagement
+                busy={busy}
+                unsaved={unsaved}
+                clearConfirm={clearConfirm}
+                onExport={exportNotebook}
+                onRetrySave={retrySave}
+                onClear={clear}
+                onConfirmClear={confirmClear}
+                onCancelClear={cancelClear}
               />
-            ))}
-
-            <NotebookConceptArea
-              notebook={notebook}
-              assessments={assessments}
-              libraryCards={knowledgeArea.cards}
-              busy={busy}
-              unsaved={unsaved}
-              conceptTitle={conceptTitle}
-              setConceptTitle={setConceptTitle}
-              parentId={parentId}
-              setParentId={setParentId}
-              onAdd={addConcept}
-            />
-          </section>{" "}
-          <NotebookManagement
-            busy={busy}
-            unsaved={unsaved}
-            clearConfirm={clearConfirm}
-            onExport={exportNotebook}
-            onRetrySave={retrySave}
-            onClear={clear}
-            onConfirmClear={() => {
-              setClearConfirm(true);
-            }}
-            onCancelClear={cancelClear}
-          />
+            </CollapsibleContent>
+          </Collapsible>
         </>
       )}
     </TabsContent>

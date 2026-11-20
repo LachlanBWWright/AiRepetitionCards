@@ -2,6 +2,9 @@ import type { SchedulerPolicy, SchedulerSettings } from "@recall/domain";
 export function presetPolicy(settings: SchedulerSettings): SchedulerPolicy {
   const policy = { ...settings };
   delete policy.reviewer;
+  delete policy.manualBurials;
+  delete policy.studyDayStartHour;
+  delete policy.leechSuspensions;
   delete policy.areaReviewLimits;
   delete policy.dailyLimitOverrides;
   delete policy.filteredDecks;

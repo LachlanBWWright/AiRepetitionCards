@@ -9,8 +9,9 @@ import {
   schedulerSettingsDraft,
 } from "@recall/application";
 import type { SchedulerSettings as SchedulerPreferences, Workspace } from "@recall/domain";
+import { FormActions, WorkflowSections } from "@recall/ui-web";
 import { Button } from "@/components/ui/Button";
-import { Alert, AlertDescription, Input } from "@recall/ui-web";
+import { Alert, AlertDescription, Input, FieldLabel, FieldDescription } from "@recall/ui-web";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -122,35 +123,26 @@ export function SchedulerSettings({ workspace, onSave, readLatest, initialDraft 
     });
   };
 
-  return (
-    <form
-      onSubmit={(event) => {
-        void save(event);
-      }}
-      aria-busy={busy}
-      style={{ display: "grid", gap: 20 }}
-    >
-      <div>
-        <h2 className="mb-2 text-lg font-semibold">Review settings</h2>
-      </div>
-      <fieldset disabled={busy} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
-        <section
-          aria-labelledby={`${prefix}-retention-heading`}
-          style={{
-            display: "grid",
-            gap: 16,
-            padding: "12px 0",
-          }}
-        >
-          <h3 className="m-0 text-base font-semibold" id={`${prefix}-retention-heading`}>
-            Target retention
-          </h3>
-          <p id={`${prefix}-retention-help`} style={{ margin: 0 }}>
-            Higher targets mean more frequent reviews. Start at 90%.
-          </p>
-          <label id={`${prefix}-retention-label`}>
+  const sectionContent1 = (
+    <>
+      <section
+        aria-labelledby={`${prefix}-retention-heading`}
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          gap: 16,
+        }}
+      >
+        <h3 className="m-0 text-base font-semibold" id={`${prefix}-retention-heading`}>
+          Target retention
+        </h3>
+        <FieldDescription id={`${prefix}-retention-help`} style={{ margin: 0 }}>
+          Higher targets mean more frequent reviews. Start at 90%.
+        </FieldDescription>
+        <div className="flex flex-col gap-2">
+          <FieldLabel id={`${prefix}-retention-label`}>
             Target retention: <strong>{retentionPercent}%</strong>
-          </label>
+          </FieldLabel>
           <Slider
             id={`${prefix}-retention`}
             min={70}
@@ -164,7 +156,9 @@ export function SchedulerSettings({ workspace, onSave, readLatest, initialDraft 
               if (value !== undefined) updateRetention(String(value));
             }}
           />
-          <label htmlFor={`${prefix}-retention-number`}>Exact target (%)</label>
+        </div>
+        <FieldLabel className="flex flex-col gap-2" htmlFor={`${prefix}-retention-number`}>
+          Exact target (%)
           <Input
             id={`${prefix}-retention-number`}
             type="number"
@@ -178,33 +172,83 @@ export function SchedulerSettings({ workspace, onSave, readLatest, initialDraft 
               updateRetention(event.target.value);
             }}
           />
-          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14 }}>
-            <span>70% · fewer reviews</span>
-            <span>97% · more reviews</span>
-          </div>
-          <p id={`${prefix}-retention-timing`} style={{ margin: 0 }}>
-            Applies after each card’s next review.
-          </p>
-        </section>
-        <StudyPolicyFields settings={effectiveSettings} onChange={setStudySettings} />
-        <ReviewerSettingsFields settings={effectiveSettings} onChange={setStudySettings} />
-        <AdvancedSchedulingFields
-          key={`advanced:${JSON.stringify(draftWorkspace.schedulerSettings)}`}
-          policy={effectiveSettings}
-          onChange={(policy) => {
-            setStudySettings({ ...studySettings, ...policy });
-          }}
-        />
-        <StudyPresetEditor
-          workspace={draftWorkspace}
-          settings={effectiveSettings}
-          onChange={setStudySettings}
-        />
-        <ParameterFittingPanel
-          key={`fitting:${JSON.stringify(draftWorkspace.schedulerSettings)}`}
-          workspace={draftWorkspace}
-          settings={effectiveSettings}
-          onChange={setStudySettings}
+        </FieldLabel>
+        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14 }}>
+          <span>70% · fewer reviews</span>
+          <span>97% · more reviews</span>
+        </div>
+        <FieldDescription id={`${prefix}-retention-timing`} style={{ margin: 0 }}>
+          Applies after each card’s next review.
+        </FieldDescription>
+      </section>
+      <StudyPolicyFields settings={effectiveSettings} onChange={setStudySettings} />
+    </>
+  );
+  const sectionContent2 = (
+    <>
+      <ReviewerSettingsFields settings={effectiveSettings} onChange={setStudySettings} />
+      <AdvancedSchedulingFields
+        key={`advanced:${JSON.stringify(draftWorkspace.schedulerSettings)}`}
+        policy={effectiveSettings}
+        onChange={(policy) => {
+          setStudySettings({ ...studySettings, ...policy });
+        }}
+      />
+    </>
+  );
+  const sectionContent3 = (
+    <>
+      <StudyPresetEditor
+        workspace={draftWorkspace}
+        settings={effectiveSettings}
+        onChange={setStudySettings}
+      />
+    </>
+  );
+  const sectionContent4 = (
+    <>
+      <ParameterFittingPanel
+        key={`fitting:${JSON.stringify(draftWorkspace.schedulerSettings)}`}
+        workspace={draftWorkspace}
+        settings={effectiveSettings}
+        onChange={setStudySettings}
+      />
+    </>
+  );
+  return (
+    <form
+      onSubmit={(event) => {
+        void save(event);
+      }}
+      aria-busy={busy}
+      className="mx-auto flex flex-col w-full max-w-3xl gap-6"
+    >
+      <h2 className="m-0 text-lg font-semibold">Review settings</h2>
+      <fieldset disabled={busy} className="flex flex-col min-w-0 gap-6 border-0 p-0">
+        <WorkflowSections
+          label="Review settings sections"
+          sections={[
+            {
+              id: "daily",
+              label: "Daily study",
+              content: sectionContent1,
+            },
+            {
+              id: "scheduling",
+              label: "Scheduling",
+              content: sectionContent2,
+            },
+            {
+              id: "presets",
+              label: "Presets",
+              content: sectionContent3,
+            },
+            {
+              id: "fitting",
+              label: "Personalization",
+              content: sectionContent4,
+            },
+          ]}
         />
       </fieldset>
       {feedback && (
@@ -215,10 +259,7 @@ export function SchedulerSettings({ workspace, onSave, readLatest, initialDraft 
           <AlertDescription>{feedback.text}</AlertDescription>
         </Alert>
       )}
-      <div>
-        <Button type="submit" disabled={busy}>
-          {busy ? "Saving…" : "Save settings"}
-        </Button>
+      <FormActions className="sticky bottom-0 z-10 border-t bg-background py-3">
         {readLatest && (
           <Button
             type="button"
@@ -231,7 +272,10 @@ export function SchedulerSettings({ workspace, onSave, readLatest, initialDraft 
             Reload latest settings
           </Button>
         )}
-      </div>
+        <Button type="submit" disabled={busy}>
+          {busy ? "Saving…" : "Save settings"}
+        </Button>
+      </FormActions>
       <AlertDialog open={confirmReload} onOpenChange={setConfirmReload}>
         <AlertDialogContent>
           <AlertDialogHeader>

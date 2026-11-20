@@ -46,7 +46,7 @@ export function CardEditorDuplicateConfirmations({
           ))}
           <NativeButton
             label="Keep both and apply refinement"
-            tone="soft"
+            variant="default"
             disabled={locked}
             onPress={() => {
               void applyRefinement(refinementDuplicate.result, refinementDuplicate.key);
@@ -54,7 +54,7 @@ export function CardEditorDuplicateConfirmations({
           />
           <NativeButton
             label="Cancel refinement"
-            tone="soft"
+            variant="secondary"
             disabled={locked}
             onPress={() => {
               setRefinementDuplicate(null);
@@ -78,7 +78,7 @@ export function CardEditorDuplicateConfirmations({
           ))}
           <NativeButton
             label={duplicatesAccepted ? "Keep both selected" : "Keep both"}
-            tone="soft"
+            variant="default"
             disabled={locked}
             onPress={() => {
               setKeptDuplicateDraft(duplicateDraftKey);

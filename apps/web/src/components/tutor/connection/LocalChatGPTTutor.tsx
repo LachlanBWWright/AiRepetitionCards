@@ -1,7 +1,6 @@
 "use client";
 import {
   useCallback,
-  useEffect,
   useMemo,
   useState,
   useSyncExternalStore,
@@ -9,25 +8,24 @@ import {
   type ReactNode,
 } from "react";
 import type { TutorTokenUsage } from "@recall/ai-core";
-import { selectTutorModel } from "@recall/application";
 import { Effect, Either, Schema } from "effect";
 import { Button, Dialog } from "@recall/ui-web";
-import { readLocalChatGPTConnection } from "./read-local-chatgpt-connection";
+import { useBrowserAiFunding } from "../funding/AiFundingProvider";
+import { AiFundingSettings } from "../funding/AiFundingSettings";
+import { useLocalChatGPTConnection } from "./LocalChatGPTConnectionProvider";
+import { ChatGPTSignInPrompt } from "./ChatGPTSignInPrompt";
 import { localTutorUnavailableReason } from "./local-tutor-readiness";
 import type { ChatModelSelection } from "../chat/ChatModelPicker";
 import { TutorPanel } from "../practice/TutorPanel";
 import { TutorPrivacyControls } from "./TutorPrivacyControls";
-import { ChatGPTResearchPanel } from "../research/ChatGPTResearchPanel";
 import { createLocalChatGptTutor } from "@/lib/chatgpt-local-tutor";
-import { tutorApi } from "@/lib/tutor-api";
+import { tutorApi, createManagedTutorApi } from "@/lib/tutor-api";
 import { createLocalTutorPrivacyApi } from "@/lib/chatgpt-local-privacy";
 import { chatGptPlanFailureMessage } from "@/lib/chatgpt-plan-errors";
 import "@/lib/desktop-api";
-import { localWritesBlocked } from "@/features/workspace/local-write-coordinator";
-import { volatileStorage } from "@/lib/volatile-storage";
 
 import { Alert, AlertDescription } from "@recall/ui-web/components/alert";
-import { ChatGPTPlanControls, Models } from "./LocalChatGPTTutorPlanControls";
+import { ChatGPTPlanControls } from "./LocalChatGPTTutorPlanControls";
 const Reply = Schema.Union(
   Schema.Struct({ _tag: Schema.Literal("Success"), value: Schema.Unknown }),
   Schema.Struct({
@@ -45,11 +43,9 @@ import {
   readSelection,
   setModel,
 } from "./chat-model-selection";
-let welcomeOwner: symbol | null = null;
 
 export { ChatGPTPlanControls } from "./LocalChatGPTTutorPlanControls";
 export type { LocalChatGPTState } from "./LocalChatGPTTutorPlanControls";
-import type { LocalChatGPTState } from "./LocalChatGPTTutorPlanControls";
 
 export function ChatGPTPlanWelcome({ onDismiss }: { onDismiss: () => void }) {
   return (
@@ -61,7 +57,7 @@ export function ChatGPTPlanWelcome({ onDismiss }: { onDismiss: () => void }) {
       <a href="https://chatgpt.com/settings/usage" target="_blank" rel="noreferrer">
         Manage usage
       </a>
-      <Button variant="outline" type="button" onClick={onDismiss}>
+      <Button variant="default" type="button" onClick={onDismiss}>
         Got it
       </Button>
     </Dialog>
@@ -75,34 +71,33 @@ export function LocalChatGPTTutor(
           context: {
             readonly modelSelection?: ChatModelSelection | undefined;
             readonly sessionNamespace: string;
-            readonly research: ReactNode;
             readonly unavailableReason: string | null;
+            readonly connectionPrompt: ReactNode;
           },
         ) => ReactNode;
         readonly settingsOnly?: false;
       })
     | { readonly settingsOnly: true },
 ) {
-  const [connectionId] = useState(() => Symbol("ChatGPT connection"));
-  useEffect(
-    () => () => {
-      if (welcomeOwner === connectionId) welcomeOwner = null;
-    },
-    [connectionId],
-  );
-  const [state, setState] = useState<LocalChatGPTState | null>(null);
+  const funding = useBrowserAiFunding();
+  const {
+    state,
+    models,
+    checking,
+    message: connectionMessage,
+    store: connection,
+  } = useLocalChatGPTConnection();
   const [lastUsage, setLastUsage] = useState<{
     readonly profile: string;
     readonly areaId: string;
     readonly usage: TutorTokenUsage;
   } | null>(null);
-  const [models, setModels] = useState<typeof Models.Type>([]);
   const { model } = useSyncExternalStore(subscribeSelection, readSelection, () => defaultSelection);
   const [busy, setBusy] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
-  const [checking, setChecking] = useState(true);
   const [message, setMessage] = useState<string | null>(null);
-  const [welcome, setWelcome] = useState<string | null>(null);
+  const [welcome, setWelcome] = useState(false);
+  const statusMessage = message ?? connectionMessage;
   const profile = state?.activeClientId ?? "";
   const areaId = props.settingsOnly ? "" : props.knowledgeArea.id;
   const onUsage = useCallback(
@@ -116,84 +111,28 @@ export function LocalChatGPTTutor(
       ? lastUsage.usage
       : null;
   const bridge = typeof window === "undefined" ? undefined : window.recallDesktop?.chatgpt;
-  // Desktop has one AI provider. Route to it even while reconnecting or signed out,
-  // so requests never silently fall back to the Recall service.
-  const isDesktopChatGPT = bridge !== undefined;
+  const isDesktopChatGPT = bridge !== undefined && funding?.mode !== "managed";
+  const managedApi = useMemo(() => createManagedTutorApi(funding?.owner ?? null), [funding?.owner]);
+  const namespace = isDesktopChatGPT
+    ? `chatgpt:${profile}`
+    : `managed:${funding?.owner ?? "disconnected"}`;
   const privacyApi = useMemo(() => createLocalTutorPrivacyApi(profile), [profile]);
   const api = useMemo(
     () => createLocalChatGptTutor(profile, model, areaId, onUsage),
     [profile, model, areaId, onUsage],
   );
-  const refresh = useCallback(
-    () =>
-      Effect.gen(function* () {
-        const bridge = window.recallDesktop?.chatgpt;
-        if (!bridge) return;
-        setChecking(true);
-        const snapshot = yield* readLocalChatGPTConnection(bridge, setState).pipe(
-          Effect.tapError(() =>
-            Effect.sync(() => {
-              setState(null);
-              setModels([]);
-              setModel("");
-            }),
-          ),
-        );
-        setState(snapshot.state);
-        setModels(snapshot.models);
-        setModel((current) => selectTutorModel(snapshot.models, current));
-        setMessage(snapshot.message);
-        const account = snapshot.state.accounts.find(
-          (item) => item.clientId === snapshot.state.activeClientId,
-        );
-        if (!account?.signedIn || !account.planEnabled || snapshot.message) return;
-        const welcomed = yield* Effect.try({
-          try: () => volatileStorage.getItem(`recall-chatgpt-welcome:${account.clientId}`),
-          catch: () => null,
-        });
-        if (!welcomed && (welcomeOwner === null || welcomeOwner === connectionId)) {
-          welcomeOwner = connectionId;
-          setWelcome(account.clientId);
-        }
-      }).pipe(
-        Effect.ensuring(
-          Effect.sync(() => {
-            setChecking(false);
-          }),
-        ),
-      ),
-    [connectionId],
-  );
-  useEffect(() => {
-    Effect.runFork(
-      refresh().pipe(
-        Effect.catchAll((error) =>
-          Effect.sync(() => {
-            setMessage(error);
-          }),
-        ),
-      ),
-    );
-  }, [refresh]);
-  useEffect(() => {
-    const onPlanStateChanged = (event: Event) => {
-      if (event instanceof CustomEvent && event.detail === connectionId) return;
-      Effect.runFork(
-        refresh().pipe(
-          Effect.catchAll((error) =>
-            Effect.sync(() => {
-              setMessage(error);
-            }),
-          ),
-        ),
-      );
-    };
-    window.addEventListener("recall-chatgpt-plan-state-changed", onPlanStateChanged);
-    return () => {
-      window.removeEventListener("recall-chatgpt-plan-state-changed", onPlanStateChanged);
-    };
-  }, [connectionId, refresh]);
-  function operate(operation: () => Promise<unknown>, revoking = false) {
+  const refresh = () => (bridge ? connection.refresh(bridge) : Effect.void);
+  function operate(
+    operation: () => Promise<unknown>,
+    {
+      revoking = false,
+      welcome: showWelcome = false,
+    }: {
+      readonly revoking?: boolean;
+      readonly welcome?: boolean;
+    } = {},
+  ) {
+    connection.invalidate();
     setBusy(true);
     setSigningOut(revoking);
     setMessage(null);
@@ -212,9 +151,15 @@ export function LocalChatGPTTutor(
               : chatGptPlanFailureMessage(reply.right),
           );
         window.dispatchEvent(
-          new CustomEvent("recall-chatgpt-plan-state-changed", { detail: connectionId }),
+          new CustomEvent("recall-chatgpt-plan-state-changed", { detail: connection }),
         );
-        yield* refresh();
+        if (bridge) yield* connection.ensure(bridge);
+        const restored = connection.getSnapshot();
+        const account = restored.state?.accounts.find(
+          (item) => item.clientId === restored.state?.activeClientId,
+        );
+        if (showWelcome && account?.signedIn && account.planEnabled && !restored.message)
+          setWelcome(true);
         if (revoking) {
           const result = Schema.decodeUnknownEither(
             Schema.Struct({ remoteRevocationConfirmed: Schema.Boolean }),
@@ -231,6 +176,7 @@ export function LocalChatGPTTutor(
             setMessage(error);
           }),
         ),
+        Effect.ensuring(bridge ? connection.ensure(bridge).pipe(Effect.ignore) : Effect.void),
         Effect.ensuring(
           Effect.sync(() => {
             setBusy(false);
@@ -240,25 +186,6 @@ export function LocalChatGPTTutor(
       ),
     );
   }
-  const research =
-    !props.settingsOnly &&
-    isDesktopChatGPT &&
-    profile &&
-    model &&
-    state?.accounts.some(
-      (account) => account.clientId === profile && account.signedIn && account.planEnabled,
-    ) ? (
-      <ChatGPTResearchPanel
-        key={`research:${profile}:${model}:${props.knowledgeArea.id}`}
-        expectedClientId={profile}
-        model={model}
-        areaId={props.knowledgeArea.id}
-        disabled={
-          busy ||
-          Boolean(state.accounts.find((account) => account.clientId === profile)?.usagePaused)
-        }
-      />
-    ) : undefined;
   const reloadModels = () => {
     setBusy(true);
     setMessage(null);
@@ -283,36 +210,50 @@ export function LocalChatGPTTutor(
     );
   };
   const dismissWelcome = () => {
-    if (!welcome || localWritesBlocked()) return;
-    Effect.runSync(
-      Effect.try({
-        try: () => {
-          volatileStorage.setItem(`recall-chatgpt-welcome:${welcome}`, "1");
-        },
-        catch: () => null,
-      }).pipe(Effect.catchAll(() => Effect.void)),
-    );
-    if (welcomeOwner === connectionId) welcomeOwner = null;
-    setWelcome(null);
+    setWelcome(false);
   };
-  const unavailableReason =
-    isDesktopChatGPT && checking
+  const unavailableReason = !isDesktopChatGPT
+    ? funding?.mode === "managed"
+      ? funding.unavailableReason
+      : "Choose Recall managed AI in Account → AI settings to begin."
+    : checking
       ? "Checking your ChatGPT connection…"
       : localTutorUnavailableReason({
           desktop: isDesktopChatGPT,
           state,
           model,
-          error: message,
+          error: statusMessage,
         });
+  const modelSelection = isDesktopChatGPT
+    ? {
+        models,
+        usage: usage?.model === model ? usage : null,
+        value: model,
+        onChange: setModel,
+        disabled: busy || checking || Boolean(unavailableReason),
+      }
+    : undefined;
+  const connectionPrompt =
+    bridge && isDesktopChatGPT ? (
+      <ChatGPTSignInPrompt
+        state={state}
+        busy={busy}
+        checking={checking}
+        onSignIn={(clientId, enablePlan) => {
+          operate(() => bridge.signIn({ clientId, enablePlan }), { welcome: true });
+        }}
+      />
+    ) : null;
   return (
     <>
+      {props.settingsOnly && <AiFundingSettings />}
       {props.settingsOnly && !bridge && (
         <Alert role="status">
           <AlertDescription>
-            {message ??
+            {statusMessage ??
               (state
                 ? "ChatGPT access is not enabled in this desktop build. No Recall account is required when it is enabled."
-                : "Checking ChatGPT connection…")}
+                : "ChatGPT access is not enabled in this build.")}
           </AlertDescription>
         </Alert>
       )}
@@ -324,13 +265,13 @@ export function LocalChatGPTTutor(
           busy={busy}
           signingOut={signingOut}
           checking={checking}
-          message={message}
+          message={statusMessage}
           onModel={setModel}
           onSignIn={(clientId, enablePlan) => {
-            operate(() => bridge.signIn({ clientId, enablePlan }));
+            operate(() => bridge.signIn({ clientId, enablePlan }), { welcome: true });
           }}
           onSignOut={(id) => {
-            operate(() => bridge.signOut(id), true);
+            operate(() => bridge.signOut(id), { revoking: true });
           }}
           onReloadModels={reloadModels}
           onResumePlan={(id) => {
@@ -339,7 +280,7 @@ export function LocalChatGPTTutor(
         />
       )}
       {props.settingsOnly && bridge && profile && (
-        <div className="mt-6 border-t pt-5">
+        <div className="border-t pt-6">
           <TutorPrivacyControls
             key={profile}
             api={privacyApi}
@@ -350,28 +291,35 @@ export function LocalChatGPTTutor(
           />
         </div>
       )}
+      {props.settingsOnly && funding?.mode === "managed" && funding.owner && (
+        <TutorPrivacyControls
+          key={`managed:${funding.owner}`}
+          disabled={busy}
+          onBusyChange={setBusy}
+          onCleared={() => {
+            window.dispatchEvent(
+              new CustomEvent("recall-tutor-history-cleared", { detail: namespace }),
+            );
+          }}
+        />
+      )}
       {welcome && <ChatGPTPlanWelcome onDismiss={dismissWelcome} />}
       {props.settingsOnly ? null : props.renderContent ? (
-        props.renderContent(isDesktopChatGPT ? api : (props.api ?? tutorApi), {
-          sessionNamespace: isDesktopChatGPT ? `chatgpt:${profile}` : "hosted",
-          research,
-          modelSelection: isDesktopChatGPT
-            ? {
-                models,
-                usage: usage?.model === model ? usage : null,
-                value: model,
-                onChange: setModel,
-                disabled: busy || checking || Boolean(unavailableReason),
-              }
-            : undefined,
-          unavailableReason,
-        })
+        <div key={namespace} className="flex min-h-0 flex-1 flex-col">
+          {props.renderContent(isDesktopChatGPT ? api : (props.api ?? managedApi), {
+            sessionNamespace: namespace,
+            modelSelection,
+            unavailableReason,
+            connectionPrompt,
+          })}
+        </div>
       ) : (
         <TutorPanel
-          key={isDesktopChatGPT ? `chatgpt:${profile}:${model}` : "hosted"}
+          key={`${namespace}:${model}`}
           {...props}
-          research={research}
-          {...(isDesktopChatGPT ? { api, privacyApi, sessionNamespace: `chatgpt:${profile}` } : {})}
+          api={isDesktopChatGPT ? api : (props.api ?? managedApi)}
+          sessionNamespace={namespace}
+          {...(isDesktopChatGPT ? { privacyApi } : {})}
         />
       )}
     </>

@@ -29,7 +29,7 @@ export function LearningActivityLibraryRow({
       </h3>
       <p className="whitespace-pre-wrap text-sm text-muted-foreground">{activity.fallback}</p>
       <Button
-        variant="secondary"
+        variant="default"
         disabled={disabled || creating || activity.archived || !availableOnWeb}
         onClick={() => {
           onStart(activity);
@@ -38,7 +38,7 @@ export function LearningActivityLibraryRow({
         {availableOnWeb ? "Start activity" : "Unavailable on web"}
       </Button>
       <Button
-        variant="secondary"
+        variant="default"
         disabled={disabled || creating || !availableOnWeb}
         onClick={() => {
           onEdit(activity);
@@ -47,7 +47,7 @@ export function LearningActivityLibraryRow({
         Edit activity
       </Button>
       <Button
-        variant="secondary"
+        variant="default"
         disabled={disabled || creating}
         onClick={() => {
           onArchive(activity);

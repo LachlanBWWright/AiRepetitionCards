@@ -2,6 +2,7 @@
 import * as React from "react";
 import { ChevronDownIcon } from "lucide-react";
 import { Accordion as AccordionPrimitive } from "radix-ui";
+import { disclosureTriggerStyles } from "./disclosure-styles";
 import { cn } from "cn";
 
 function Accordion(props: React.ComponentProps<typeof AccordionPrimitive.Root>) {
@@ -22,14 +23,22 @@ function AccordionItem({
 function AccordionTrigger({
   className,
   children,
+  variant = "default",
   ...props
-}: React.ComponentProps<typeof AccordionPrimitive.Trigger>) {
+}: React.ComponentProps<typeof AccordionPrimitive.Trigger> & {
+  readonly variant?: "default" | "section" | "compact";
+}) {
   return (
     <AccordionPrimitive.Header className="flex text-base font-semibold">
       <AccordionPrimitive.Trigger
         data-slot="accordion-trigger"
         className={cn(
-          "flex flex-1 items-center justify-between gap-4 py-4 text-left text-sm font-medium outline-none transition-all hover:underline focus-visible:ring-[3px] focus-visible:ring-ring/50 [&[data-state=open]>svg]:rotate-180",
+          disclosureTriggerStyles,
+          "flex-1 my-1 [&[data-state=open]>svg]:rotate-180",
+          variant === "section" &&
+            "my-0 min-h-16 rounded-xl px-5 py-4 [&>svg]:self-start [&>svg]:mt-1",
+          variant === "compact" &&
+            "my-0 w-fit flex-none justify-start gap-2 px-0 text-sm text-muted-foreground",
           className,
         )}
         {...props}

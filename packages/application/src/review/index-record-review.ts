@@ -11,6 +11,8 @@ import { scheduleReview, schedulerParameterSetId, type ReviewRating } from "@rec
 import { createSyncedReviewEvent } from "@recall/sync-core";
 import { reviewScheduleHash } from "./review-schedule-hash";
 import { studyQueue, studyCardStatus, type StudyDay } from "./study-queue";
+import { applyLeechAction } from "./leech-actions";
+import { isManuallyBuried } from "./administration/manual-burial";
 import { reviewParameters } from "./presets/resolve-settings";
 
 export type RecordReviewFailure =
@@ -87,6 +89,7 @@ export function recordReview(
       return yield* Effect.fail({ _tag: "ReviewTimestampInvalid" } as const);
     if (
       studyCardStatus(input.workspace, card).suspended ||
+      isManuallyBuried(input.workspace, card.id, ratedAtTime) ||
       (input.studyDay &&
         !studyQueue(input.workspace, area, ratedAtTime, input.studyDay).cards.some(
           (candidate) => candidate.id === card.id,
@@ -137,6 +140,13 @@ export function recordReview(
       event,
       workspace: {
         ...input.workspace,
+        schedulerSettings: applyLeechAction(
+          input.workspace.schedulerSettings,
+          parameters,
+          card,
+          nextSchedule,
+          event.id,
+        ),
         reviewEvents: [...previousEvents, event],
         reviewUndoStates: [
           ...(input.workspace.reviewUndoStates ?? []),

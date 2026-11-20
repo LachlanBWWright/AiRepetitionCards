@@ -4,6 +4,7 @@ import { LiteElement } from "mathjax-full/js/adaptors/lite/Element.js";
 import type { LiteText } from "mathjax-full/js/adaptors/lite/Text.js";
 import type { LiteDocument } from "mathjax-full/js/adaptors/lite/Document.js";
 import { HTMLDocument } from "mathjax-full/js/handlers/html/HTMLDocument.js";
+import type TexError from "mathjax-full/js/input/tex/TexError.js";
 import { TeX } from "mathjax-full/js/input/tex.js";
 import { SVG } from "mathjax-full/js/output/svg.js";
 import "mathjax-full/js/input/tex/ams/AmsConfiguration.js";
@@ -16,6 +17,21 @@ const failure = (): CardMathFailure => ({
   message: "Check this equation's TeX syntax.",
 });
 
+function texInput(onFailure: (failure: CardMathFailure) => void) {
+  return new TeX<LiteElement, LiteText, LiteDocument>({
+    packages: ["base", "ams", "newcommand"],
+    maxBuffer: 8000,
+    maxMacros: 500,
+    formatError: (jax: TeX<LiteElement, LiteText, LiteDocument>, error: TexError) => {
+      onFailure({
+        _tag: "CardMathFailure",
+        message: `Equation: ${error.message.split("\n")[0]?.slice(0, 300) ?? "Check TeX syntax."}`,
+      });
+      return jax.formatError(error);
+    },
+  });
+}
+
 /** Offline SVG only: no autoload, URLs, HTML, external fonts, or user-supplied extensions. */
 export function renderCardMath(
   source: string,
@@ -25,17 +41,16 @@ export function renderCardMath(
   return Effect.runSync(
     Effect.either(
       Effect.try({
-        try: () => {
+        try: (): CardMathSvg | CardMathFailure | undefined => {
           // Each equation gets an isolated parser so macro definitions cannot leak between cards.
+          let texFailure: CardMathFailure | undefined;
           const adaptor = liteAdaptor();
           const document = new HTMLDocument<LiteElement, LiteText, LiteDocument>(
             adaptor.parse("", "text/html"),
             adaptor,
             {
-              InputJax: new TeX<LiteElement, LiteText, LiteDocument>({
-                packages: ["base", "ams", "newcommand"],
-                maxBuffer: 8000,
-                maxMacros: 500,
+              InputJax: texInput((error) => {
+                texFailure = error;
               }),
               OutputJax: new SVG<LiteElement, LiteText, LiteDocument>({ fontCache: "none" }),
             },
@@ -46,6 +61,7 @@ export function renderCardMath(
             ex: 10,
             containerWidth: 640,
           });
+          if (texFailure) return texFailure;
           if (!(node instanceof LiteElement)) return undefined;
           const svg = adaptor.tags(node, "svg")[0];
           if (
@@ -66,8 +82,21 @@ export function renderCardMath(
         },
         catch: failure,
       }).pipe(
-        Effect.flatMap((result) => (result ? Effect.succeed(result) : Effect.fail(failure()))),
+        Effect.flatMap((result) =>
+          !result
+            ? Effect.fail(failure())
+            : "_tag" in result
+              ? Effect.fail(result)
+              : Effect.succeed(result),
+        ),
       ),
     ),
   );
+}
+
+export function cardEquationError(source: string, display = false): string | null {
+  if (!source.trim()) return "Enter an equation using TeX notation.";
+  if (source.length > 4000) return "Keep the equation within 4,000 characters.";
+  const result = renderCardMath(source, display);
+  return Either.isLeft(result) ? result.left.message : null;
 }

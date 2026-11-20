@@ -35,7 +35,7 @@ export const NoSearchMatches: Story = {
   args: {
     title: "No matching cards.",
     description: "Try a different phrase or clear your filters.",
-    action: <Button variant="secondary">Clear filters</Button>,
+    action: <Button variant="default">Clear filters</Button>,
   },
 };
 export const ImportUnavailable: Story = {
@@ -43,7 +43,7 @@ export const ImportUnavailable: Story = {
     icon: "!",
     title: "This file could not be imported.",
     description: "Choose a supported Recall JSON or Anki package to try again.",
-    action: <Button variant="secondary">Choose another file</Button>,
+    action: <Button variant="default">Choose another file</Button>,
   },
 };
 export const FullScreenStates: Story = {

@@ -1,7 +1,8 @@
+import { NativeButton } from "@recall/ui-native";
+
 import type { Dispatch, SetStateAction } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Text, View } from "react-native";
 import type { LearningArea } from "@recall/domain";
-import { NativeButton } from "../../ui/NativeButton";
 
 export type NativeWorkspaceDeckControlsProps = {
   readonly area: LearningArea;
@@ -15,7 +16,7 @@ export type NativeWorkspaceDeckControlsProps = {
   readonly onAddCard: () => void;
   readonly onGenerateCards: (() => void) | undefined;
   readonly onStudy: ((areaId: LearningArea["id"]) => void) | undefined;
-  readonly now: number;
+  readonly dueCount: number;
   readonly hasWorkspace: boolean;
 };
 
@@ -31,57 +32,66 @@ export function NativeWorkspaceDeckControls({
   onAddCard,
   onGenerateCards,
   onStudy,
-  now,
+  dueCount,
   hasWorkspace,
 }: NativeWorkspaceDeckControlsProps) {
   return (
     <>
       <View className="flex-row items-center justify-between gap-[12px]">
         <Text className="text-recall-ink text-[16px] font-bold">{area.title}</Text>
-        <Pressable
-          accessibilityRole="button"
+        <NativeButton
+          label="⋯"
+          variant="secondary"
+          size="icon"
           accessibilityLabel="Deck actions"
           accessibilityState={{ expanded: areaMenu, disabled: locked }}
           disabled={locked}
           onPress={() => {
             setAreaMenu((value) => !value);
           }}
-          className="min-w-[44px] min-h-[44px] items-center justify-center"
-        >
-          <Text className="text-recall-ink text-[16px] font-bold">⋯</Text>
-        </Pressable>
+        />
       </View>
       {areaMenu && (
         <View className="gap-[8px] pb-[12px]">
-          <NativeButton label="Rename area" tone="soft" disabled={locked} onPress={onRename} />
+          <NativeButton
+            label="Rename area"
+            variant="secondary"
+            disabled={locked}
+            onPress={onRename}
+          />
           <NativeButton
             label="Subject settings"
-            tone="soft"
+            variant="secondary"
             disabled={locked}
             onPress={onSettings}
           />
           <NativeButton
             label="Review settings"
-            tone="soft"
+            variant="secondary"
             disabled={locked || !hasWorkspace}
             onPress={onScheduler}
           />
-          <NativeButton label="Delete subject" tone="soft" disabled={locked} onPress={onDelete} />
+          <NativeButton
+            label="Delete subject"
+            variant="destructive"
+            disabled={locked}
+            onPress={onDelete}
+          />
         </View>
       )}
-      <NativeButton label="Add card" tone="soft" disabled={locked} onPress={onAddCard} />
+      <NativeButton label="Add card" variant="default" disabled={locked} onPress={onAddCard} />
       {onGenerateCards && (
         <NativeButton
           label="Generate cards"
-          tone="soft"
+          variant="secondary"
           disabled={locked}
           onPress={onGenerateCards}
         />
       )}
       {onStudy && (
         <NativeButton
-          label={`Review ${String(area.cards.filter((card) => Date.parse(card.schedule.due) <= now).length)} due cards`}
-          disabled={locked || !area.cards.some((card) => Date.parse(card.schedule.due) <= now)}
+          label={`Review ${String(dueCount)} due cards`}
+          disabled={locked || dueCount === 0}
           onPress={() => {
             onStudy(area.id);
           }}

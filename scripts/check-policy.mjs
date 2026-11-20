@@ -30,6 +30,12 @@ const sidebarProviderGuard = {
   file: "packages/ui-web/src/components/sidebar.tsx",
   line: /^\s*if \(!context\) throw new Error\("Sidebar components must be used inside SidebarProvider\."\);\s*$/,
 };
+// This licensed Python card describes exception syntax as quoted study content.
+// Permit only this exact string literal, never executable exception control flow.
+const starterExceptionVocabulary = {
+  file: "packages/application/src/workspace/starters/data/python-2.ts",
+  line: /^\s*"How do you raise an exception\?\\n\\nraise ValueError\('message'\)\. You can raise built-in or your own custom exception classes\. \(Like throw in PowerShell\.\)",\s*$/,
+};
 const platformDependencies =
   /^(?:react(?:-dom)?(?:\/|$)|next(?:\/|$)|@supabase\/|expo(?:[-/]|$)|react-native(?:-web)?(?:\/|$)|electron(?:\/|$)|openai(?:\/|$)|node:|server-only$)/;
 const layerRestrictions = [
@@ -112,7 +118,7 @@ for (const file of files) {
     for (const rule of forbidden) {
       if (
         rule.name === "exception control flow" &&
-        [storageQuotaFixture, sidebarProviderGuard].some(
+        [storageQuotaFixture, sidebarProviderGuard, starterExceptionVocabulary].some(
           (exception) => relativeFile === exception.file && exception.line.test(line),
         )
       )

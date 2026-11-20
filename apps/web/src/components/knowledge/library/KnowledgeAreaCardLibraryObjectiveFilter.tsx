@@ -1,5 +1,12 @@
 import type { LearningArea } from "@recall/domain";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@recall/ui-web";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+  FieldLabel,
+} from "@recall/ui-web";
 
 type KnowledgeAreaCardLibraryObjectiveFilterProps = {
   readonly fieldId: string;
@@ -19,7 +26,7 @@ export function KnowledgeAreaCardLibraryObjectiveFilter({
   if (objectives.length === 0 && legacyObjectives.length === 0) return null;
 
   return (
-    <label htmlFor={`${fieldId}-objective`} className="w-full sm:w-52">
+    <FieldLabel htmlFor={`${fieldId}-objective`} className="min-w-0 w-full">
       <span className="sr-only">Learning objective</span>
       <Select value={value || "all"} onValueChange={onChange}>
         <SelectTrigger id={`${fieldId}-objective`} aria-label="Learning objective">
@@ -39,6 +46,6 @@ export function KnowledgeAreaCardLibraryObjectiveFilter({
           ))}
         </SelectContent>
       </Select>
-    </label>
+    </FieldLabel>
   );
 }

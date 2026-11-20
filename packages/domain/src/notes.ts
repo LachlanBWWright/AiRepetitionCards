@@ -18,6 +18,7 @@ export const NoteTypeSchema = Schema.Struct({
       name: Schema.String.pipe(Schema.minLength(1), Schema.maxLength(80)),
       front: Schema.String.pipe(Schema.maxLength(20_000)),
       back: Schema.String.pipe(Schema.maxLength(20_000)),
+      explanation: Schema.optional(Schema.String.pipe(Schema.maxLength(10_000))),
       clozeField: Schema.optional(FieldName),
       deckAreaId: Schema.optional(AreaIdSchema),
       presentation: Schema.optional(ReviewPresentationSchema),

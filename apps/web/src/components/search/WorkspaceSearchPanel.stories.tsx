@@ -91,9 +91,9 @@ const demoNotebooks = [{ namespace: "hosted", notebook }];
 function SearchStory({ query }: { readonly query: string }) {
   const [selected, setSelected] = useState<WorkspaceSearchResult | null>(null);
   return (
-    <main style={{ minHeight: "100vh", background: "#faf9f6", padding: "40px 24px" }}>
-      <div style={{ maxWidth: 780, margin: "0 auto" }}>
-        <h1>Search</h1>
+    <main className="min-h-screen bg-background px-4 py-6 text-foreground sm:px-6 sm:py-10">
+      <div className="mx-auto w-full max-w-3xl space-y-6">
+        <h1 className="text-2xl font-semibold">Search</h1>
         <WorkspaceSearchPanel
           workspace={mockWorkspace}
           ownershipKey="storybook"

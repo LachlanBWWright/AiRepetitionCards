@@ -1,3 +1,6 @@
+import { useId } from "react";
+import { FieldDescription, FieldError } from "@recall/ui-web/components/field";
+import { Label } from "@recall/ui-web/components/label";
 import { useFilteredStudy } from "@recall/react";
 import { Either } from "effect";
 import type { FilteredDeck, LearningArea, Workspace } from "@recall/domain";
@@ -26,6 +29,7 @@ export function FilteredStudyControls({
   readonly onStart: (area: LearningArea, deck?: FilteredDeck) => void;
   readonly save: SaveStudyCommand;
 }) {
+  const queryErrorId = useId();
   const {
     deck,
     scope,
@@ -102,27 +106,29 @@ export function FilteredStudyControls({
         </Select>
       )}
       <div className="flex gap-2">
-        <Button variant="secondary" onClick={newCollection}>
+        <Button variant="default" onClick={newCollection}>
           New collection
         </Button>
         <Button
-          variant="secondary"
+          variant="default"
           disabled={!name.trim() || controls.busy || Either.isLeft(filtered)}
           onClick={saveCollection}
         >
           Save collection
         </Button>
         <Button
-          variant="secondary"
+          variant="default"
           disabled={controls.busy || !settings.filteredDecks?.some((item) => item.id === deck.id)}
           onClick={removeCollection}
         >
           Delete collection
         </Button>
       </div>
-      <label>
+      <Label className="grid gap-2">
         Card search
         <Input
+          aria-invalid={Either.isLeft(filtered)}
+          aria-describedby={Either.isLeft(filtered) ? queryErrorId : undefined}
           value={query}
           maxLength={500}
           onChange={(event) => {
@@ -130,8 +136,8 @@ export function FilteredStudyControls({
           }}
           placeholder="tag:biology (is:due OR rated:7:again)"
         />
-      </label>
-      <p className="text-sm text-muted-foreground">{CARD_SEARCH_HELP}</p>
+      </Label>
+      <FieldDescription>{CARD_SEARCH_HELP}</FieldDescription>
       {(settings.savedSearches?.length ?? 0) > 0 && (
         <Select onValueChange={setQuery}>
           <SelectTrigger aria-label="Saved card searches">
@@ -146,7 +152,7 @@ export function FilteredStudyControls({
           </SelectContent>
         </Select>
       )}
-      <label>
+      <Label className="grid gap-2">
         Card limit
         <Input
           type="number"
@@ -157,7 +163,7 @@ export function FilteredStudyControls({
             setLimit(event.target.value);
           }}
         />
-      </label>
+      </Label>
       <Select
         value={order}
         onValueChange={(value) => {
@@ -176,7 +182,7 @@ export function FilteredStudyControls({
         </SelectContent>
       </Select>
       {Either.isLeft(filtered) ? (
-        <p role="alert">{filtered.left.message}</p>
+        <FieldError id={queryErrorId}>{filtered.left.message}</FieldError>
       ) : (
         <p role="status">
           {filtered.right.cards.length} cards selected. Suspended cards are excluded.
@@ -195,14 +201,14 @@ export function FilteredStudyControls({
           Rebuild and start collection
         </Button>
         <Button
-          variant="secondary"
+          variant="default"
           disabled={controls.busy || Either.isLeft(filtered) || !query.trim()}
           onClick={filterReviews}
         >
           Filter scheduled reviews
         </Button>
       </div>
-      <label>
+      <Label className="grid gap-2">
         Save this search as
         <Input
           value={name}
@@ -211,13 +217,13 @@ export function FilteredStudyControls({
             setName(event.target.value);
           }}
         />
-      </label>
-      <Button variant="secondary" disabled={!canSaveSearch} onClick={saveSearch}>
+      </Label>
+      <Button variant="default" disabled={!canSaveSearch} onClick={saveSearch}>
         Save search
       </Button>
       {settings.savedSearches?.some((search) => search.query === query) && (
         <Button
-          variant="secondary"
+          variant="default"
           disabled={controls.busy}
           onClick={() => {
             deleteSearch();

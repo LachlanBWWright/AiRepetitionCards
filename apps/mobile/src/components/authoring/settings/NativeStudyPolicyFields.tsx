@@ -1,18 +1,26 @@
+import { NativeStudySessionFields } from "./NativeStudySessionFields";
 import { siblingBuryOptions } from "@recall/application";
-import type { SchedulerPolicy } from "@recall/domain";
 import { NativeSelect, NativeTextField } from "@recall/ui-native";
 import { View } from "react-native";
 export function NativeStudyPolicyFields({
   policy,
   disabled,
   onChange,
+  workspace = false,
 }: {
-  readonly policy: SchedulerPolicy;
+  readonly workspace?: boolean;
+  readonly policy: import("@recall/domain").SchedulerSettings;
   readonly disabled: boolean;
-  readonly onChange: (policy: SchedulerPolicy) => void;
+  readonly onChange: (policy: import("@recall/domain").SchedulerSettings) => void;
 }) {
   return (
     <View className="gap-3">
+      <NativeStudySessionFields
+        settings={policy}
+        disabled={disabled}
+        onChange={onChange}
+        workspace={workspace}
+      />
       <NativeTextField
         label="Daily new cards"
         keyboardType="number-pad"

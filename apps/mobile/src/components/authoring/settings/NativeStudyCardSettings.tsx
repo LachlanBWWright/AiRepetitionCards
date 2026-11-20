@@ -73,7 +73,7 @@ function NativeStudyCardRow({
       </Text>
       <NativeButton
         label={status.suspended ? "Resume on save" : "Suspend on save"}
-        tone="soft"
+        variant="default"
         disabled={disabled}
         onPress={toggle}
       />

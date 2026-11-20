@@ -1,0 +1,62 @@
+-- Rollback-only ledger checks; requires 20261105000000_managed_ai.sql.
+begin;
+insert into auth.users(id) values ('a1111111-1111-4111-8111-111111111111'),('a2222222-2222-4222-8222-222222222222');
+insert into public.managed_ai_deployments values ('test','anthropic','fixture-model',true,96000,2600,'fixture-v1',1000000,2000000);
+insert into public.managed_ai_routes values ('question','test');
+insert into public.managed_ai_grants values ('a1111111-1111-4111-8111-111111111111',now()+interval '1 day',true,array['test'],1000000,30,1);
+create function pg_temp.reserve(call_id uuid, bytes integer default 1000) returns jsonb language sql as $$
+  select public.managed_ai_reserve('a1111111-1111-4111-8111-111111111111',call_id,'question','test','fixture-v1','fixture-model',bytes,100);
+$$;
+do $$
+declare owner uuid := 'a1111111-1111-4111-8111-111111111111'; call_id uuid := gen_random_uuid(); held bigint; before_count bigint; result jsonb; admitted_after timestamptz;
+begin
+  if (public.managed_ai_plan(owner,'question')->>'allowed')::boolean then raise exception 'default off bypass'; end if;
+  update public.managed_ai_policy set enabled=true where id;
+  if (public.managed_ai_plan('a2222222-2222-4222-8222-222222222222','question')->>'allowed')::boolean then raise exception 'ungranted account admitted'; end if;
+  if pg_temp.reserve(gen_random_uuid(),96001)->>'reason'<>'request-too-large' then raise exception 'oversize admitted'; end if;
+  admitted_after:=clock_timestamp();
+  if not (pg_temp.reserve(call_id)->>'allowed')::boolean then raise exception 'valid request denied'; end if;
+  if (select created_at from public.managed_ai_calls where id=call_id)<admitted_after then raise exception 'admission used stale transaction time'; end if;
+  if pg_temp.reserve(call_id)->>'reason'<>'duplicate-request' then raise exception 'duplicate replay allowed'; end if;
+  if pg_temp.reserve(gen_random_uuid())->>'reason'<>'managed-concurrency-limit' then raise exception 'concurrency bypass'; end if;
+  select charged_microusd into held from public.managed_ai_daily where scope=owner::text;
+  if not public.managed_ai_settle(owner,call_id,null,null) then raise exception 'unknown settlement rejected'; end if;
+  if (select charged_microusd from public.managed_ai_daily where scope=owner::text)<>held then raise exception 'unknown usage refunded'; end if;
+  if not public.managed_ai_settle(owner,call_id,100,10,'verified-model') then raise exception 'reconciliation failed'; end if;
+  if not public.managed_ai_settle(owner,call_id,100,10,'verified-model') then raise exception 'idempotent settlement failed'; end if;
+  if public.managed_ai_settle(owner,call_id,1,1) then raise exception 'conflicting settlement allowed'; end if;
+  if public.managed_ai_settle('a2222222-2222-4222-8222-222222222222',call_id,0,0) then raise exception 'foreign settlement allowed'; end if;
+  if (select charged_microusd from public.managed_ai_daily where scope=owner::text)<>120 then raise exception 'wrong actual cost'; end if;
+  if (select returned_model from public.managed_ai_calls where id=call_id)<>'verified-model' then raise exception 'returned model not recorded'; end if;
+  if (select calls from public.managed_ai_daily where scope=owner::text)<>1 then raise exception 'request count refunded'; end if;
+  update public.managed_ai_grants set expires_at=clock_timestamp()+interval '20 milliseconds' where user_id=owner;
+  perform pg_sleep(0.03);
+  if pg_temp.reserve(gen_random_uuid())->>'reason'<>'managed-not-entitled' then raise exception 'grant expiry used stale transaction time'; end if;
+  update public.managed_ai_grants set expires_at=now()-interval '1 second' where user_id=owner;
+  if pg_temp.reserve(gen_random_uuid())->>'reason'<>'managed-not-entitled' then raise exception 'expired grant admitted'; end if;
+  update public.managed_ai_grants set expires_at=now()+interval '1 day',daily_request_limit=1 where user_id=owner;
+  if pg_temp.reserve(gen_random_uuid())->>'reason'<>'managed-budget-exceeded' then raise exception 'request ceiling bypass'; end if;
+  update public.managed_ai_grants set daily_request_limit=30,daily_budget_microusd=121 where user_id=owner;
+  if pg_temp.reserve(gen_random_uuid())->>'reason'<>'managed-budget-exceeded' then raise exception 'account budget bypass'; end if;
+  update public.managed_ai_grants set daily_budget_microusd=1000000 where user_id=owner;
+  update public.managed_ai_policy set daily_budget_microusd=121 where id;
+  if pg_temp.reserve(gen_random_uuid())->>'reason'<>'managed-budget-exceeded' then raise exception 'platform budget bypass'; end if;
+  update public.managed_ai_policy set daily_budget_microusd=1000000 where id;
+  update public.managed_ai_deployments set enabled=false where id='test';
+  if pg_temp.reserve(gen_random_uuid())->>'reason'<>'route-unavailable' then raise exception 'disabled deployment admitted'; end if;
+  update public.managed_ai_deployments set enabled=true where id='test';
+  call_id:=gen_random_uuid();
+  perform pg_temp.reserve(call_id);
+  -- Settlement uses the admission day, even after the current day changes.
+  update public.managed_ai_daily set day=day-1;
+  update public.managed_ai_calls set admitted_day=admitted_day-1;
+  if not public.managed_ai_settle(owner,call_id,10,10) then raise exception 'prior-day settlement failed'; end if;
+  if (select charged_microusd from public.managed_ai_daily where scope=owner::text)<>150 then raise exception 'settled wrong day'; end if;
+  call_id:=gen_random_uuid(); perform pg_temp.reserve(call_id);
+  if public.managed_ai_settle(owner,call_id,1000000,1000000) then raise exception 'excess usage did not fail'; end if;
+  if (select enabled from public.managed_ai_policy where id) then raise exception 'excess usage did not trip kill switch'; end if;
+  if has_function_privilege('authenticated','public.managed_ai_reserve(uuid,uuid,text,text,text,text,integer,integer)','EXECUTE') then raise exception 'client can reserve'; end if;
+  if has_function_privilege('authenticated','public.managed_ai_settle(uuid,uuid,integer,integer,text)','EXECUTE') then raise exception 'client can refund'; end if;
+  if has_table_privilege('authenticated','public.managed_ai_grants','UPDATE') then raise exception 'client can mint grants'; end if;
+end $$;
+rollback;

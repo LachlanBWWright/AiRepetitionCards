@@ -6,6 +6,7 @@ import {
   type Workspace,
 } from "@recall/domain";
 import { orderReviewEvents } from "@recall/sync-core";
+import { undoLeechAction } from "../leech-actions";
 import { rebuildWorkspaceSchedules } from "../schedule-replay";
 export const UndoReviewCommandSchema = Schema.Struct({
   kind: Schema.Literal("undo-review"),
@@ -44,7 +45,7 @@ export function undoReview(
     if (!Number.isFinite(now.getTime()) || undoableReview(workspace)?.id !== command.eventId)
       return yield* Effect.fail(invalid);
     return yield* rebuildWorkspaceSchedules({
-      ...workspace,
+      ...undoLeechAction(workspace, command.eventId),
       reviewCorrections: [
         ...(workspace.reviewCorrections ?? []),
         { id: command.operationId, eventId: command.eventId, recordedAt: now.toISOString() },

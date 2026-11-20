@@ -278,6 +278,12 @@
                                 "title": "maxLength(20000)",
                                 "maxLength": 20000
                               },
+                              "explanation": {
+                                "type": "string",
+                                "description": "a string at most 10000 character(s) long",
+                                "title": "maxLength(10000)",
+                                "maxLength": 10000
+                              },
                               "clozeField": {
                                 "type": "string",
                                 "description": "a string matching the pattern ^[A-Za-z][A-Za-z0-9 _-]{0,79}$",
@@ -322,7 +328,8 @@
                                         "type": "string",
                                         "enum": [
                                           "left",
-                                          "center"
+                                          "center",
+                                          "right"
                                         ]
                                       },
                                       "lineSpacing": {
@@ -331,6 +338,206 @@
                                           "compact",
                                           "comfortable"
                                         ]
+                                      },
+                                      "direction": {
+                                        "type": "string",
+                                        "enum": [
+                                          "auto",
+                                          "ltr",
+                                          "rtl"
+                                        ]
+                                      },
+                                      "imageSize": {
+                                        "type": "string",
+                                        "enum": [
+                                          "small",
+                                          "medium",
+                                          "large"
+                                        ]
+                                      }
+                                    },
+                                    "additionalProperties": false
+                                  },
+                                  "fieldAppearance": {
+                                    "type": "object",
+                                    "required": [],
+                                    "properties": {
+                                      "front": {
+                                        "type": "object",
+                                        "required": [
+                                          "font",
+                                          "size",
+                                          "align",
+                                          "lineSpacing"
+                                        ],
+                                        "properties": {
+                                          "font": {
+                                            "type": "string",
+                                            "enum": [
+                                              "sans",
+                                              "serif",
+                                              "mono"
+                                            ]
+                                          },
+                                          "size": {
+                                            "type": "string",
+                                            "enum": [
+                                              "small",
+                                              "medium",
+                                              "large"
+                                            ]
+                                          },
+                                          "align": {
+                                            "type": "string",
+                                            "enum": [
+                                              "left",
+                                              "center",
+                                              "right"
+                                            ]
+                                          },
+                                          "lineSpacing": {
+                                            "type": "string",
+                                            "enum": [
+                                              "compact",
+                                              "comfortable"
+                                            ]
+                                          },
+                                          "direction": {
+                                            "type": "string",
+                                            "enum": [
+                                              "auto",
+                                              "ltr",
+                                              "rtl"
+                                            ]
+                                          },
+                                          "imageSize": {
+                                            "type": "string",
+                                            "enum": [
+                                              "small",
+                                              "medium",
+                                              "large"
+                                            ]
+                                          }
+                                        },
+                                        "additionalProperties": false
+                                      },
+                                      "back": {
+                                        "type": "object",
+                                        "required": [
+                                          "font",
+                                          "size",
+                                          "align",
+                                          "lineSpacing"
+                                        ],
+                                        "properties": {
+                                          "font": {
+                                            "type": "string",
+                                            "enum": [
+                                              "sans",
+                                              "serif",
+                                              "mono"
+                                            ]
+                                          },
+                                          "size": {
+                                            "type": "string",
+                                            "enum": [
+                                              "small",
+                                              "medium",
+                                              "large"
+                                            ]
+                                          },
+                                          "align": {
+                                            "type": "string",
+                                            "enum": [
+                                              "left",
+                                              "center",
+                                              "right"
+                                            ]
+                                          },
+                                          "lineSpacing": {
+                                            "type": "string",
+                                            "enum": [
+                                              "compact",
+                                              "comfortable"
+                                            ]
+                                          },
+                                          "direction": {
+                                            "type": "string",
+                                            "enum": [
+                                              "auto",
+                                              "ltr",
+                                              "rtl"
+                                            ]
+                                          },
+                                          "imageSize": {
+                                            "type": "string",
+                                            "enum": [
+                                              "small",
+                                              "medium",
+                                              "large"
+                                            ]
+                                          }
+                                        },
+                                        "additionalProperties": false
+                                      },
+                                      "explanation": {
+                                        "type": "object",
+                                        "required": [
+                                          "font",
+                                          "size",
+                                          "align",
+                                          "lineSpacing"
+                                        ],
+                                        "properties": {
+                                          "font": {
+                                            "type": "string",
+                                            "enum": [
+                                              "sans",
+                                              "serif",
+                                              "mono"
+                                            ]
+                                          },
+                                          "size": {
+                                            "type": "string",
+                                            "enum": [
+                                              "small",
+                                              "medium",
+                                              "large"
+                                            ]
+                                          },
+                                          "align": {
+                                            "type": "string",
+                                            "enum": [
+                                              "left",
+                                              "center",
+                                              "right"
+                                            ]
+                                          },
+                                          "lineSpacing": {
+                                            "type": "string",
+                                            "enum": [
+                                              "compact",
+                                              "comfortable"
+                                            ]
+                                          },
+                                          "direction": {
+                                            "type": "string",
+                                            "enum": [
+                                              "auto",
+                                              "ltr",
+                                              "rtl"
+                                            ]
+                                          },
+                                          "imageSize": {
+                                            "type": "string",
+                                            "enum": [
+                                              "small",
+                                              "medium",
+                                              "large"
+                                            ]
+                                          }
+                                        },
+                                        "additionalProperties": false
                                       }
                                     },
                                     "additionalProperties": false
@@ -618,6 +825,12 @@
                             "basic"
                           ]
                         },
+                        "explanation": {
+                          "type": "string",
+                          "description": "a string at most 10000 character(s) long",
+                          "title": "maxLength(10000)",
+                          "maxLength": 10000
+                        },
                         "presentation": {
                           "type": "object",
                           "required": [],
@@ -651,7 +864,8 @@
                                   "type": "string",
                                   "enum": [
                                     "left",
-                                    "center"
+                                    "center",
+                                    "right"
                                   ]
                                 },
                                 "lineSpacing": {
@@ -660,6 +874,206 @@
                                     "compact",
                                     "comfortable"
                                   ]
+                                },
+                                "direction": {
+                                  "type": "string",
+                                  "enum": [
+                                    "auto",
+                                    "ltr",
+                                    "rtl"
+                                  ]
+                                },
+                                "imageSize": {
+                                  "type": "string",
+                                  "enum": [
+                                    "small",
+                                    "medium",
+                                    "large"
+                                  ]
+                                }
+                              },
+                              "additionalProperties": false
+                            },
+                            "fieldAppearance": {
+                              "type": "object",
+                              "required": [],
+                              "properties": {
+                                "front": {
+                                  "type": "object",
+                                  "required": [
+                                    "font",
+                                    "size",
+                                    "align",
+                                    "lineSpacing"
+                                  ],
+                                  "properties": {
+                                    "font": {
+                                      "type": "string",
+                                      "enum": [
+                                        "sans",
+                                        "serif",
+                                        "mono"
+                                      ]
+                                    },
+                                    "size": {
+                                      "type": "string",
+                                      "enum": [
+                                        "small",
+                                        "medium",
+                                        "large"
+                                      ]
+                                    },
+                                    "align": {
+                                      "type": "string",
+                                      "enum": [
+                                        "left",
+                                        "center",
+                                        "right"
+                                      ]
+                                    },
+                                    "lineSpacing": {
+                                      "type": "string",
+                                      "enum": [
+                                        "compact",
+                                        "comfortable"
+                                      ]
+                                    },
+                                    "direction": {
+                                      "type": "string",
+                                      "enum": [
+                                        "auto",
+                                        "ltr",
+                                        "rtl"
+                                      ]
+                                    },
+                                    "imageSize": {
+                                      "type": "string",
+                                      "enum": [
+                                        "small",
+                                        "medium",
+                                        "large"
+                                      ]
+                                    }
+                                  },
+                                  "additionalProperties": false
+                                },
+                                "back": {
+                                  "type": "object",
+                                  "required": [
+                                    "font",
+                                    "size",
+                                    "align",
+                                    "lineSpacing"
+                                  ],
+                                  "properties": {
+                                    "font": {
+                                      "type": "string",
+                                      "enum": [
+                                        "sans",
+                                        "serif",
+                                        "mono"
+                                      ]
+                                    },
+                                    "size": {
+                                      "type": "string",
+                                      "enum": [
+                                        "small",
+                                        "medium",
+                                        "large"
+                                      ]
+                                    },
+                                    "align": {
+                                      "type": "string",
+                                      "enum": [
+                                        "left",
+                                        "center",
+                                        "right"
+                                      ]
+                                    },
+                                    "lineSpacing": {
+                                      "type": "string",
+                                      "enum": [
+                                        "compact",
+                                        "comfortable"
+                                      ]
+                                    },
+                                    "direction": {
+                                      "type": "string",
+                                      "enum": [
+                                        "auto",
+                                        "ltr",
+                                        "rtl"
+                                      ]
+                                    },
+                                    "imageSize": {
+                                      "type": "string",
+                                      "enum": [
+                                        "small",
+                                        "medium",
+                                        "large"
+                                      ]
+                                    }
+                                  },
+                                  "additionalProperties": false
+                                },
+                                "explanation": {
+                                  "type": "object",
+                                  "required": [
+                                    "font",
+                                    "size",
+                                    "align",
+                                    "lineSpacing"
+                                  ],
+                                  "properties": {
+                                    "font": {
+                                      "type": "string",
+                                      "enum": [
+                                        "sans",
+                                        "serif",
+                                        "mono"
+                                      ]
+                                    },
+                                    "size": {
+                                      "type": "string",
+                                      "enum": [
+                                        "small",
+                                        "medium",
+                                        "large"
+                                      ]
+                                    },
+                                    "align": {
+                                      "type": "string",
+                                      "enum": [
+                                        "left",
+                                        "center",
+                                        "right"
+                                      ]
+                                    },
+                                    "lineSpacing": {
+                                      "type": "string",
+                                      "enum": [
+                                        "compact",
+                                        "comfortable"
+                                      ]
+                                    },
+                                    "direction": {
+                                      "type": "string",
+                                      "enum": [
+                                        "auto",
+                                        "ltr",
+                                        "rtl"
+                                      ]
+                                    },
+                                    "imageSize": {
+                                      "type": "string",
+                                      "enum": [
+                                        "small",
+                                        "medium",
+                                        "large"
+                                      ]
+                                    }
+                                  },
+                                  "additionalProperties": false
                                 }
                               },
                               "additionalProperties": false
@@ -996,6 +1410,12 @@
                             "cloze"
                           ]
                         },
+                        "explanation": {
+                          "type": "string",
+                          "description": "a string at most 10000 character(s) long",
+                          "title": "maxLength(10000)",
+                          "maxLength": 10000
+                        },
                         "presentation": {
                           "type": "object",
                           "required": [],
@@ -1029,7 +1449,8 @@
                                   "type": "string",
                                   "enum": [
                                     "left",
-                                    "center"
+                                    "center",
+                                    "right"
                                   ]
                                 },
                                 "lineSpacing": {
@@ -1038,6 +1459,206 @@
                                     "compact",
                                     "comfortable"
                                   ]
+                                },
+                                "direction": {
+                                  "type": "string",
+                                  "enum": [
+                                    "auto",
+                                    "ltr",
+                                    "rtl"
+                                  ]
+                                },
+                                "imageSize": {
+                                  "type": "string",
+                                  "enum": [
+                                    "small",
+                                    "medium",
+                                    "large"
+                                  ]
+                                }
+                              },
+                              "additionalProperties": false
+                            },
+                            "fieldAppearance": {
+                              "type": "object",
+                              "required": [],
+                              "properties": {
+                                "front": {
+                                  "type": "object",
+                                  "required": [
+                                    "font",
+                                    "size",
+                                    "align",
+                                    "lineSpacing"
+                                  ],
+                                  "properties": {
+                                    "font": {
+                                      "type": "string",
+                                      "enum": [
+                                        "sans",
+                                        "serif",
+                                        "mono"
+                                      ]
+                                    },
+                                    "size": {
+                                      "type": "string",
+                                      "enum": [
+                                        "small",
+                                        "medium",
+                                        "large"
+                                      ]
+                                    },
+                                    "align": {
+                                      "type": "string",
+                                      "enum": [
+                                        "left",
+                                        "center",
+                                        "right"
+                                      ]
+                                    },
+                                    "lineSpacing": {
+                                      "type": "string",
+                                      "enum": [
+                                        "compact",
+                                        "comfortable"
+                                      ]
+                                    },
+                                    "direction": {
+                                      "type": "string",
+                                      "enum": [
+                                        "auto",
+                                        "ltr",
+                                        "rtl"
+                                      ]
+                                    },
+                                    "imageSize": {
+                                      "type": "string",
+                                      "enum": [
+                                        "small",
+                                        "medium",
+                                        "large"
+                                      ]
+                                    }
+                                  },
+                                  "additionalProperties": false
+                                },
+                                "back": {
+                                  "type": "object",
+                                  "required": [
+                                    "font",
+                                    "size",
+                                    "align",
+                                    "lineSpacing"
+                                  ],
+                                  "properties": {
+                                    "font": {
+                                      "type": "string",
+                                      "enum": [
+                                        "sans",
+                                        "serif",
+                                        "mono"
+                                      ]
+                                    },
+                                    "size": {
+                                      "type": "string",
+                                      "enum": [
+                                        "small",
+                                        "medium",
+                                        "large"
+                                      ]
+                                    },
+                                    "align": {
+                                      "type": "string",
+                                      "enum": [
+                                        "left",
+                                        "center",
+                                        "right"
+                                      ]
+                                    },
+                                    "lineSpacing": {
+                                      "type": "string",
+                                      "enum": [
+                                        "compact",
+                                        "comfortable"
+                                      ]
+                                    },
+                                    "direction": {
+                                      "type": "string",
+                                      "enum": [
+                                        "auto",
+                                        "ltr",
+                                        "rtl"
+                                      ]
+                                    },
+                                    "imageSize": {
+                                      "type": "string",
+                                      "enum": [
+                                        "small",
+                                        "medium",
+                                        "large"
+                                      ]
+                                    }
+                                  },
+                                  "additionalProperties": false
+                                },
+                                "explanation": {
+                                  "type": "object",
+                                  "required": [
+                                    "font",
+                                    "size",
+                                    "align",
+                                    "lineSpacing"
+                                  ],
+                                  "properties": {
+                                    "font": {
+                                      "type": "string",
+                                      "enum": [
+                                        "sans",
+                                        "serif",
+                                        "mono"
+                                      ]
+                                    },
+                                    "size": {
+                                      "type": "string",
+                                      "enum": [
+                                        "small",
+                                        "medium",
+                                        "large"
+                                      ]
+                                    },
+                                    "align": {
+                                      "type": "string",
+                                      "enum": [
+                                        "left",
+                                        "center",
+                                        "right"
+                                      ]
+                                    },
+                                    "lineSpacing": {
+                                      "type": "string",
+                                      "enum": [
+                                        "compact",
+                                        "comfortable"
+                                      ]
+                                    },
+                                    "direction": {
+                                      "type": "string",
+                                      "enum": [
+                                        "auto",
+                                        "ltr",
+                                        "rtl"
+                                      ]
+                                    },
+                                    "imageSize": {
+                                      "type": "string",
+                                      "enum": [
+                                        "small",
+                                        "medium",
+                                        "large"
+                                      ]
+                                    }
+                                  },
+                                  "additionalProperties": false
                                 }
                               },
                               "additionalProperties": false
@@ -1485,19 +2106,7 @@
                     },
                     "payload": {
                       "type": "object",
-                      "required": [],
-                      "properties": {},
-                      "additionalProperties": {
-                        "type": [
-                          "null",
-                          "string",
-                          "number",
-                          "boolean",
-                          "array",
-                          "object"
-                        ],
-                        "description": "JSON value; runtime validation additionally enforces depth <= 32, <= 50000 visited values, and finite numbers."
-                      }
+                      "additionalProperties": true
                     },
                     "archived": {
                       "type": "boolean"

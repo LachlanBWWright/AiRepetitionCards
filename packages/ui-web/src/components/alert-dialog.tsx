@@ -2,6 +2,8 @@
 import * as React from "react";
 import { AlertDialog as AlertDialogPrimitive } from "radix-ui";
 import { cn } from "cn";
+import { buttonVariants } from "./button";
+import { FormActions } from "./form-actions";
 
 function AlertDialog(props: React.ComponentProps<typeof AlertDialogPrimitive.Root>) {
   return <AlertDialogPrimitive.Root data-slot="alert-dialog" {...props} />;
@@ -55,16 +57,7 @@ function AlertDialogHeader({ className, ...props }: React.ComponentProps<"div">)
   );
 }
 function AlertDialogFooter({ className, ...props }: React.ComponentProps<"div">) {
-  return (
-    <div
-      data-slot="alert-dialog-footer"
-      className={cn(
-        "flex flex-col-reverse gap-2 sm:flex-row sm:flex-wrap sm:justify-end",
-        className,
-      )}
-      {...props}
-    />
-  );
+  return <FormActions data-slot="alert-dialog-footer" className={className} {...props} />;
 }
 function AlertDialogTitle({
   className,
@@ -92,15 +85,16 @@ function AlertDialogDescription({
 }
 function AlertDialogAction({
   className,
+  variant = "default",
   ...props
-}: React.ComponentProps<typeof AlertDialogPrimitive.Action>) {
+}: React.ComponentProps<typeof AlertDialogPrimitive.Action> & {
+  readonly variant?: "default" | "destructive";
+}) {
   return (
     <AlertDialogPrimitive.Action
       data-slot="alert-dialog-action"
-      className={cn(
-        "inline-flex h-9 items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90",
-        className,
-      )}
+      data-variant={variant}
+      className={cn(buttonVariants({ variant }), className)}
       {...props}
     />
   );
@@ -112,10 +106,8 @@ function AlertDialogCancel({
   return (
     <AlertDialogPrimitive.Cancel
       data-slot="alert-dialog-cancel"
-      className={cn(
-        "inline-flex h-9 items-center justify-center rounded-md border bg-background px-4 text-sm font-medium hover:bg-accent",
-        className,
-      )}
+      data-variant="secondary"
+      className={cn(buttonVariants({ variant: "secondary" }), className)}
       {...props}
     />
   );

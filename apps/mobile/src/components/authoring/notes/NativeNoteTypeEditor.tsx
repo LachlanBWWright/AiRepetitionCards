@@ -32,7 +32,7 @@ export function NativeNoteTypeEditor({ model, disabled }: Props) {
       </Text>
       <NativeButton
         label="Clone as a new type and note"
-        tone="soft"
+        variant="default"
         disabled={disabled}
         onPress={model.cloneType}
       />
@@ -41,7 +41,7 @@ export function NativeNoteTypeEditor({ model, disabled }: Props) {
         <NativeButton
           key={item.name}
           label={`${item.sticky ? "✓ " : ""}Keep ${item.name} when adding another`}
-          tone="soft"
+          variant="default"
           disabled={disabled}
           onPress={() => {
             setType({
@@ -56,7 +56,7 @@ export function NativeNoteTypeEditor({ model, disabled }: Props) {
       {field("New field name", fieldName, setFieldName)}
       <NativeButton
         label="Add field"
-        tone="soft"
+        variant="default"
         disabled={
           disabled ||
           !/^[A-Za-z][A-Za-z0-9 _-]{0,79}$/.test(fieldName) ||
@@ -80,6 +80,9 @@ export function NativeNoteTypeEditor({ model, disabled }: Props) {
           {field("Answer template", template.back, (back) => {
             model.updateTemplate(template.id, { back });
           })}
+          {field("Explanation template (optional)", template.explanation ?? "", (explanation) => {
+            model.updateTemplate(template.id, { explanation });
+          })}
           <NativeNoteTemplateDeck model={model} templateId={template.id} disabled={disabled} />
           <NativeReviewPresentationSettings
             value={template.presentation}
@@ -91,7 +94,7 @@ export function NativeNoteTypeEditor({ model, disabled }: Props) {
           {type.templates.length > 1 && (
             <NativeButton
               label="Remove template"
-              tone="soft"
+              variant="default"
               disabled={disabled}
               onPress={() => {
                 model.removeTemplate(template.id);
@@ -102,14 +105,14 @@ export function NativeNoteTypeEditor({ model, disabled }: Props) {
       ))}
       <NativeButton
         label="Add card template"
-        tone="soft"
+        variant="default"
         disabled={disabled || type.templates.length >= 20}
         onPress={model.addTemplate}
       />
       {model.affectsOthers && (
         <NativeButton
           label={`${model.confirmedTypeChange ? "✓ " : ""}Apply field and template changes to all notes using this type`}
-          tone="soft"
+          variant="default"
           disabled={disabled}
           onPress={() => {
             model.setConfirmedTypeChange(!model.confirmedTypeChange);

@@ -1,4 +1,4 @@
-import { Home, Plus } from "lucide-react";
+import { Home, Layers, Plus } from "lucide-react";
 import {
   SidebarContent,
   SidebarGroup,
@@ -27,7 +27,7 @@ export function RecallDashboardNavigation({ model }: { readonly model: RecallDas
               }}
             >
               <Home aria-hidden="true" />
-              <span>Home</span>
+              <span className="group-data-[state=collapsed]/sidebar:hidden">Home</span>
               {model.workspaceUnlocked && <SidebarMenuBadge>{model.dueCount}</SidebarMenuBadge>}
             </SidebarMenuButton>
           </SidebarMenuItem>
@@ -54,7 +54,7 @@ export function RecallDashboardNavigation({ model }: { readonly model: RecallDas
 
 function SubjectNavigationMenu({ model }: { readonly model: RecallDashboardModel }) {
   return (
-    <SidebarMenu>
+    <SidebarMenu className="gap-2">
       {studySubjectTree(model.workspace).map(({ area, depth, hasChildren }) => (
         <SubjectNavigationRow
           key={area.id}
@@ -78,11 +78,17 @@ function SubjectNavigationRow({
   readonly model: RecallDashboardModel;
   readonly area: RecallDashboardModel["workspace"]["areas"][number];
 }) {
+  const dueCount = studyQueue(
+    model.workspace,
+    area,
+    model.now.getTime(),
+    localStudyDay(model.now.getTime(), model.workspace.schedulerSettings?.studyDayStartHour),
+  ).cards.length;
   const active =
     model.selectedId === area.id &&
     !(model.activeView === DashboardView.Today && !model.practiceId);
   return (
-    <SidebarMenuItem style={{ paddingLeft: Math.min(depth, 12) * 10 }}>
+    <SidebarMenuItem>
       <SidebarMenuButton
         tooltip={area.title}
         isActive={active}
@@ -93,19 +99,20 @@ function SubjectNavigationRow({
       >
         <span
           aria-hidden="true"
-          className="inline-flex size-5 shrink-0 items-center justify-center rounded-full text-[9px] font-semibold text-background"
+          className="inline-flex size-5 shrink-0 items-center justify-center rounded-full text-[9px] font-semibold text-background group-data-[state=collapsed]/sidebar:size-7 group-data-[state=collapsed]/sidebar:text-xs"
           style={{ backgroundColor: area.color }}
         >
-          {
-            studyQueue(
-              model.workspace,
-              area,
-              model.now.getTime(),
-              localStudyDay(model.now.getTime()),
-            ).cards.length
-          }
+          <span className="group-data-[state=collapsed]/sidebar:hidden">{dueCount}</span>
+          <span className="hidden group-data-[state=collapsed]/sidebar:inline">
+            {Array.from(area.title)[0]?.toLocaleUpperCase()}
+          </span>
         </span>
-        <span className="truncate group-data-[state=collapsed]/sidebar:hidden">{area.title}</span>
+        <span
+          className="truncate group-data-[state=collapsed]/sidebar:hidden"
+          style={{ paddingLeft: Math.min(depth, 12) * 10 }}
+        >
+          {area.title}
+        </span>
       </SidebarMenuButton>
       {hasChildren && (
         <SidebarMenuButton
@@ -115,7 +122,10 @@ function SubjectNavigationRow({
             model.startPractice(`scope:${area.id}`);
           }}
         >
-          <span className="text-xs">Study {area.title} and descendants</span>
+          <Layers aria-hidden="true" />
+          <span className="text-xs group-data-[state=collapsed]/sidebar:hidden">
+            Study {area.title} and descendants
+          </span>
         </SidebarMenuButton>
       )}
     </SidebarMenuItem>

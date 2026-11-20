@@ -26,7 +26,9 @@ export const volatileStorage = {
       typeof window === "undefined" ? undefined : (desktopStorage() ?? window.localStorage);
     if (storage) {
       const privatePrefixes = [
+        "recall-ai-funding:",
         "recall-tutor-session:",
+        "recall-tutor-conversation:",
         "recall-chatgpt-tutor:",
         "recall-chatgpt-proposal-session:",
         "recall-chatgpt-welcome:",

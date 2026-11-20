@@ -23,7 +23,7 @@ export function NativeNoteOwnershipImpact({
         </View>
       ))}
       <NativeButton
-        tone="soft"
+        variant="default"
         disabled={disabled}
         label={`${model.migration?.confirmLinkedSnapshots ? "✓ " : ""}Replace these snapshots with this source note when saving`}
         onPress={() => {

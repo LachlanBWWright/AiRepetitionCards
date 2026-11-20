@@ -1,14 +1,12 @@
+import { NativeButton } from "@recall/ui-native";
+
 import { useState } from "react";
 import { NativeAccountPanelTransfers } from "./NativeAccountPanelTransfers";
-import { ActivityIndicator, Pressable, Text, TextInput, View } from "react-native";
+import { Text, TextInput, View } from "react-native";
 import { Effect, Either } from "effect";
-import { designTokens } from "@recall/design-tokens";
 import { AccountActions, AccountConflictNotice } from "./NativeAccountPanelActions";
 
-const palette = designTokens.color;
-
 export function NativeAccountPanel({
-  onSync,
   conflictAreas,
   onUseServerVersion,
   onImport,
@@ -42,38 +40,34 @@ export function NativeAccountPanel({
   readonly account: string | null;
   readonly cloudAvailable?: boolean;
   readonly onSignOut: () => Promise<string>;
-  readonly onRequestSignIn: (email: string) => Promise<string>;
+  readonly onRequestSignIn: () => Promise<string>;
   readonly initialDeleteConfirmationOpen?: boolean;
   readonly ownershipIssue?: "account-mismatch" | "owner-adoption-required" | null;
   readonly onAdoptLegacyOwner?: () => Promise<string>;
   readonly onResetForAccount?: () => void;
 }) {
   const [showAccountActions, setShowAccountActions] = useState(initialDeleteConfirmationOpen);
-  const [email, setEmail] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [syncBusy, setSyncBusy] = useState(false);
   const [resolvingConflict, setResolvingConflict] = useState(false);
   const [fileBusy, setFileBusy] = useState(false);
   const [showDelete, setShowDelete] = useState(initialDeleteConfirmationOpen);
   const [deleteConfirmation, setDeleteConfirmation] = useState("");
 
-  async function requestLink() {
+  async function signInWithGoogle() {
     setBusy(true);
     setNotice(null);
     const result = await Effect.runPromise(
       Effect.either(
         Effect.tryPromise({
-          try: () => onRequestSignIn(email.trim()),
+          try: onRequestSignIn,
           catch: () => ({ _tag: "NativeSignInRequestError" }) as const,
         }),
       ),
     );
     setBusy(false);
     setNotice(
-      Either.isRight(result)
-        ? result.right
-        : "Could not send a sign-in link. Check your email and connection.",
+      Either.isRight(result) ? result.right : "Google sign-in could not start. Please try again.",
     );
   }
 
@@ -93,22 +87,6 @@ export function NativeAccountPanel({
       Either.isRight(result)
         ? result.right
         : "Could not sign out. Your current account session is unchanged.",
-    );
-  }
-
-  async function syncNow() {
-    setSyncBusy(true);
-    const result = await Effect.runPromise(
-      Effect.either(
-        Effect.tryPromise({
-          try: onSync,
-          catch: () => ({ _tag: "NativeSyncRequestError" }) as const,
-        }),
-      ),
-    );
-    setSyncBusy(false);
-    setNotice(
-      Either.isRight(result) ? result.right : "Sync failed. Your offline data is still saved.",
     );
   }
 
@@ -169,11 +147,8 @@ export function NativeAccountPanel({
   };
 
   return (
-    <View
-      className={"gap-[10px] py-[16px] border-t-recall-line border-t"}
-      testID="native-account-panel"
-    >
-      <View className={"gap-[6px]"}>
+    <View className={"gap-4 py-6 border-t-recall-line border-t"} testID="native-account-panel">
+      <View className={"gap-2"}>
         <Text className={"text-recall-ink text-[15px] font-bold"}>
           {cloudAvailable ? "Recall account (optional)" : "Files and backups"}
         </Text>
@@ -184,7 +159,7 @@ export function NativeAccountPanel({
       )}
       <NativeAccountPanelTransfers
         fileBusy={fileBusy}
-        syncBusy={syncBusy}
+        syncBusy={false}
         ownershipIssue={cloudAvailable ? ownershipIssue : null}
         onAdoptLegacyOwner={onAdoptLegacyOwner}
         onResetForAccount={onResetForAccount}
@@ -198,23 +173,11 @@ export function NativeAccountPanel({
       />
       {cloudAvailable && account ? (
         <>
-          <Pressable
-            accessibilityRole="button"
-            disabled={syncBusy || resolvingConflict || ownershipIssue !== null}
-            onPress={() => void syncNow()}
-            className={"min-h-[42px] justify-center px-[14px] rounded-[10px] bg-recall-darkGreen"}
-          >
-            {syncBusy ? (
-              <ActivityIndicator color={palette.surface} />
-            ) : (
-              <Text className={"text-recall-surface font-bold text-[12px]"}>Sync now</Text>
-            )}
-          </Pressable>
           <AccountActions
             expanded={showAccountActions}
             fileBusy={fileBusy}
             busy={busy}
-            syncBusy={syncBusy}
+            syncBusy={false}
             resolvingConflict={resolvingConflict}
             onToggle={() => {
               setShowAccountActions((value) => !value);
@@ -229,7 +192,7 @@ export function NativeAccountPanel({
             <AccountConflictNotice
               areas={conflictAreas}
               resolving={resolvingConflict}
-              disabled={resolvingConflict || syncBusy}
+              disabled={resolvingConflict}
               onUseServer={() => {
                 void applyServerVersion();
               }}
@@ -237,38 +200,15 @@ export function NativeAccountPanel({
           ) : null}
         </>
       ) : cloudAvailable ? (
-        <View className={"gap-[8px]"}>
-          <TextInput
-            accessibilityLabel="Email address"
-            autoCapitalize="none"
-            autoComplete="email"
-            keyboardType="email-address"
-            onChangeText={setEmail}
-            placeholder="you@example.com"
-            placeholderTextColor={palette.muted}
-            className={
-              "flex-1 min-h-[42px] px-[12px] rounded-[10px] bg-recall-paper text-recall-ink"
-            }
-            value={email}
-          />
-          <Pressable
-            accessibilityRole="button"
-            disabled={busy || email.trim().length === 0}
-            onPress={() => void requestLink()}
-            className={"min-h-[42px] justify-center px-[14px] rounded-[10px] bg-recall-darkGreen"}
-          >
-            {busy ? (
-              <ActivityIndicator color={palette.surface} />
-            ) : (
-              <Text className={"text-recall-surface font-bold text-[12px]"}>
-                Email sign-in link
-              </Text>
-            )}
-          </Pressable>
-        </View>
+        <NativeButton
+          label={busy ? "Opening Google…" : "Continue with Google"}
+          accessibilityState={{ busy }}
+          disabled={busy}
+          onPress={() => void signInWithGoogle()}
+        />
       ) : null}
       {cloudAvailable && showDelete ? (
-        <View className={"gap-[12px] py-[16px] border-t border-[#fca5a5]"}>
+        <View className={"gap-4 py-6 border-t border-[#fca5a5]"}>
           <Text className={"text-recall-ink font-bold text-[13px]"}>
             Delete your account and data?
           </Text>
@@ -276,44 +216,34 @@ export function NativeAccountPanel({
             This removes synced account data and this device’s workspace and attachments. Signing
             out alone keeps offline data. Export account data first if you need a copy.
           </Text>
-          <Text className={"text-recall-muted text-[12px]"}>Type DELETE to confirm.</Text>
-          <TextInput
-            accessibilityLabel="Type DELETE to confirm account deletion"
-            autoCapitalize="characters"
-            autoCorrect={false}
-            editable={!fileBusy}
-            onChangeText={setDeleteConfirmation}
-            value={deleteConfirmation}
-            className={
-              "flex-1 min-h-[42px] px-[12px] rounded-[10px] bg-recall-paper text-recall-ink"
-            }
-          />
-          <View className={"flex-row gap-[8px]"}>
-            <Pressable
-              accessibilityRole="button"
+          <View className="gap-2">
+            <Text className={"text-recall-muted text-[12px]"}>Type DELETE to confirm.</Text>
+            <TextInput
+              accessibilityLabel="Type DELETE to confirm account deletion"
+              autoCapitalize="characters"
+              autoCorrect={false}
+              editable={!fileBusy}
+              onChangeText={setDeleteConfirmation}
+              value={deleteConfirmation}
+              className="w-full min-h-12 rounded-xl bg-recall-paper px-3 text-base text-recall-ink"
+            />
+          </View>
+          <View className="gap-2">
+            <NativeButton
+              label="Cancel"
+              variant="secondary"
               disabled={fileBusy}
               onPress={() => {
                 setShowDelete(false);
                 setDeleteConfirmation("");
               }}
-              className={
-                "flex-1 min-h-[38px] justify-center items-center px-[8px] border-b border-recall-line"
-              }
-            >
-              <Text className={"text-recall-darkGreen font-bold text-[12px]"}>Cancel</Text>
-            </Pressable>
-            <Pressable
-              accessibilityRole="button"
+            />
+            <NativeButton
+              label={fileBusy ? "Deleting…" : "Delete account and data"}
+              variant="destructive"
               disabled={fileBusy || deleteConfirmation !== "DELETE"}
               onPress={() => void deleteAccount()}
-              className={
-                "min-h-[40px] justify-center items-center px-[12px] rounded-[10px] bg-[#3a2025]"
-              }
-            >
-              <Text className={"text-[#fca5a5] font-bold text-[12px]"}>
-                {fileBusy ? "Deleting…" : "Delete account and data"}
-              </Text>
-            </Pressable>
+            />
           </View>
         </View>
       ) : null}

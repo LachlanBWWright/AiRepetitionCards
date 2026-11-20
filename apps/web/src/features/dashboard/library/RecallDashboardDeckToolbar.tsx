@@ -7,7 +7,7 @@ import {
   DropdownMenuTrigger,
 } from "@recall/ui-web/components/dropdown-menu";
 import { BookOpen, Ellipsis } from "lucide-react";
-import { dueNow } from "@/features/dashboard/layout/RecallDashboardSupport";
+import { studyQueue, localStudyDay } from "@recall/application";
 import type { RecallDashboardModel } from "../state/useRecallDashboardController";
 export function RecallDashboardDeckToolbar({ model }: { readonly model: RecallDashboardModel }) {
   const {
@@ -23,27 +23,35 @@ export function RecallDashboardDeckToolbar({ model }: { readonly model: RecallDa
     setShowAreaSettings,
     deleteArea,
   } = model;
+  const dueCount = area
+    ? studyQueue(
+        model.workspace,
+        area,
+        now.getTime(),
+        localStudyDay(now.getTime(), model.workspace.schedulerSettings?.studyDayStartHour),
+      ).cards.length
+    : 0;
   return (
     <section
       aria-label="Subject tools"
       className="flex w-full min-w-0 flex-wrap items-center gap-3"
       hidden={!libraryDeckOpen || !area}
     >
-      <p className="min-w-0 flex-1 text-sm text-muted-foreground">
+      <p className="flex-1 whitespace-nowrap text-sm text-muted-foreground">
         {area?.cards.length ?? 0} {area?.cards.length === 1 ? "card" : "cards"}
         <span className="mx-3 text-border" aria-hidden="true">
           /
         </span>
-        {area?.cards.filter((entry) => dueNow(entry, now)).length ?? 0} due
+        {dueCount} due
       </p>
-      {area && area.cards.some((entry) => dueNow(entry, now)) && (
+      {area && dueCount > 0 && (
         <Button
           onClick={() => {
             startPractice(area.id);
           }}
         >
           <BookOpen aria-hidden="true" className="size-4" />
-          Review {area.cards.filter((entry) => dueNow(entry, now)).length} due
+          Review {dueCount} due
         </Button>
       )}
       {area && (

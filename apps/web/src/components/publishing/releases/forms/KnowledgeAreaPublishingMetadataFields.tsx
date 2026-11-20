@@ -1,3 +1,4 @@
+import { Label } from "@recall/ui-web/components/label";
 import {
   Input,
   Select,
@@ -19,7 +20,7 @@ type Props = {
 export function KnowledgeAreaPublishingMetadataFields(props: Props) {
   return (
     <>
-      <label>
+      <Label>
         Visibility
         <Select
           value={props.visibility}
@@ -35,8 +36,8 @@ export function KnowledgeAreaPublishingMetadataFields(props: Props) {
             <SelectItem value="public">Public access</SelectItem>
           </SelectContent>
         </Select>
-      </label>
-      <label>
+      </Label>
+      <Label>
         Release notes (optional)
         <Textarea
           value={props.releaseNotes}
@@ -46,8 +47,8 @@ export function KnowledgeAreaPublishingMetadataFields(props: Props) {
           maxLength={4000}
           placeholder="Describe what changed in this release"
         />
-      </label>
-      <label>
+      </Label>
+      <Label>
         Attribution
         <Input
           value={props.attribution}
@@ -57,7 +58,7 @@ export function KnowledgeAreaPublishingMetadataFields(props: Props) {
           placeholder="Your name or source"
           maxLength={200}
         />
-      </label>
+      </Label>
     </>
   );
 }

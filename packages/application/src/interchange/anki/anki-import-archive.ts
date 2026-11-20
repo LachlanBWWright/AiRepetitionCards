@@ -1,12 +1,12 @@
 import { sha256 } from "@noble/hashes/sha2.js";
 import { Decompress } from "fzstd";
 
-export const MAX_ARCHIVE_BYTES = 50_000_000;
-export const MAX_FILES = 2_000;
+export const MAX_ARCHIVE_BYTES = 100_000_000;
+export const MAX_FILES = 2_010;
 export const MAX_EXPANDED_BYTES = 100_000_000;
 export const MAX_DATABASE_BYTES = 80_000_000;
 export const MAX_MEDIA_BYTES = 20_000_000;
-export const MAX_MEDIA_ASSETS = 100;
+export const MAX_MEDIA_ASSETS = 2_000;
 export const MAX_PROTO_BYTES = 5_000_000;
 export const ZIP_SIGNATURE = [0x50, 0x4b, 0x03, 0x04];
 
@@ -166,10 +166,32 @@ function zstdWindowSize(bytes: Uint8Array): number | undefined {
   }
   return 2 ** (10 + ((bytes[5] ?? 0) >>> 3)) * (1 + ((bytes[5] ?? 0) & 7) / 8);
 }
+/** Anki entries contain one frame. Reject concatenated/skippable frames before decoder allocation. */
+function singleZstdFrame(bytes: Uint8Array): boolean {
+  const descriptor = bytes[4];
+  if (descriptor === undefined) return false;
+  const singleSegment = (descriptor & 0x20) !== 0;
+  const sizeFlag = descriptor >>> 6;
+  const dictionaryFlag = descriptor & 3;
+  const dictionaryBytes = dictionaryFlag === 3 ? 4 : dictionaryFlag;
+  const contentSizeBytes = sizeFlag === 0 ? (singleSegment ? 1 : 0) : 1 << sizeFlag;
+  let offset = 5 + (singleSegment ? 0 : 1) + dictionaryBytes + contentSizeBytes;
+  while (offset + 3 <= bytes.length) {
+    const header =
+      (bytes[offset] ?? 0) + (bytes[offset + 1] ?? 0) * 256 + (bytes[offset + 2] ?? 0) * 65536;
+    const blockType = (header >>> 1) & 3;
+    if (blockType === 3) return false;
+    offset += 3 + (blockType === 1 ? 1 : header >>> 3);
+    if (offset > bytes.length) return false;
+    if ((header & 1) !== 0) return offset + ((descriptor & 4) !== 0 ? 4 : 0) === bytes.length;
+  }
+  return false;
+}
 export function decompressZstd(bytes: Uint8Array, limit: number): Uint8Array | "invalid" | "limit" {
   const windowSize = zstdWindowSize(bytes);
   if (windowSize === undefined) return "invalid";
   if (windowSize > limit) return "limit";
+  if (!singleZstdFrame(bytes)) return "invalid";
   const chunks: Uint8Array[] = [];
   let size = 0;
   const outputOverflow = { value: false };
@@ -184,6 +206,7 @@ export function decompressZstd(bytes: Uint8Array, limit: number): Uint8Array | "
         bytes.subarray(offset, Math.min(offset + 16_384, bytes.length)),
         offset + 16_384 >= bytes.length,
       );
+      if (outputOverflow.value) return "limit";
     }
   } catch {
     return "invalid";

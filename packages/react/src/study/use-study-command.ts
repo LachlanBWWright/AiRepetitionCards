@@ -5,6 +5,8 @@ import { Effect, Either } from "effect";
 import {
   workspaceAuthoringBaseline,
   suspensionSettings,
+  buryStudyCard,
+  unburyStudyCards,
   type WorkspaceAuthoringCommand,
 } from "@recall/application";
 import type { AssessmentId, Workspace } from "@recall/domain";
@@ -43,7 +45,24 @@ export function useStudyCommand(workspace: Workspace, save: StudyCommandSave | u
       "Card suspension updated. Review history is preserved.",
     );
   };
-  return { busy, message, commit, toggleSuspension };
+  const bury = (cardId: AssessmentId, scope: "card" | "note", now: number) => {
+    const result = Effect.runSync(Effect.either(buryStudyCard(workspace, cardId, scope, now)));
+    if (Either.isLeft(result)) {
+      setMessage(result.left.message);
+      return;
+    }
+    commit(
+      { kind: "update-scheduler-settings", settings: result.right },
+      "Buried until the next study day. Unbury cards to bring them back early.",
+    );
+  };
+  const unbury = () => {
+    commit(
+      { kind: "update-scheduler-settings", settings: unburyStudyCards(workspace) },
+      "Manually buried cards are available again. Sibling rules still apply.",
+    );
+  };
+  return { busy, message, commit, toggleSuspension, bury, unbury };
 }
 export type StudyCommandPromiseSave = (
   command: WorkspaceAuthoringCommand,

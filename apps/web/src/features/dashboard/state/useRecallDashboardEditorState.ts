@@ -133,6 +133,7 @@ export function useRecallDashboardEditorState(
   const [cardDraftStale, setCardDraftStale] = useState(demo?.cardEditConflict ?? false);
   const [areaTitle, setAreaTitle] = useState(demoArea?.title ?? "");
   const [front, setFront] = useState(demoCard?.front ?? "");
+  const [explanation, setExplanation] = useState(demoCard?.explanation ?? "");
   const [back, setBack] = useState(demoCard?.back ?? "");
   const [duplicateAcknowledgement, setDuplicateAcknowledgement] = useState<string | null>(null);
   const [imageOcclusion, setImageOcclusion] = useState<ImageOcclusion | undefined>(
@@ -232,6 +233,8 @@ export function useRecallDashboardEditorState(
     setFront,
     back,
     setBack,
+    explanation,
+    setExplanation,
     duplicateAcknowledgement,
     setDuplicateAcknowledgement,
     imageOcclusion,

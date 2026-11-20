@@ -24,6 +24,8 @@ export function openSqliteWorkspaceStore(): Effect.Effect<WorkspaceStore, LocalS
       const database = await SQLite.openDatabaseAsync(databaseName);
       await database.execAsync(`
         PRAGMA journal_mode = WAL;
+        PRAGMA synchronous = FULL;
+        PRAGMA busy_timeout = 5000;
         CREATE TABLE IF NOT EXISTS workspace_snapshot_chunks(part INTEGER PRIMARY KEY,payload TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS workspace_checkpoints (id INTEGER PRIMARY KEY CHECK(id = 1), entries TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS workspace_checkpoint_chunks (part INTEGER PRIMARY KEY, payload TEXT NOT NULL);

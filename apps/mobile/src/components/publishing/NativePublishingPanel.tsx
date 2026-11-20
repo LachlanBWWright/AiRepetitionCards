@@ -1,7 +1,8 @@
+import { NativeButton } from "@recall/ui-native";
+
 import { useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Pressable, Text, View } from "react-native";
+import { Text, View } from "react-native";
 import { Effect, Either } from "effect";
-import { designTokens } from "@recall/design-tokens";
 import {
   diffKnowledgeAreas,
   publicationNeedsReuseConfirmation,
@@ -11,8 +12,6 @@ import {
 import type { KnowledgeArea } from "@recall/domain";
 import { NativeDeckQualityPanel } from "../library/NativeDeckQualityPanel";
 import { nativeReleaseDraftStore } from "../../storage/publishing/native-release-draft-store";
-
-const palette = designTokens.color;
 
 import type {
   NativePublishingPanelProps,
@@ -225,20 +224,17 @@ export function NativePublishingPanel(props: NativePublishingPanelProps) {
     >
       <View className={"flex-row gap-[8px]"}>
         {(["publish", "receive"] as const).map((value) => (
-          <Pressable
+          <NativeButton
+            label={value === "publish" ? "Publish" : "Receive"}
+            variant="secondary"
+            className="flex-1"
             key={value}
-            accessibilityRole="button"
             accessibilityState={{ selected: mode === value, disabled: busy }}
             disabled={busy}
             onPress={() => {
               setMode(value);
             }}
-            className={`flex-1 min-h-[44px] items-center justify-center border-b border-recall-line ${mode === value ? "border-b-2 border-b-recall-darkGreen" : ""}`}
-          >
-            <Text className={"text-recall-darkGreen text-[12px] font-bold capitalize"}>
-              {value === "publish" ? "Publish" : "Receive"}
-            </Text>
-          </Pressable>
+          />
         ))}
       </View>
       {mode === "publish" && (
@@ -266,7 +262,7 @@ export function NativePublishingPanel(props: NativePublishingPanelProps) {
             </Text>
           )}
           {qualityResult?.status === "failed" && (
-            <Text accessibilityRole="alert" className="text-sm text-red-700">
+            <Text accessibilityRole="alert" className="text-sm text-recall-dangerForeground">
               Deck quality could not be validated, so publishing is paused.
             </Text>
           )}
@@ -274,8 +270,9 @@ export function NativePublishingPanel(props: NativePublishingPanelProps) {
             previousRelease={previousRelease}
             releaseContent={releaseContent}
           />
-          <Pressable
-            accessibilityRole="button"
+          <NativeButton
+            label={busy ? "Publishing…" : "Publish area"}
+            accessibilityState={{ busy }}
             disabled={
               busy ||
               !area ||
@@ -285,16 +282,7 @@ export function NativePublishingPanel(props: NativePublishingPanelProps) {
               (needsReuseConfirmation && !reuseConfirmed)
             }
             onPress={() => void publish()}
-            className={
-              "min-h-[42px] justify-center items-center px-[14px] rounded-[9px] bg-recall-darkGreen"
-            }
-          >
-            {busy ? (
-              <ActivityIndicator color={palette.surface} />
-            ) : (
-              <Text className={"text-recall-surface font-bold text-[12px]"}>Publish area</Text>
-            )}
-          </Pressable>
+          />
           {versionId ? (
             <Text selectable className={"text-recall-muted text-[12px] leading-[18px]"}>
               Version: {versionId}
@@ -334,28 +322,21 @@ export function NativePublishingPanel(props: NativePublishingPanelProps) {
         onFork={() => void fork()}
       />
       {forkConflict && publication ? (
-        <Pressable
-          accessibilityRole="button"
+        <NativeButton
+          label="Start a new copy attempt"
+          variant="default"
           disabled={busy}
           onPress={startNewForkAttempt}
-          className={"flex-1 items-center py-[9px] rounded-[9px] bg-recall-paper"}
-        >
-          <Text>Start a new copy attempt</Text>
-        </Pressable>
+          className="flex-1"
+        />
       ) : null}
       {publicationConflict && area ? (
-        <Pressable
-          className={
-            "min-h-[42px] justify-center items-center px-[14px] rounded-[9px] bg-recall-darkGreen"
-          }
-          accessibilityRole="button"
+        <NativeButton
+          label="Start a new publication attempt"
+          variant="default"
           disabled={busy}
           onPress={startNewPublicationAttempt}
-        >
-          <Text className={"text-recall-surface font-bold text-[12px]"}>
-            Start a new publication attempt
-          </Text>
-        </Pressable>
+        />
       ) : null}
       {notice ? (
         <Text accessibilityRole="alert" className={"text-recall-muted text-[12px] leading-[18px]"}>

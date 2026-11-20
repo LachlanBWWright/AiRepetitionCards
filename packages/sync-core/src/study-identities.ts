@@ -25,6 +25,13 @@ export function remapImportedSchedule(
 export function remapStudyIdentities(workspace: Workspace, ids: IdMaps): Workspace {
   const settings = (value: SchedulerSettings): SchedulerSettings => ({
     ...value,
+    ...(value.manualBurials
+      ? {
+          manualBurials: Object.fromEntries(
+            Object.entries(value.manualBurials).map(([id, until]) => [ids.card(id), until]),
+          ),
+        }
+      : {}),
     ...(value.areaReviewLimits
       ? {
           areaReviewLimits: Object.fromEntries(

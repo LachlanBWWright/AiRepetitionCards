@@ -24,7 +24,7 @@ export function NotebookPracticeControls({
     <div className="flex flex-wrap items-center gap-2 border-t pt-4">
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button type="button" variant="secondary" size="small" disabled={disabled}>
+          <Button type="button" variant="default" size="default" disabled={disabled}>
             More options
           </Button>
         </DropdownMenuTrigger>
@@ -44,8 +44,8 @@ export function NotebookPracticeControls({
       </DropdownMenu>
       <Button
         type="button"
-        variant="link"
-        size="small"
+        variant="default"
+        size="default"
         disabled={disabled}
         onClick={() => {
           onControl("finish");

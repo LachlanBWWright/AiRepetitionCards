@@ -33,7 +33,7 @@ export function CollectionMaintenance({
             their files protected.
           </p>
         </div>
-        <Button variant="secondary" className="gap-2" disabled={health.busy} onClick={health.scan}>
+        <Button variant="default" className="gap-2" disabled={health.busy} onClick={health.scan}>
           {health.busy ? (
             <LoaderCircle
               className="size-4 animate-spin motion-reduce:animate-none"
@@ -68,7 +68,7 @@ export function CollectionMaintenance({
         </div>
         {health.trashCount > 0 && (
           <Button
-            variant="ghost"
+            variant="default"
             className="gap-2"
             disabled={health.controls.busy}
             onClick={() => {
@@ -175,7 +175,7 @@ function CleanupActions({
     <div className="flex flex-wrap gap-2">
       {report.unused.length > 0 && (
         <Button
-          variant="secondary"
+          variant="default"
           disabled={busy}
           onClick={() => {
             onAction("trash");
@@ -186,7 +186,7 @@ function CleanupActions({
       )}
       {report.missing.length > 0 && (
         <Button
-          variant="secondary"
+          variant="default"
           disabled={busy}
           onClick={() => {
             onAction("tag-missing");

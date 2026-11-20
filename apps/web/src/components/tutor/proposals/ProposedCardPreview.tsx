@@ -47,11 +47,11 @@ export function ProposedCardPreview({
         {children}
       </div>
       <div className="flex flex-wrap items-center gap-2 border-t px-4 py-3 sm:px-5">
-        <Button size="small" disabled={acceptDisabled} onClick={onAccept}>
+        <Button size="default" disabled={acceptDisabled} onClick={onAccept}>
           Add card
         </Button>
         <Button
-          size="small"
+          size="default"
           variant="secondary"
           disabled={disabled}
           onClick={() => {
@@ -61,9 +61,9 @@ export function ProposedCardPreview({
           Edit
         </Button>
         <Button
-          size="small"
-          variant="link"
-          className="ml-auto text-muted-foreground"
+          size="default"
+          variant="secondary"
+          className="ml-auto"
           disabled={disabled}
           onClick={onDiscard}
         >
@@ -117,7 +117,7 @@ export function ProposedCardPreview({
           {editorTools}
           <Button
             className="justify-self-end"
-            size="small"
+            size="default"
             onClick={() => {
               setEditing(false);
             }}

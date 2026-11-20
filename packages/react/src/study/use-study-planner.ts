@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { Effect, Either } from "effect";
 import type { Workspace } from "@recall/domain";
-import { simulateStudyWorkload, type WorkloadSimulation } from "@recall/application";
+import { compareStudyWorkload, type WorkloadSimulation } from "@recall/application";
 export function useStudyPlanner(workspace: Workspace, now: number, areaId?: string) {
   const [days, setDays] = useState("30");
   const [retention, setRetention] = useState("90");
@@ -10,11 +10,12 @@ export function useStudyPlanner(workspace: Workspace, now: number, areaId?: stri
   const [reviewLimit, setReviewLimit] = useState("200");
   const [additionalCards, setAdditionalCards] = useState("0");
   const [result, setResult] = useState<WorkloadSimulation | null>(null);
+  const [comparisons, setComparisons] = useState<readonly WorkloadSimulation[]>([]);
   const [message, setMessage] = useState("");
   const run = () => {
     const simulated = Effect.runSync(
       Effect.either(
-        simulateStudyWorkload(
+        compareStudyWorkload(
           workspace,
           now,
           {
@@ -28,7 +29,11 @@ export function useStudyPlanner(workspace: Workspace, now: number, areaId?: stri
         ),
       ),
     );
-    setResult(Either.isRight(simulated) ? simulated.right : null);
+    const scenarios = Either.isRight(simulated) ? simulated.right : [];
+    setComparisons(scenarios);
+    setResult(
+      scenarios.find((scenario) => scenario.targetRetention === Number(retention) / 100) ?? null,
+    );
     setMessage(
       Either.isLeft(simulated)
         ? simulated.left.message
@@ -44,6 +49,7 @@ export function useStudyPlanner(workspace: Workspace, now: number, areaId?: stri
       { label: "Additional new cards", value: additionalCards, set: setAdditionalCards },
     ],
     result,
+    comparisons,
     message,
     run,
   };

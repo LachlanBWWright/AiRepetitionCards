@@ -1,3 +1,4 @@
+import { eraseAnkiDraft } from "../interchange/anki-import-draft";
 import { Effect } from "effect";
 import { clearWorkspaceAndMedia } from "@recall/application";
 import { uncoordinatedWorkspaceStore } from "./browser-workspace-store";
@@ -14,6 +15,10 @@ export const eraseLocalData = () =>
         uncoordinatedWorkspaceStore,
         uncoordinatedMediaStore,
       );
+      const importDraftCleared = yield* eraseAnkiDraft().pipe(
+        Effect.as(true),
+        Effect.orElseSucceed(() => false),
+      );
       const keyedDataCleared = yield* Effect.try({
         try: () => {
           volatileStorage.clear();
@@ -22,6 +27,8 @@ export const eraseLocalData = () =>
         },
         catch: () => ({ _tag: "LocalSessionCleanupFailure" }) as const,
       }).pipe(Effect.orElseSucceed(() => false));
-      return cleanup.workspaceCleared && cleanup.mediaCleared && keyedDataCleared;
+      return (
+        cleanup.workspaceCleared && cleanup.mediaCleared && keyedDataCleared && importDraftCleared
+      );
     }),
   );

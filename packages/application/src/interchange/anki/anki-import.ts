@@ -1,3 +1,5 @@
+import { areaMediaReferences } from "../../workspace/media/media-references";
+import { ankiCompatibilityReport } from "./anki-compatibility";
 import { renderCloze } from "../../authoring/cloze";
 import { importAnkiOcclusion } from "./anki-import-occlusion";
 import { readAnkiPackage } from "./anki-import-package";
@@ -16,10 +18,13 @@ import {
 } from "@recall/domain";
 import { sanitizeField } from "./anki-import-media";
 import { newSchedule, rebuildSchedule } from "@recall/scheduler";
-import type { AnkiSqliteReader } from "./anki-import-contracts";
+import type { AnkiImportControl, AnkiSqliteReader } from "./anki-import-contracts";
 
 export { AnkiCollectionSchema } from "./anki-import-contracts";
 export type {
+  AnkiImportControl,
+  AnkiImportProgress,
+  AnkiCompatibilityReport,
   AnkiCardRow,
   AnkiCollection,
   AnkiImportError,
@@ -54,13 +59,14 @@ export function importAnkiApkg(
     readonly color: string;
     readonly createId?: () => string;
     readonly now: Date;
+    readonly control?: AnkiImportControl;
   },
   readSqlite: AnkiSqliteReader,
 ): Effect.Effect<AnkiImportProposal, AnkiImportError> {
   return Effect.gen(function* () {
     if (!Number.isFinite(options.now.getTime()))
       return yield* Effect.fail(MISSING("invalid-input"));
-    const { collection, mediaByName } = yield* readAnkiPackage(input, readSqlite);
+    const { collection, mediaByName } = yield* readAnkiPackage(input, readSqlite, options.control);
     const noteTypes = new Map(collection.noteTypes.map((noteType) => [noteType.id, noteType]));
     const notes = new Map(collection.notes.map((note) => [note.id, note]));
     if (
@@ -78,7 +84,17 @@ export function importAnkiApkg(
     const usedRefs = new Map<string, MediaReference>();
     const noteGuids = new Set<string>();
     const sortedCards = [...collection.cards].sort((left, right) => left.id - right.id);
+    let completed = 0;
     for (const card of sortedCards) {
+      if (completed % 100 === 0) {
+        yield* options.control?.checkpoint?.({
+          phase: "cards",
+          completed,
+          total: sortedCards.length,
+        }) ?? Effect.void;
+        if (options.control?.checkpoint) yield* Effect.yieldNow();
+      }
+      completed += 1;
       const note = notes.get(card.noteId);
       const noteType = note ? noteTypes.get(note.noteTypeId) : undefined;
       if (!note || !noteType) return yield* Effect.fail(MISSING("invalid-database"));
@@ -267,10 +283,17 @@ export function importAnkiApkg(
     };
     const decodedArea = Schema.decodeUnknownEither(LearningAreaSchema)(areaValue);
     if (Either.isLeft(decodedArea)) return yield* Effect.fail(MISSING("invalid-proposal"));
+    for (const reference of areaMediaReferences(decodedArea.right))
+      usedRefs.set(reference.id, reference);
+    const mediaById = new Map<string, import("@recall/local-store").StoredMediaAsset>(
+      [...mediaByName.values()].map((asset) => [asset.reference.id, asset]),
+    );
+    const compatibility = ankiCompatibilityReport(collection, mediaByName, usedRefs.size);
     return {
       area: decodedArea.right,
+      compatibility,
       media: [...usedRefs.keys()].flatMap((id) => {
-        const asset = [...mediaByName.values()].find((candidate) => candidate.reference.id === id);
+        const asset = mediaById.get(id);
         return asset ? [asset] : [];
       }),
       reviewEvents,
@@ -282,6 +305,11 @@ export function importAnkiApkg(
           return id ? [id] : [];
         }),
       warnings: [
+        ...(compatibility.omittedRemoteMedia > 0
+          ? [
+              `${String(compatibility.omittedRemoteMedia)} remote media references were not downloaded. Missing images/audio are marked on the cards. Review these cards before importing; export with bundled media from Anki to retain them.`,
+            ]
+          : []),
         "Matching Anki GUIDs and templates update existing content while preserving local scheduling and history. Ambiguous matches across areas are rejected.",
         "Static field templates are converted to safe text; styling and executable templates are not retained.",
         "Supported review and timestamp learning schedules retain due dates and intervals. Day-learning and suspended schedules are retained. Buried cards become available again; filtered queues rebuild from history. FSRS memory is retained when present, otherwise approximated from interval.",

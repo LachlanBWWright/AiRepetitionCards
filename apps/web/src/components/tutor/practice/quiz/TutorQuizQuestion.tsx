@@ -50,8 +50,8 @@ export function TutorQuizQuestion({
             required
           />
           <Button
-            variant="secondary"
-            size="small"
+            variant="default"
+            size="default"
             type="submit"
             disabled={busy || !item.learnerAnswer?.trim() || !canSubmit}
           >

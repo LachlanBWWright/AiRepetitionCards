@@ -94,3 +94,10 @@ function removeSchemaMetadata(value: unknown): unknown {
       .map(([key, item]) => [key, removeSchemaMetadata(item)]),
   );
 }
+
+export function responseModel(body: unknown): string | null {
+  const model = asRecord(body)?.model;
+  return typeof model === "string" && /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,199}$/.test(model)
+    ? model
+    : null;
+}

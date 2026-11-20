@@ -3,14 +3,18 @@ import test from "node:test";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { Effect, Either, Schema } from "effect";
-import { AuthSessionResponseSchema, WorkspaceSnapshotSchema } from "@recall/contracts";
+import {
+  AuthSessionResponseSchema,
+  WorkspaceSnapshotSchema,
+  ManagedAiStatusSchema,
+} from "@recall/contracts";
 import { parseKnowledgeAreaJson } from "@recall/domain";
 
 const directory = resolve(process.cwd(), "../../contracts/fixtures/dotnet-v1");
 const Manifest = Schema.Array(
   Schema.Struct({
     file: Schema.String,
-    contract: Schema.Literal("auth-session", "workspace-snapshot"),
+    contract: Schema.Literal("auth-session", "workspace-snapshot", "managed-ai-status"),
     schemaValid: Schema.Boolean,
     valid: Schema.Boolean,
   }),
@@ -21,6 +25,16 @@ void test("shared .NET fixture corpus matches Effect shape and semantic validati
   assert.ok(cases.length >= 15);
   for (const entry of cases) {
     const input: unknown = JSON.parse(await readFile(resolve(directory, entry.file), "utf8"));
+    if (entry.contract === "managed-ai-status") {
+      assert.equal(
+        Either.isRight(
+          Schema.decodeUnknownEither(ManagedAiStatusSchema)(input, { onExcessProperty: "error" }),
+        ),
+        entry.valid,
+        entry.file,
+      );
+      continue;
+    }
     if (entry.contract === "auth-session") {
       const decoded = Schema.decodeUnknownEither(AuthSessionResponseSchema)(input, {
         onExcessProperty: "error",

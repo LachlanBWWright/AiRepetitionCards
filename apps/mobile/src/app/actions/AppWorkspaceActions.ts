@@ -158,7 +158,9 @@ export function createAppWorkspaceActions(
         ...pendingCleanupTargets.current.areaIds,
         ...(latest?.areas.map((area) => area.id) ?? []),
         ...(latest?.deletedAreas?.map((item) => item.areaId) ?? []),
-        ...Object.keys(nativeTutorSessionIds).map(createAreaId),
+        ...Object.keys(nativeTutorSessionIds).map((key) =>
+          createAreaId(key.slice(key.lastIndexOf(":") + 1)),
+        ),
       ]),
     ];
     const forkVersionIds = [
@@ -169,7 +171,11 @@ export function createAppWorkspaceActions(
         ) ?? []),
       ]),
     ];
-    const targets = { areaIds, forkVersionIds };
+    const targets = {
+      areaIds,
+      forkVersionIds,
+      tutorSessionKeys: Object.keys(nativeTutorSessionIds),
+    };
     pendingCleanupTargets.current = targets;
     return targets;
   }
@@ -178,7 +184,9 @@ export function createAppWorkspaceActions(
       const pendingOperations = yield* Effect.either(
         clearNativePendingOperations(targets.areaIds, targets.forkVersionIds),
       );
-      const tutorSessions = yield* Effect.either(clearNativeTutorSessionIds(targets.areaIds));
+      const tutorSessions = yield* Effect.either(
+        clearNativeTutorSessionIds([...targets.areaIds, ...targets.tutorSessionKeys]),
+      );
       const chatGPTSessions = yield* Effect.either(clearNativeChatGPTTutorState);
       const pendingOperationsCleared = Either.isRight(pendingOperations);
       const libraryDrafts = yield* Effect.either(clearNativeLibraryNotes);

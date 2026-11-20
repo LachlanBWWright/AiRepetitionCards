@@ -1,3 +1,5 @@
+import { AppAgentHandover } from "./AppAgentHandover";
+import { NativeCollapsible } from "@recall/ui-native";
 import { emptyActivityLibrary, type ActivityLibrary } from "@recall/domain";
 import { NativeButton } from "../../components/ui/NativeButton";
 import { Text, View } from "react-native";
@@ -29,7 +31,6 @@ export function AppLibraryPanel({ model }: { readonly model: AppModel }) {
     reviewPending,
     workspaceLifetime,
     setSearchOpen,
-    chatGPT,
     tutorScope,
     operationGeneration,
     workspace,
@@ -72,38 +73,40 @@ export function AppLibraryPanel({ model }: { readonly model: AppModel }) {
   const portableDeckTransfer = <AppPortableDeckTransfer model={model} />;
   return (
     <View className="gap-4">
-      <NativeButton
-        tone="soft"
-        label={searchOpen ? "Close search" : "Search everything"}
-        disabled={!ready || reviewPending || workspaceLifetime.isBlocked()}
-        onPress={() => {
+      <NativeCollapsible
+        open={searchOpen}
+        title="Search everything"
+        onToggle={() => {
           setSearchOpen((value) => !value);
         }}
-      />
-      {searchOpen && (
-        <NativeWorkspaceSearchPanel
-          notebookScope={chatGPT.tutorMode === "chatgpt" ? tutorScope : undefined}
-          key={`${tutorScope}:${String(operationGeneration)}:${workspace?.syncOwnerId ?? "local"}`}
-          workspace={workspace}
-          disabled={!ready || reviewPending || workspaceLifetime.isBlocked()}
-          onNavigate={(result) => {
-            if (
-              workspaceLifetime.isBlocked() ||
-              reviewPending ||
-              !workspaceRef.current?.areas.some((item) => item.id === result.areaId)
-            )
-              return;
-            setActiveAreaId(result.areaId);
-            setSearchTarget(result);
-            setShowAnswer(false);
-            setSearchOpen(false);
-            model.setSubjectMode(
-              ["area", "card", "objective"].includes(result.target.kind) ? "overview" : "improve",
-            );
-            setActiveTab(AppTab.Library);
-          }}
-        />
-      )}
+        disabled={!ready || reviewPending || workspaceLifetime.isBlocked()}
+      >
+        {
+          <NativeWorkspaceSearchPanel
+            notebookScope={tutorScope}
+            key={`${tutorScope}:${String(operationGeneration)}:${workspace?.syncOwnerId ?? "local"}`}
+            workspace={workspace}
+            disabled={!ready || reviewPending || workspaceLifetime.isBlocked()}
+            onNavigate={(result) => {
+              if (
+                workspaceLifetime.isBlocked() ||
+                reviewPending ||
+                !workspaceRef.current?.areas.some((item) => item.id === result.areaId)
+              )
+                return;
+              setActiveAreaId(result.areaId);
+              setSearchTarget(result);
+              setShowAnswer(false);
+              setSearchOpen(false);
+              model.setSubjectMode(
+                ["area", "card", "objective"].includes(result.target.kind) ? "overview" : "improve",
+              );
+              setActiveTab(AppTab.Library);
+            }}
+          />
+        }
+      </NativeCollapsible>
+      {activeArea && <AppAgentHandover model={model} areaId={activeArea.id} />}
       <AppLibraryTransfer
         activeAreaTitle={activeArea?.title}
         canExport={Boolean(activeArea)}

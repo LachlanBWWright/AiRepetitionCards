@@ -1,3 +1,6 @@
+import { cardFieldAppearance } from "@recall/application";
+import type { ReviewCardProps } from "./ReviewCardProps";
+import { CardExplanation } from "../cards/explanations/CardExplanation";
 import { occlusionAnswerLabel } from "@recall/application";
 import { ImageOcclusionView } from "@/components/occlusion/ImageOcclusionView";
 import { ReviewSpeech } from "../cards/ReviewSpeech";
@@ -7,50 +10,16 @@ import { useReviewerInteraction } from "../cards/useReviewerInteraction";
 import { ReviewerTimer } from "../cards/ReviewerTimer";
 import { defaultReviewerSettings, type ReviewerSettings } from "@recall/domain";
 import { Effect, Either } from "effect";
-import { previewReviewSchedules, type SchedulerParameters } from "@recall/scheduler";
-import { summarizeStudySession, formatReviewDelay } from "@recall/application";
-import type { LearningArea, Assessment } from "@recall/domain";
+import { previewReviewSchedules } from "@recall/scheduler";
+import { formatReviewDelay } from "@recall/application";
+import type { Assessment } from "@recall/domain";
 import { Button } from "@recall/ui-web/components/button";
 import { EmptyState } from "./EmptyState";
 import { InlineImage } from "./InlineImage";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@recall/ui-web/components/dropdown-menu";
-import { MoreHorizontal } from "lucide-react";
+import { ReviewCardActions } from "./ReviewCardActions";
+import { ReviewQuestionContext } from "../cards/ReviewQuestionContext";
 
 export type ReviewRating = "again" | "hard" | "good" | "easy";
-
-type ReviewCardProps = {
-  area: Pick<LearningArea, "title" | "color"> | undefined;
-  readonly session?: ReturnType<typeof summarizeStudySession>;
-  readonly now?: Date;
-  readonly schedulerParameters?: SchedulerParameters | undefined;
-  readonly onBack?: () => void;
-  readonly onNextDeck?: (() => void) | undefined;
-  readonly flagged?: boolean;
-  readonly flaggedCount?: number;
-  readonly onFlag?: (card: Assessment) => void;
-  readonly onEditFlagged?: () => void;
-  card: Assessment | undefined;
-  showAnswer: boolean;
-  onReveal: () => void;
-  onRate: (rating: ReviewRating) => void;
-  onEdit?: (card: Assessment) => void;
-  onDelete?: (card: Assessment) => void;
-  onAddCard: () => void;
-  mediaPreviews?: readonly {
-    readonly id?: string;
-    readonly mimeType: string;
-    readonly url: string;
-  }[];
-  keyboardActive?: boolean;
-  disabled?: boolean;
-  saving?: boolean;
-  readonly reviewerSettings?: ReviewerSettings | undefined;
-};
 
 const ratings: ReadonlyArray<{ rating: ReviewRating; label: string }> = [
   { rating: "again", label: "Again" },
@@ -60,6 +29,7 @@ const ratings: ReadonlyArray<{ rating: ReviewRating; label: string }> = [
 ];
 
 export function ReviewCard({
+  helpAction,
   area,
   session,
   now,
@@ -107,7 +77,7 @@ export function ReviewCard({
             : "Already caught up";
   const flaggedAction =
     flaggedCount > 0 && onEditFlagged ? (
-      <Button variant="secondary" onClick={onEditFlagged}>
+      <Button variant="default" onClick={onEditFlagged}>
         Edit flagged cards ({flaggedCount})
       </Button>
     ) : null;
@@ -128,17 +98,6 @@ export function ReviewCard({
           ]),
         )
       : {};
-  const deleteCardAction =
-    onDelete && card ? (
-      <DropdownMenuItem
-        variant="destructive"
-        onSelect={() => {
-          onDelete(card);
-        }}
-      >
-        Delete card
-      </DropdownMenuItem>
-    ) : null;
   const controls = useReviewerInteraction({
     cardId: card?.id,
     revealed: showAnswer,
@@ -147,9 +106,6 @@ export function ReviewCard({
     onReveal,
     onRate,
   });
-  const editCard = () => {
-    if (card && onEdit) onEdit(card);
-  };
   const inlineMediaUrls = Object.fromEntries(
     mediaPreviews.flatMap((preview) =>
       preview.id && preview.id !== card?.imageOcclusion?.imageMediaId
@@ -164,51 +120,28 @@ export function ReviewCard({
     ? `${shortcutLabel(reviewerSettings.shortcuts.reveal)} / ↵`
     : "↵";
   return (
-    <article className="flex min-h-[262px] flex-col rounded-[11px] border border-[var(--line)] bg-[var(--surface)] px-[17px] pt-[14px]">
-      {session && card && (
-        <p className="text-sm text-muted-foreground" role="status">
-          {session.reviewed} reviewed this session · {session.remaining} remaining
-          <br />
-          {session.newCards} new · {session.learningCards} learning ·{" "}
-          {session.remaining - session.newCards - session.learningCards} review
-        </p>
-      )}
-      <div className="flex min-h-8 items-center justify-end">
-        {card && onFlag && (
-          <Button
-            variant="secondary"
-            size="sm"
-            disabled={disabled || saving}
-            aria-pressed={flagged}
-            onClick={() => {
-              onFlag(card);
-            }}
-          >
-            {flagged ? "Flagged for editing" : "Improve later"}
-          </Button>
+    <article className="flex min-w-0 min-h-[400px] flex-col overflow-hidden rounded-2xl border border-border bg-card px-5 pt-5 sm:px-8 sm:pt-6">
+      <div className="flex flex-wrap items-start justify-between gap-4 border-b border-border pb-5">
+        {session && card && (
+          <p className="text-sm leading-6 text-muted-foreground" role="status">
+            <span className="font-medium text-foreground">{session.remaining} remaining</span>
+            <span className="ml-3">{session.reviewed} reviewed this session</span>
+            <br />
+            {session.newCards} new · {session.learningCards} learning ·{" "}
+            {session.remaining - session.newCards - session.learningCards} review
+          </p>
         )}
+        <ReviewCardActions
+          card={card}
+          helpAction={helpAction}
+          flagged={flagged}
+          onFlag={onFlag}
+          onEdit={onEdit}
+          onDelete={onDelete}
+          disabled={disabled || saving}
+        />
         {!card && session && session.reviewed > 0 && (
-          <span className="text-xs font-semibold text-[var(--ink)]">SESSION FINISHED</span>
-        )}
-        {card && (onEdit || onDelete) && (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                type="button"
-                variant="secondary"
-                size="icon"
-                className="size-8 rounded-md border-transparent bg-transparent text-[var(--muted)] shadow-none hover:bg-[var(--surface-raised)] hover:text-[var(--ink)]"
-                disabled={disabled || saving}
-                aria-label="Card actions"
-              >
-                <MoreHorizontal className="size-4" aria-hidden="true" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              {onEdit && <DropdownMenuItem onSelect={editCard}>Edit card</DropdownMenuItem>}
-              {deleteCardAction}
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <span className="text-sm text-muted-foreground">Session finished</span>
         )}
       </div>
       {card ? (
@@ -220,18 +153,27 @@ export function ReviewCard({
           />
           <div
             {...controls.gestureHandlers}
-            className="flex flex-1 flex-col items-center justify-center px-6 py-4 text-center"
+            className="mx-auto flex w-full max-w-[680px] flex-1 flex-col justify-center py-10 sm:py-12"
           >
-            <span className="text-[8px] font-bold tracking-[1.1px] text-[var(--ink)]">
-              {showAnswer ? "ANSWER" : "QUESTION"}
+            {showAnswer && <ReviewQuestionContext card={card} mediaUrls={inlineMediaUrls} />}
+            <span className="mb-4 text-sm font-medium text-muted-foreground">
+              {showAnswer ? "Answer" : "Question"}
             </span>
             <CardRichText
-              appearance={card.presentation?.appearance}
+              appearance={cardFieldAppearance(card.presentation, showAnswer ? "back" : "front")}
               text={showAnswer ? occlusionAnswerLabel(card.imageOcclusion, card.back) : card.front}
               mediaUrls={inlineMediaUrls}
-              className="mt-[13px] max-w-[435px] whitespace-pre-wrap text-[22px] leading-[1.4] tracking-[-0.35px] [overflow-wrap:anywhere] [font-family:Georgia,serif]"
+              className="w-full whitespace-pre-wrap text-left font-sans text-xl leading-relaxed [overflow-wrap:anywhere] sm:text-[22px]"
             />
           </div>
+          {showAnswer && card.explanation && (
+            <CardExplanation
+              key={card.id}
+              text={card.explanation}
+              mediaUrls={inlineMediaUrls}
+              appearance={cardFieldAppearance(card.presentation, "explanation")}
+            />
+          )}
           <ReviewSpeech card={card} revealed={showAnswer} />
           <TypedReviewAnswer
             key={card.id}
@@ -249,7 +191,7 @@ export function ReviewCard({
             </div>
           )}
           {showAnswer ? (
-            <div className="flex flex-col items-center gap-[9px] pb-[15px]">
+            <div className="-mx-5 mt-auto flex flex-col items-center gap-4 border-t border-border bg-muted/20 px-5 py-6 sm:-mx-8 sm:px-8">
               <span className="text-sm text-[var(--muted)]" role={saving ? "status" : undefined}>
                 {saving ? "Saving review…" : "How well did you recall it?"}
               </span>
@@ -261,13 +203,13 @@ export function ReviewCard({
                 onRate={onRate}
               />
               <p className="text-xs text-muted-foreground text-center">
-                Again: forgot · Hard: recalled with difficulty · Good: recalled · Easy: effortless
+                Again: forgot · Hard: difficult · Good: recalled · Easy: effortless
               </p>
             </div>
           ) : (
             <Button
-              size="sm"
-              className="mb-[17px] self-center rounded-[7px] bg-[var(--primary)] px-[13px] py-[9px] text-[10px] text-white hover:bg-[var(--status-success-bg)]"
+              size="default"
+              className="mb-6 self-center"
               onClick={onReveal}
               disabled={disabled || saving}
               aria-keyshortcuts={revealKeyShortcuts}
@@ -286,13 +228,13 @@ export function ReviewCard({
               ? "Create a deck to add cards."
               : emptyDeck
                 ? "Add your first card to start studying."
-                : `${deferred > 0 ? `${String(session?.deferredReviewCount ?? 0)} returning cards deferred; ${String(session?.deferredNewCount ?? 0)} new cards deferred by your daily settings; ${String(session?.filteredCount ?? 0)} cards excluded by the study filter; ${String(session?.buriedCount ?? 0)} related cards buried until tomorrow. ` : ""}${session?.reviewed ? `${String(session.reviewed)} ${session.reviewed === 1 ? "review" : "reviews"} this session · ${String(session.recalled)} recalled. ` : "No cards due right now. "}${session?.nextReviewAt ? `Next review: ${new Date(session.nextReviewAt).toLocaleString()}.` : ""}`
+                : `${deferred > 0 ? `${String(session?.deferredReviewCount ?? 0)} returning cards deferred; ${String(session?.deferredNewCount ?? 0)} new cards deferred by your daily settings; ${String(session?.filteredCount ?? 0)} cards excluded by the study filter; ${String(session?.buriedCount ?? 0)} cards buried until the next study day. ` : ""}${session?.reviewed ? `${String(session.reviewed)} ${session.reviewed === 1 ? "review" : "reviews"} this session · ${String(session.recalled)} recalled. ` : "No cards due right now. "}${session?.nextReviewAt ? `Next review: ${new Date(session.nextReviewAt).toLocaleString()}.` : ""}`
           }
           action={
             <div className="flex flex-wrap justify-center gap-2 pb-5">
               {flaggedAction}
               {navigationAction}
-              <Button variant={area && !emptyDeck ? "secondary" : "default"} onClick={onAddCard}>
+              <Button variant="default" onClick={onAddCard}>
                 {area ? (emptyDeck ? "Add your first card" : "Add more cards") : "New deck"}
               </Button>
             </div>
@@ -317,11 +259,12 @@ function ReviewRatingButtons({
   readonly onRate: (rating: ReviewRating) => void;
 }) {
   return (
-    <div className="flex gap-1.5 max-[640px]:w-full max-[640px]:[&>button]:min-w-0 max-[640px]:[&>button]:flex-1">
+    <div className="grid w-full max-w-xl grid-cols-4 gap-2 sm:gap-3">
       {ratings.map(({ rating, label }) => (
         <Button
-          variant={rating === "again" ? "destructive" : "secondary"}
-          className={`min-h-12 min-w-[72px] flex-col rounded-md border border-[var(--line)] bg-[var(--surface)] px-3 py-2 text-sm ${rating === "again" || rating === "hard" ? "text-[var(--status-warning-fg)]" : "text-[var(--status-success-fg)]"}`}
+          size="rating"
+          className="min-w-0"
+          variant="secondary"
           key={rating}
           disabled={disabled}
           onClick={() => {
@@ -329,8 +272,14 @@ function ReviewRatingButtons({
           }}
           aria-keyshortcuts={keyboardActive ? shortcutLabel(shortcuts[rating]) : undefined}
         >
-          {label}
-          {keyboardActive ? ` · ${shortcuts[rating] === " " ? "Space" : shortcuts[rating]}` : ""}
+          <span className="flex items-center gap-2">
+            {label}
+            {keyboardActive && (
+              <kbd className="hidden text-xs font-normal sm:inline">
+                {shortcutLabel(shortcuts[rating])}
+              </kbd>
+            )}
+          </span>
           {delays[rating] && <span className="text-xs font-normal">{delays[rating]}</span>}
         </Button>
       ))}

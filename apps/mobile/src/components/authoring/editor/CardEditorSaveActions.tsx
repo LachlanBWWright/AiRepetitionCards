@@ -18,23 +18,24 @@ export function CardEditorSaveActions({
 }: CardEditorSaveActionsProps) {
   return (
     <>
+      <NativeButton
+        label={pending ? "Saving card…" : editor.mode === "create" ? "Save card" : "Save changes"}
+        variant="default"
+        disabled={locked}
+        onPress={() => {
+          saveCard(false);
+        }}
+      />
       {editor.mode === "create" && (
         <NativeButton
-          label="Save and add another"
+          label="Save & add another"
+          variant="secondary"
           disabled={locked}
           onPress={() => {
             saveCard(true);
           }}
         />
       )}
-      <NativeButton
-        label={pending ? "Saving…" : editor.mode === "create" ? "Save and finish" : "Save changes"}
-        tone="soft"
-        disabled={locked}
-        onPress={() => {
-          saveCard(false);
-        }}
-      />
     </>
   );
 }

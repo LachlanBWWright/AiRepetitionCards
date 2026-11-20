@@ -29,6 +29,7 @@ export function KnowledgeNotebookPanel(props: KnowledgeNotebookPanelProps) {
     return (
       <ImprovementChat
         model={model}
+        renderHandover={props.renderHandover}
         modelSelection={props.modelSelection}
         unavailableReason={props.aiUnavailableReason}
       />
@@ -108,8 +109,8 @@ export function KnowledgeNotebookPanel(props: KnowledgeNotebookPanelProps) {
           )}
           <Button
             type="button"
-            variant="secondary"
-            size="small"
+            variant="default"
+            size="default"
             disabled={busy}
             onClick={reloadNotebook}
           >

@@ -6,7 +6,7 @@ import { deletedAreaPendingWorkspace } from "../features/workspace/deleted-revie
 const meta = {
   title: "Screens/Native Practice Insights",
   component: NativePracticeInsights,
-  parameters: { layout: "fullscreen" },
+  parameters: { nativePreview: true, layout: "fullscreen" },
   args: {
     workspace: mockWorkspace,
     now: Date.parse("2026-10-03T09:00:00.000Z"),
@@ -15,7 +15,7 @@ const meta = {
   globals: { viewport: { value: "recallMobile", isRotated: false } },
   decorators: [
     (Story) => (
-      <main style={{ minHeight: 844, padding: 16, background: "#faf9f6" }}>
+      <main style={{ minHeight: 844, padding: 16, background: "var(--recall-paper)" }}>
         <Story />
       </main>
     ),

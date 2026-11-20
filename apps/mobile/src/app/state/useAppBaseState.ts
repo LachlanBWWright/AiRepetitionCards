@@ -14,7 +14,6 @@ import { createNativeForkOperationStore } from "../../storage/publishing/native-
 import { createNativePublicationOperationStore } from "../../storage/publishing/native-publication-operation-store";
 import { createNativeWorkspaceLifetime } from "../../storage/workspace/native-workspace-lifetime";
 export function useAppBaseState() {
-  const chatGPT = useNativeChatGPTAuth();
   const [store, setStore] = useState<WorkspaceStore | null>(null);
   const [mediaStore, setMediaStore] = useState<MediaStore | null>(null);
   const clearLocalStores = useRef<Effect.Effect<WorkspaceMediaClearResult>>(
@@ -36,6 +35,7 @@ export function useAppBaseState() {
     generation: 0,
   });
   const [accountUserId, setAccountUserId] = useState<string | null>(null);
+  const chatGPT = useNativeChatGPTAuth(accountUserId);
   const [selectedDeckVersion, setSelectedDeckVersion] = useState<{
     readonly versionId: string;
     readonly token?: string;

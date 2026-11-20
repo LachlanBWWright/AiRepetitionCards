@@ -49,3 +49,17 @@ Create GitHub environments named `mobile-preview` and `mobile-production`. Add `
 Run **Mobile builds** manually, choose the profile and Android, iOS or both. The workflow installs the frozen workspace, validates configuration and requests the selected build with a pinned CLI. It has no push, tag or pull-request trigger. Expo hosts the signed artifact; the workflow log includes the build result and download links. Expo documents [non-interactive builds from CI](https://docs.expo.dev/build/building-on-ci/).
 
 Creating a store artifact does not submit it to an app store. Submission, store listings, privacy disclosures, app icons, store screenshots and device-level release validation remain separate external release steps. This configuration pass has not contacted EAS to build, submitted an app, or exercised device behavior.
+
+## Upgrade and interrupted-write acceptance
+
+The native workspace database uses WAL with FULL synchronous writes and a five-second busy timeout.
+Snapshot updates remain exclusive transactions. Shared sync recovery retains pending work through
+expired authentication, and media downloads retain verified completed assets when a later transfer
+fails. Desktop process-termination regressions do not establish native power-loss behavior.
+
+For each production candidate, install the previous signed version on physical iOS and Android,
+create offline reviews and image/audio attachments, force-stop it during saves and media transfers,
+then install the new build without clearing application data. Verify history, pending outbox work,
+media bytes and synchronization after reauthentication. Record artifact versions, device OS and logs
+in the [daily-use acceptance record](daily-use-acceptance.md). Native store/Expo delivery remains the
+update mechanism; no unverified over-the-air update service or signing credentials are configured.

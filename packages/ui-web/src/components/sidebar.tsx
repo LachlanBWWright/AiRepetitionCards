@@ -20,7 +20,7 @@ type SidebarContextValue = {
 
 const SidebarContext = React.createContext<SidebarContextValue | null>(null);
 const sidebarMenuButtonClassName =
-  "peer/menu-button flex h-9 w-full min-w-0 items-center gap-2 overflow-hidden rounded-md px-2 text-left text-sm outline-none transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 data-[active=true]:bg-sidebar-accent data-[active=true]:font-medium data-[active=true]:text-sidebar-accent-foreground [&>svg]:size-4 [&>svg]:shrink-0 group-data-[state=collapsed]/sidebar:justify-center group-data-[state=collapsed]/sidebar:px-1.5";
+  "peer/menu-button flex h-10 w-full min-w-0 items-center gap-2 overflow-hidden rounded-md px-2 text-left text-sm outline-none transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 data-[active=true]:bg-sidebar-accent data-[active=true]:font-medium data-[active=true]:text-sidebar-accent-foreground [&>svg]:size-4 [&>svg]:shrink-0 group-data-[state=collapsed]/sidebar:justify-center group-data-[state=collapsed]/sidebar:px-0";
 
 function useSidebar() {
   const context = React.useContext(SidebarContext);
@@ -75,7 +75,7 @@ function Sidebar({ children, className, ...props }: React.ComponentProps<"aside"
         data-state={open ? "expanded" : "collapsed"}
         aria-label="Application navigation"
         className={cn(
-          "group/sidebar fixed inset-y-0 left-0 z-40 hidden w-[var(--sidebar-width)] flex-col border-r bg-sidebar text-sidebar-foreground transition-[width,transform] duration-200 md:flex",
+          "group/sidebar fixed inset-y-0 left-0 z-40 hidden w-[var(--sidebar-width)] flex-col border-r bg-sidebar text-sidebar-foreground transition-[width,transform] duration-200 motion-reduce:transition-none md:flex",
           "data-[state=collapsed]:w-[var(--sidebar-width-icon)]",
           "max-md:hidden",
           className,
@@ -147,7 +147,7 @@ function SidebarGroupLabel({ className, ...props }: React.ComponentProps<"div">)
     <div
       data-slot="sidebar-group-label"
       className={cn(
-        "flex h-[34px] shrink-0 items-center rounded-md px-2 text-[10px] font-medium tracking-[0.08em] text-muted-foreground outline-none group-data-[state=collapsed]/sidebar:invisible",
+        "flex h-[34px] shrink-0 items-center rounded-md px-2 text-xs font-medium text-muted-foreground outline-none group-data-[state=collapsed]/sidebar:hidden",
         className,
       )}
       {...props}
@@ -161,7 +161,7 @@ function SidebarGroupAction({ className, ...props }: React.ComponentProps<"butto
       data-slot="sidebar-group-action"
       type="button"
       className={cn(
-        "absolute top-3 right-3 flex size-5 items-center justify-center rounded-md text-muted-foreground outline-none hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-ring [&>svg]:size-4",
+        "absolute top-2 right-2 flex size-8 items-center justify-center rounded-md text-muted-foreground outline-none hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-ring [&>svg]:size-4",
         className,
       )}
       {...props}
@@ -214,7 +214,7 @@ function SidebarMenuBadge({ className, ...props }: React.ComponentProps<"div">) 
     <div
       data-slot="sidebar-menu-badge"
       className={cn(
-        "pointer-events-none absolute right-1 flex h-5 min-w-5 items-center justify-center rounded-md px-1 text-xs font-medium tabular-nums text-sidebar-foreground",
+        "pointer-events-none absolute right-1 flex h-5 min-w-5 items-center justify-center rounded-md px-1 text-xs font-medium tabular-nums text-sidebar-foreground group-data-[state=collapsed]/sidebar:hidden",
         className,
       )}
       {...props}
@@ -227,27 +227,34 @@ function SidebarMenuButton({
   isActive = false,
   tooltip,
   keepMobileOpen = false,
+  size = "default",
   onClick,
   ...props
 }: React.ComponentProps<"button"> & {
   isActive?: boolean;
   tooltip?: string;
   keepMobileOpen?: boolean;
+  size?: "default" | "lg";
 }) {
-  const { open, setMobileOpen } = useSidebar();
+  const { open, mobileOpen, setMobileOpen } = useSidebar();
   const button = (
     <button
       data-slot="sidebar-menu-button"
       data-active={isActive}
+      aria-label={tooltip}
       onClick={(event) => {
         onClick?.(event);
         if (!keepMobileOpen) setMobileOpen(false);
       }}
-      className={cn(sidebarMenuButtonClassName, className)}
+      className={cn(
+        sidebarMenuButtonClassName,
+        size === "lg" && "h-14 group-data-[state=collapsed]/sidebar:h-10",
+        className,
+      )}
       {...props}
     />
   );
-  if (!tooltip || open) return button;
+  if (!tooltip || open || mobileOpen) return button;
   return (
     <Tooltip>
       <TooltipTrigger asChild>{button}</TooltipTrigger>
@@ -259,13 +266,14 @@ function SidebarMenuButton({
 }
 
 function SidebarTrigger({ className, children, ...props }: React.ComponentProps<"button">) {
-  const { open, setOpen, setMobileOpen } = useSidebar();
+  const { open, mobileOpen, setOpen, setMobileOpen } = useSidebar();
+  const label = mobileOpen ? "Close navigation" : open ? "Collapse sidebar" : "Expand sidebar";
   return (
     <button
       data-slot="sidebar-trigger"
       type="button"
-      aria-label="Toggle navigation"
-      title="Toggle navigation"
+      aria-label={label}
+      title={label}
       {...props}
       onClick={() => {
         if (window.matchMedia("(max-width: 767px)").matches) setMobileOpen((value) => !value);
@@ -275,7 +283,7 @@ function SidebarTrigger({ className, children, ...props }: React.ComponentProps<
     >
       <PanelLeftIcon className="size-4" />
       {children}
-      <span className="sr-only">{open ? "Collapse sidebar" : "Expand sidebar"}</span>
+      <span className="sr-only">{label}</span>
     </button>
   );
 }
@@ -356,7 +364,7 @@ function SidebarRail({ className, ...props }: React.ComponentProps<"button">) {
       className={cn(
         "group/rail absolute inset-y-0 z-20 hidden w-4 -translate-x-1/2 cursor-ew-resize transition-all after:absolute after:inset-y-0 after:left-1/2 after:w-[2px] hover:after:bg-sidebar-border md:flex",
         "group-data-[side=left]/sidebar-wrapper:cursor-w-resize group-data-[side=right]/sidebar-wrapper:cursor-e-resize",
-        open ? "left-[--sidebar-width]" : "left-[--sidebar-width-icon]",
+        open ? "left-[var(--sidebar-width)]" : "left-[var(--sidebar-width-icon)]",
         className,
       )}
       {...props}
@@ -384,4 +392,5 @@ export {
   SidebarRail,
   SidebarProvider,
   SidebarTrigger,
+  useSidebar,
 };

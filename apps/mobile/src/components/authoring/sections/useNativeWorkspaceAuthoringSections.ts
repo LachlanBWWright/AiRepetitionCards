@@ -11,6 +11,13 @@ import { createCardLibrarySection } from "./createCardLibrarySection";
 export function useNativeWorkspaceAuthoringSections(props: NativeWorkspaceAuthoringPanelProps) {
   const controller = useNativeWorkspaceAuthoringController(props);
   return {
+    editBrowsedCard: (
+      area: import("@recall/domain").LearningArea,
+      card: import("@recall/domain").Assessment,
+    ) => {
+      const index = area.cards.findIndex((item) => item.id === card.id);
+      if (index >= 0) controller.open(controller.cardEditor(index, "basic", area));
+    },
     overview: createAuthoringOverview(controller),
     searchHistory: createSearchHistorySection(controller),
     deckControls: createDeckControlsSection(controller),

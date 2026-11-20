@@ -54,7 +54,7 @@ function NativeDeckSharingFeedbackItem({
       {canManage ? (
         <NativeButton
           label={item.status === "open" ? "Mark resolved" : "Reopen"}
-          tone="soft"
+          variant="default"
           disabled={busy}
           onPress={() => {
             onUpdate(item);
@@ -119,13 +119,13 @@ export function NativeDeckSharingPanelSafety({
           />
           <NativeButton
             label="Report selected version"
-            tone="soft"
+            variant="default"
             disabled={busy || !selectedVersion || !reportMessage.trim()}
             onPress={onReport}
           />
           <NativeButton
             label={blocked ? "Unblock publisher" : "Block publisher"}
-            tone="soft"
+            variant="default"
             disabled={busy}
             onPress={onToggleBlock}
           />
@@ -157,7 +157,7 @@ export function NativeDeckSharingPanelSafety({
             />
             <NativeButton
               label="Send feedback"
-              tone="soft"
+              variant="default"
               disabled={busy || !feedbackMessage.trim()}
               onPress={onSubmitFeedback}
             />

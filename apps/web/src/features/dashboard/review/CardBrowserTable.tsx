@@ -1,3 +1,12 @@
+import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableRow,
+  TableHead,
+  TableCell,
+  TableCaption,
+} from "@recall/ui-web/components/table";
 import { browserCell, type BrowserColumn, type StudyCardMatch } from "@recall/application";
 import { Button } from "@recall/ui-web";
 export function CardBrowserTable({
@@ -13,18 +22,18 @@ export function CardBrowserTable({
 }) {
   return (
     <div className="min-w-0 overflow-x-auto rounded-lg border border-border">
-      <table className="w-full text-sm">
-        <caption className="sr-only">Cards, page {page + 1}</caption>
-        <thead className="bg-muted/30 text-left text-xs text-muted-foreground">
-          <tr className="border-b border-border last:border-0">
+      <Table className="w-full text-sm">
+        <TableCaption className="sr-only">Cards, page {page + 1}</TableCaption>
+        <TableHeader className="bg-muted/30 text-left text-xs text-muted-foreground">
+          <TableRow className="border-b border-border last:border-0">
             {columns.map((column) => (
-              <th key={column} className="px-3 py-3 font-medium">
+              <TableHead key={column} className="px-3 py-3 font-medium">
                 {columnLabels[column]}
-              </th>
+              </TableHead>
             ))}
-          </tr>
-        </thead>
-        <tbody>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
           {entries.map((entry) => (
             <CardBrowserRow
               key={entry.card.id}
@@ -33,8 +42,8 @@ export function CardBrowserTable({
               onSelect={onSelect}
             />
           ))}
-        </tbody>
-      </table>
+        </TableBody>
+      </Table>
     </div>
   );
 }
@@ -49,13 +58,17 @@ function CardBrowserRow({
   readonly onSelect: (id: string) => void;
 }) {
   return (
-    <tr className="border-b border-border last:border-0">
+    <TableRow className="border-b border-border last:border-0">
       {columns.map((column, index) => (
-        <td key={column} className="max-w-60 whitespace-pre-wrap break-words px-3 py-3 align-top">
+        <TableCell
+          key={column}
+          className="max-w-60 whitespace-pre-wrap break-words px-3 py-3 align-top"
+        >
           {column === "front" || (!columns.includes("front") && index === 0) ? (
             <Button
-              variant="link"
-              className="h-auto justify-start whitespace-normal p-0 text-left text-sm text-foreground"
+              size="row"
+              variant="secondary"
+              className="justify-start whitespace-normal text-left"
               aria-label={`Inspect related cards: ${entry.card.front.slice(0, 90)}`}
               onClick={() => {
                 onSelect(entry.card.id);
@@ -66,9 +79,9 @@ function CardBrowserRow({
           ) : (
             displayCell(entry, column)
           )}
-        </td>
+        </TableCell>
       ))}
-    </tr>
+    </TableRow>
   );
 }
 

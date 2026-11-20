@@ -1,3 +1,4 @@
+import { X } from "lucide-react";
 import type { Meta, StoryObj } from "@storybook/react";
 import { Button } from "./Button";
 
@@ -6,8 +7,11 @@ const meta = {
   component: Button,
   parameters: { layout: "centered" },
   argTypes: {
-    variant: { control: "inline-radio", options: ["primary", "secondary", "danger"] },
-    size: { control: "inline-radio", options: ["small", "medium"] },
+    variant: {
+      control: "inline-radio",
+      options: ["default", "destructive", "ghost"],
+    },
+    size: { control: "inline-radio", options: ["sm", "default"] },
   },
 } satisfies Meta<typeof Button>;
 
@@ -15,9 +19,8 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const Primary: Story = { args: { children: "Continue" } };
-export const Secondary: Story = { args: { variant: "secondary", children: "Cancel" } };
-export const Danger: Story = { args: { variant: "danger", children: "Delete" } };
-export const Small: Story = { args: { size: "small", children: "Compact action" } };
+export const Danger: Story = { args: { variant: "destructive", children: "Delete" } };
+export const Small: Story = { args: { size: "sm", children: "Compact action" } };
 
 export const FullScreenCatalog: Story = {
   name: "Full-screen · action catalog",
@@ -40,25 +43,31 @@ export const FullScreenCatalog: Story = {
           <Button>Start studying</Button>
         </section>
         <section>
-          <h2>Secondary</h2>
-          <p>A reversible alternate action.</p>
-          <Button variant="secondary">Cancel</Button>
-        </section>
-        <section>
-          <h2>Secondary</h2>
-          <p>A visible alternate action.</p>
-          <Button variant="secondary">＋ Add a card</Button>
-        </section>
-        <section>
           <h2>Danger</h2>
           <p>A destructive action that needs attention.</p>
-          <Button variant="danger">Delete area</Button>
+          <Button variant="destructive">Delete area</Button>
         </section>
       </div>
       <div className="mt-4 flex flex-wrap gap-2.5">
-        <Button size="small">Small action</Button>
+        <Button size="sm">Small action</Button>
         <Button disabled>Disabled state</Button>
       </div>
     </main>
   ),
+};
+
+export const GhostClose: Story = {
+  args: {
+    variant: "ghost",
+    size: "icon-sm",
+    "aria-label": "Close preview",
+    children: <X aria-hidden="true" />,
+  },
+  parameters: {
+    docs: {
+      description: {
+        story: "Reserved for compact close controls. Ordinary actions use primary or destructive.",
+      },
+    },
+  },
 };

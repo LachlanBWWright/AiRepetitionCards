@@ -1,3 +1,4 @@
+import { TableRow, TableHead, TableCell } from "@recall/ui-web/components/table";
 import type { Assessment } from "@recall/domain";
 import { Button as ShadcnButton } from "@recall/ui-web/components/button";
 import {
@@ -51,7 +52,7 @@ export function KnowledgeAreaCardLibraryTableRow({
   };
 
   return (
-    <tr className="transition-colors hover:bg-[var(--surface-hover)]">
+    <TableRow className="transition-colors hover:bg-[var(--surface-hover)]">
       {hasBulkAction && (
         <KnowledgeAreaCardLibrarySelectionCell
           selected={selected}
@@ -66,7 +67,10 @@ export function KnowledgeAreaCardLibraryTableRow({
           }}
         />
       )}
-      <th className="max-w-0 px-4 py-5 text-left text-[15px] font-medium leading-6" scope="row">
+      <TableHead
+        className="min-w-0 px-2 py-3 sm:px-4 sm:py-4 text-left text-[15px] font-medium leading-6"
+        scope="row"
+      >
         <KnowledgeAreaCardLibraryQuestion
           area={area}
           card={card}
@@ -76,15 +80,15 @@ export function KnowledgeAreaCardLibraryTableRow({
           baselineForVersion={baselineForVersion}
           restoring={restoring}
         />
-      </th>
-      <td className="px-3 py-3 text-right">
+      </TableHead>
+      <TableCell className="px-3 py-3 text-right">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <ShadcnButton
               type="button"
               variant="secondary"
-              size="icon"
-              className="size-8 rounded-md border-transparent bg-transparent shadow-none hover:bg-[var(--surface-hover)]"
+              size="icon-sm"
+
               aria-label={`Actions for card: ${card.front}`}
             >
               <Ellipsis aria-hidden="true" />
@@ -113,7 +117,7 @@ export function KnowledgeAreaCardLibraryTableRow({
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
-      </td>
-    </tr>
+      </TableCell>
+    </TableRow>
   );
 }

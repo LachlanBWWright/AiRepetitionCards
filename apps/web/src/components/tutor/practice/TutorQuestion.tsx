@@ -41,7 +41,7 @@ export function TutorQuestion({
           </div>
         )}
         <Button
-          variant={history.length === 0 ? "primary" : "outline"}
+          variant="default"
           type="button"
           disabled={busy}
           onClick={() => {
@@ -94,7 +94,7 @@ export function TutorQuestion({
             maxLength={8000}
             required
           />
-          <Button variant="secondary" size="small" type="submit" disabled={!answer.trim()}>
+          <Button variant="default" size="default" type="submit" disabled={!answer.trim()}>
             Check answer
           </Button>
         </form>

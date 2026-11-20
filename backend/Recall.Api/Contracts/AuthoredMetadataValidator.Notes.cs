@@ -30,7 +30,7 @@ public static partial class AuthoredMetadataValidator
             if (field.ValueKind != JsonValueKind.Object || !field.TryGetProperty("name", out var name) || !FieldName(name) || !fieldNames.Add(name.GetString()!) || (field.TryGetProperty("sticky", out _) && !Boolean(field, "sticky"))) return false;
         var templateIds = new HashSet<string>(StringComparer.Ordinal);
         foreach (var template in templates.EnumerateArray())
-            if (template.ValueKind != JsonValueKind.Object || !RequiredText(template, "id", 1, 200) || !templateIds.Add(template.GetProperty("id").GetString()!) || !RequiredText(template, "name", 1, 80) || !RequiredText(template, "front", 0, 20_000) || !RequiredText(template, "back", 0, 20_000) || (template.TryGetProperty("clozeField", out var source) && !FieldName(source)) || !OptionalText(template, "deckAreaId", 1) || (template.TryGetProperty("presentation", out var settings) && !ValidPresentation(settings))) return false;
+            if (template.ValueKind != JsonValueKind.Object || !RequiredText(template, "id", 1, 200) || !templateIds.Add(template.GetProperty("id").GetString()!) || !RequiredText(template, "name", 1, 80) || !RequiredText(template, "front", 0, 20_000) || !RequiredText(template, "back", 0, 20_000) || !OptionalText(template, "explanation", 0, 10_000) || (template.TryGetProperty("clozeField", out var source) && !FieldName(source)) || !OptionalText(template, "deckAreaId", 1) || (template.TryGetProperty("presentation", out var settings) && !ValidPresentation(settings))) return false;
         return true;
     }
     private static bool ValidOptionalMedia(JsonElement note)

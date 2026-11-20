@@ -1,7 +1,9 @@
+import { NativeSubjectSummaryRow } from "./NativeSubjectSummaryRow";
+import { NativeDailyReviewSummary } from "./NativeDailyReviewSummary";
 import { NativeSubjectTree } from "./NativeSubjectTree";
 import { useState } from "react";
 import { Text, View } from "react-native";
-import { NativeButton, NativeSelect, NativeTextField } from "@recall/ui-native";
+import { NativeButton, NativeCollapsible, NativeSelect, NativeTextField } from "@recall/ui-native";
 import {
   summarizeStudySubjects,
   nextStudyArea,
@@ -14,6 +16,7 @@ import type { AppModel } from "../useAppController";
 export function AppSubjectsHome({ model }: { readonly model: AppModel }) {
   const [sort, setSort] = useState<SubjectSort>("daily");
   const [search, setSearch] = useState("");
+  const [showActions, setShowActions] = useState(false);
   const rows = model.workspace
     ? summarizeStudySubjects(
         model.workspace,
@@ -35,58 +38,42 @@ export function AppSubjectsHome({ model }: { readonly model: AppModel }) {
       model.setActiveTab(NativeAppTab.Library);
     }
   }
+  function createSubject() {
+    model.setSubjectMode("overview");
+    model.setSubjectSection("cards");
+    model.setCreateSubjectRequest((value) => value + 1);
+    model.setActiveTab(NativeAppTab.Library);
+  }
+  function handleEmptyAction() {
+    if (search) setSearch("");
+    else createSubject();
+  }
   return (
-    <View className="gap-5">
+    <View className="gap-6">
       <Text accessibilityRole="header" className="text-3xl font-bold text-recall-ink">
         Your subjects
       </Text>
       <Text className="text-sm text-recall-muted">
-        {due} cards due · {model.workspace?.areas.length ?? 0} subjects
+        {model.workspace?.areas.length ?? 0} subjects
       </Text>
       {model.message && (
         <Text accessibilityLiveRegion="polite" className="text-recall-muted">
           {model.message}
         </Text>
       )}
-      <View className="flex-row flex-wrap gap-2">
-        <NativeButton
-          label="New subject"
-          disabled={model.reviewPending}
-          onPress={() => {
-            model.setSubjectMode("overview");
-            model.setSubjectSection("cards");
-            model.setCreateSubjectRequest((value) => value + 1);
-            model.setActiveTab(NativeAppTab.Library);
+      {Boolean(model.workspace?.areas.length) && (
+        <NativeDailyReviewSummary
+          due={due}
+          disabled={model.reviewPending || due === 0}
+          onReview={() => {
+            const next = model.workspace ? nextStudyArea(model.workspace, model.now) : undefined;
+            if (next) {
+              model.startStudy(next.id);
+              model.setReviewAll(true);
+            }
           }}
         />
-        <NativeButton
-          label="Import cards"
-          tone="soft"
-          onPress={() => {
-            model.setSubjectMode("overview");
-            model.setShowImportChoices(true);
-            model.setActiveTab(NativeAppTab.Library);
-          }}
-        />
-        <NativeButton
-          label="Browse shared decks"
-          tone="soft"
-          onPress={() => {
-            model.setActiveTab(NativeAppTab.Sharing);
-          }}
-        />
-      </View>
-      <NativeButton
-        label="Review all due"
-        disabled={model.reviewPending || due === 0}
-        onPress={() => {
-          const next = model.workspace ? nextStudyArea(model.workspace, model.now) : undefined;
-          if (next) {
-            model.startStudy(next.id);
-            model.setReviewAll(true);
-          }
-        }}
-      />
+      )}
       {model.workspace && (
         <NativeSubjectTree
           workspace={model.workspace}
@@ -99,62 +86,76 @@ export function AppSubjectsHome({ model }: { readonly model: AppModel }) {
           }}
         />
       )}
-      <NativeTextField label="Find a subject" value={search} onChangeText={setSearch} />
-      <NativeSelect
-        label="Sort subjects"
-        value={sort}
-        options={subjectSortOptions}
-        onValueChange={(value) => {
-          if (isSubjectSort(value)) setSort(value);
-        }}
-      />
-      {rows.map((row) => (
-        <View key={row.area.id} className="gap-3 rounded-xl border border-recall-line p-4">
-          <NativeButton
-            label={row.area.title}
-            tone="soft"
-            disabled={model.reviewPending}
-            onPress={() => {
-              open(row.area.id, "overview");
+      {Boolean(model.workspace?.areas.length) && (
+        <>
+          <NativeTextField label="Find a subject" value={search} onChangeText={setSearch} />
+          <NativeSelect
+            label="Sort subjects"
+            value={sort}
+            options={subjectSortOptions}
+            onValueChange={(value) => {
+              if (isSubjectSort(value)) setSort(value);
             }}
           />
-          <Text className="text-sm text-recall-muted">
-            {row.area.cards.length} cards · {row.due} due
-            {row.suggested ? " · Follow-up available" : ""}
-          </Text>
-          <View className="flex-row flex-wrap gap-2">
-            <NativeButton
-              label="Review"
-              disabled={model.reviewPending || row.due === 0}
-              onPress={() => {
-                open(row.area.id, "review");
-              }}
-            />
-            <NativeButton
-              label="Tutor"
-              tone="soft"
-              disabled={model.reviewPending}
-              onPress={() => {
-                open(row.area.id, "tutor");
-              }}
-            />
-            <NativeButton
-              label="Improve"
-              tone="soft"
-              disabled={model.reviewPending}
-              onPress={() => {
-                open(row.area.id, "improve");
-              }}
-            />
-          </View>
-        </View>
+        </>
+      )}
+      {rows.map((row) => (
+        <NativeSubjectSummaryRow
+          key={row.area.id}
+          row={row}
+          disabled={model.reviewPending}
+          onOpen={(activity) => {
+            open(row.area.id, activity);
+          }}
+        />
       ))}
+      <NativeCollapsible
+        title="Subject actions"
+        open={showActions}
+        onToggle={() => {
+          setShowActions((current) => !current);
+        }}
+      >
+        <View className="gap-2">
+          <NativeButton
+            label="New subject"
+            disabled={model.reviewPending}
+            onPress={createSubject}
+          />
+          <NativeButton
+            label="Import cards"
+            variant="secondary"
+            onPress={() => {
+              model.setSubjectMode("overview");
+              model.setShowImportChoices(true);
+              model.setActiveTab(NativeAppTab.Library);
+            }}
+          />
+          <NativeButton
+            label="Browse shared decks"
+            variant="secondary"
+            onPress={() => {
+              model.setActiveTab(NativeAppTab.Sharing);
+            }}
+          />
+        </View>
+      </NativeCollapsible>
       {rows.length === 0 && (
-        <Text className="text-recall-muted">
-          {search
-            ? "No matching subjects."
-            : "Create a subject with just a name. Add cards or materials whenever you’re ready."}
-        </Text>
+        <View className="gap-4 py-6">
+          <Text className="text-recall-ink text-lg font-semibold">
+            {search ? "No matching subjects" : "Create your first subject"}
+          </Text>
+          <Text className="text-sm leading-6 text-recall-muted">
+            {search
+              ? "No matching subjects."
+              : "Choose something you’re learning. Give it a name, then add your first card."}
+          </Text>
+          <NativeButton
+            label={search ? "Clear search" : "New subject"}
+            disabled={model.reviewPending}
+            onPress={handleEmptyAction}
+          />
+        </View>
       )}
     </View>
   );

@@ -1,4 +1,6 @@
-import { Pressable, Text, View } from "react-native";
+import { NativeButton } from "@recall/ui-native";
+
+import { Text, View } from "react-native";
 import type { KnowledgeArea } from "@recall/domain";
 import type { NativePublishingPanelUpstreamUpdateState } from "./NativePublishingPanel.types";
 
@@ -27,14 +29,12 @@ export function NativePublishingPanelUpstreamSection({
       <Text className={"text-recall-muted text-[12px] leading-[18px]"}>
         Review a newer version before adding it as a separate copy.
       </Text>
-      <Pressable
-        accessibilityRole="button"
+      <NativeButton
+        label="Check for updates"
+        variant="default"
         disabled={busy}
         onPress={onCheckUpdates}
-        className={"min-h-[40px] justify-center items-center border-b border-recall-line"}
-      >
-        <Text className={"text-recall-darkGreen font-bold text-[12px]"}>Check for updates</Text>
-      </Pressable>
+      />
       {upstreamUpdate && (
         <Text
           accessibilityLiveRegion="polite"
@@ -50,18 +50,14 @@ export function NativePublishingPanelUpstreamSection({
         </Text>
       )}
       {upstreamUpdate?.status === "available" && (
-        <Pressable
-          accessibilityRole="button"
+        <NativeButton
+          label="Review available version"
+          variant="default"
           disabled={busy}
           onPress={() => {
             onReviewVersion(upstreamUpdate.versionId);
           }}
-          className={"min-h-[40px] justify-center items-center border-b border-recall-line"}
-        >
-          <Text className={"text-recall-darkGreen font-bold text-[12px]"}>
-            Review available version
-          </Text>
-        </Pressable>
+        />
       )}
     </View>
   );

@@ -9,9 +9,9 @@ const meta = {
   argTypes: {
     variant: {
       control: "inline-radio",
-      options: ["primary", "secondary", "danger", "outline", "link"],
+      options: ["default", "destructive", "ghost"],
     },
-    size: { control: "inline-radio", options: ["small", "medium", "lg", "icon"] },
+    size: { control: "inline-radio", options: ["sm", "default", "lg", "icon"] },
   },
   decorators: [
     (Story) => (
@@ -26,9 +26,8 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const Primary: Story = {};
-export const Secondary: Story = { args: { variant: "secondary", children: "Keep studying" } };
-export const Danger: Story = { args: { variant: "danger", children: "Delete card" } };
-export const Small: Story = { args: { size: "small", children: "Save" } };
+export const Danger: Story = { args: { variant: "destructive", children: "Delete card" } };
+export const Small: Story = { args: { size: "sm", children: "Save" } };
 export const Disabled: Story = { args: { disabled: true, children: "No cards due" } };
 export const Saving: Story = {
   args: { disabled: true, "aria-busy": true, children: "Saving card…" },
@@ -62,13 +61,13 @@ export const FullScreenStates: Story = {
         <section>
           <h2>Study actions</h2>
           <Button>Start studying</Button>
-          <Button variant="secondary">Browse cards</Button>
-          <Button variant="secondary">Add a card</Button>
+          <Button variant="default">Browse cards</Button>
+          <Button variant="default">Add a card</Button>
         </section>
         <section>
           <h2>Destructive action</h2>
           <p>Use a clear label before the confirmation dialog.</p>
-          <Button variant="danger">Delete learning area</Button>
+          <Button variant="destructive">Delete learning area</Button>
         </section>
         <section>
           <h2>Disabled and saving</h2>
@@ -81,7 +80,7 @@ export const FullScreenStates: Story = {
           <h2>Keyboard focus</h2>
           <p>Use Tab to move between actions.</p>
           <Button autoFocus>Continue review</Button>
-          <Button size="small" variant="secondary">
+          <Button size="sm" variant="default">
             Skip for now
           </Button>
         </section>
@@ -108,22 +107,31 @@ export const CompositionAndVariants: Story = {
         Buttons keep action semantics; composed links retain navigation.
       </p>
       <div className="mt-8 grid grid-cols-1 gap-3 sm:grid-cols-2 [&>section]:min-h-[150px] [&>section]:rounded-xl [&>section]:border [&>section]:bg-card [&>section]:p-5 [&>section>h2]:m-0 [&>section>h2]:text-sm [&>section>p]:my-2 [&>section>p]:text-xs [&>section>p]:text-muted-foreground">
-        <section>
+        <section className="flex flex-col items-start gap-3">
           <h2>Navigation</h2>
-          <Button asChild>
-            <a href="#library">Browse your library</a>
-          </Button>
-          <Button asChild variant="outline">
-            <a href="#review">Return to review</a>
-          </Button>
-          <Button asChild variant="link">
-            <a href="#settings">Study settings</a>
-          </Button>
+          <a
+            className="text-primary underline underline-offset-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring"
+            href="#library"
+          >
+            Browse your library
+          </a>
+          <a
+            className="text-primary underline underline-offset-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring"
+            href="#review"
+          >
+            Return to review
+          </a>
+          <a
+            className="text-primary underline underline-offset-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring"
+            href="#settings"
+          >
+            Study settings
+          </a>
         </section>
         <section>
           <h2>Sizes</h2>
-          <Button size="small">Save</Button>
-          <Button size="medium">Start studying</Button>
+          <Button size="sm">Save</Button>
+          <Button size="default">Start studying</Button>
           <Button size="lg">Continue your session</Button>
           <Button size="icon" aria-label="Add a card">
             +

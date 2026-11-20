@@ -1,0 +1,15 @@
+@font-face {
+  font-family: "RecallGeist";
+  src: url("../src/app/fonts/Geist-Regular.ttf") format("truetype");
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: "RecallGeistMono";
+  src: url("../src/app/fonts/GeistMono-Latin.woff2") format("woff2");
+  font-display: swap;
+}
+:root {
+  --font-geist-sans: "RecallGeist";
+  --font-geist-mono: "RecallGeistMono";
+}

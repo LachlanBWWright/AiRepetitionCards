@@ -17,7 +17,7 @@ export function NativeWorkspaceFlaggedFilter({
   return (
     <NativeButton
       label={flaggedOnly ? "Show all cards" : `Flagged for editing (${String(flaggedCount)})`}
-      tone="soft"
+      variant="default"
       onPress={() => {
         onChange(!flaggedOnly);
       }}

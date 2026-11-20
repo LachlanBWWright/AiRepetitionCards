@@ -1,3 +1,4 @@
+import { NativeCollapsibleTrigger, NativeCollapsibleContent } from "@recall/ui-native";
 import { Text, TextInput, View } from "react-native";
 import type { KnowledgeNotebook, StudyMaterial } from "@recall/application";
 import type { getNativeStudyMaterialCoverage } from "./NativeStudyMaterialsPanel.actions";
@@ -17,15 +18,7 @@ function ActionButton({
   readonly onPress: () => void;
   readonly disabled: boolean;
 }) {
-  return (
-    <NativeButton
-      label={label}
-      onPress={onPress}
-      disabled={disabled}
-      className="py-[10px] px-[4px]"
-      labelClassName="text-recall-surface text-[12px] font-bold"
-    />
-  );
+  return <NativeButton label={label} onPress={onPress} disabled={disabled} />;
 }
 
 export function NativeStudyMaterialsPanelMetadata({
@@ -214,8 +207,13 @@ export function NativeStudyMaterialsPanelGenerationSettings({
   );
   return (
     <>
-      {button(visible ? "Hide options" : "Options", onToggle)}
-      <View className={visible ? "gap-[10px]" : "hidden"}>
+      <NativeCollapsibleTrigger
+        open={visible}
+        title="Options"
+        onToggle={onToggle}
+        disabled={disabled}
+      />
+      <NativeCollapsibleContent open={visible}>
         <Text className="text-recall-muted text-[11px] leading-[16px]">
           Choose the concept these proposals will investigate.
         </Text>
@@ -244,7 +242,7 @@ export function NativeStudyMaterialsPanelGenerationSettings({
           keyboardType="number-pad"
           className="p-[10px] rounded-[8px] bg-recall-paper text-recall-ink"
         />
-      </View>
+      </NativeCollapsibleContent>
     </>
   );
 }
@@ -274,17 +272,8 @@ export function NativeStudyMaterialsPanelGenerationActions({
         label="Generate cards"
         onPress={onGenerate}
         disabled={disabled || !hasApi || hasUnsavedPassage}
-        className="py-[10px] px-[4px]"
-        labelClassName="text-recall-surface text-[12px] font-bold"
       />
-      {generating ? (
-        <NativeButton
-          label="Pause generation"
-          onPress={onPause}
-          className="py-[10px] px-[4px]"
-          labelClassName="text-recall-surface text-[12px] font-bold"
-        />
-      ) : null}
+      {generating ? <NativeButton label="Pause generation" onPress={onPause} /> : null}
       {!hasApi ? (
         <Text className="text-recall-muted text-[11px] leading-[16px]">
           Connect AI in settings to generate cards.

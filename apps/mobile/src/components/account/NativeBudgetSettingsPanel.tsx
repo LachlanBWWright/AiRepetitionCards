@@ -1,5 +1,8 @@
+import { NativeButton } from "@recall/ui-native";
+import { NativeCollapsibleTrigger, NativeCollapsibleContent } from "@recall/ui-native";
+
 import { useEffect, useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Text, View } from "react-native";
 import { Effect, Either } from "effect";
 import { parseLocalBudgetLimit, type LocalAiUsageSnapshot } from "@recall/application";
 import { NativeTextField } from "../ui/NativeTextField";
@@ -63,27 +66,29 @@ export function NativeBudgetSettingsPanel({ accountId }: { readonly accountId: s
     } else setMessage(result.left.message);
   }
   return (
-    <View className="gap-[10px] p-[14px]">
+    <View className="gap-4 p-4">
       <Text className="font-bold">AI usage limits</Text>
       <Text>Request limits for this account on this device. Leave blank for unlimited.</Text>
-      <Pressable accessibilityRole="button" disabled={busy} onPress={() => void refresh()}>
-        <Text>Refresh usage</Text>
-      </Pressable>
+      <NativeButton
+        label="Refresh usage"
+        variant="default"
+        disabled={busy}
+        onPress={() => void refresh()}
+      />
       {snapshot && (
         <>
           <Text>
             Today: {snapshot.summary.daily.requests} · Week: {snapshot.summary.weekly.requests}{" "}
             requests
           </Text>
-          <Pressable
-            accessibilityRole="button"
-            onPress={() => {
+          <NativeCollapsibleTrigger
+            open={detailsVisible}
+            title="Usage details and reset times"
+            onToggle={() => {
               setDetailsVisible(!detailsVisible);
             }}
-          >
-            <Text>{detailsVisible ? "Hide usage details" : "Usage details and reset times"}</Text>
-          </Pressable>
-          {detailsVisible ? (
+          />
+          <NativeCollapsibleContent open={detailsVisible}>
             <View className="gap-2">
               <Text>
                 {snapshot.summary.daily.completed} completed · {snapshot.summary.daily.failed}{" "}
@@ -102,7 +107,7 @@ export function NativeBudgetSettingsPanel({ accountId }: { readonly accountId: s
                 These limits do not show remaining ChatGPT allowance or set a spending cap.
               </Text>
             </View>
-          ) : null}
+          </NativeCollapsibleContent>
           {["Daily requests", "Weekly requests", "Daily research requests"].map((label, index) => (
             <NativeTextField
               key={label}
@@ -116,9 +121,12 @@ export function NativeBudgetSettingsPanel({ accountId }: { readonly accountId: s
               }}
             />
           ))}
-          <Pressable accessibilityRole="button" disabled={busy} onPress={() => void save()}>
-            <Text>{busy ? "Saving…" : "Save limits"}</Text>
-          </Pressable>
+          <NativeButton
+            label={busy ? "Saving…" : "Save limits"}
+            variant="default"
+            disabled={busy}
+            onPress={() => void save()}
+          />
         </>
       )}
       {message && <Text accessibilityRole="alert">{message}</Text>}

@@ -1,4 +1,3 @@
-import { countLocalChatGPTContext } from "./transport/chatgpt-context-count";
 import { readChatGPTModels } from "./chatgpt-local-models";
 import { randomUUID } from "node:crypto";
 import { join } from "node:path";
@@ -145,7 +144,6 @@ export function registerChatGptLocal(trustedSender: (event: IpcMainInvokeEvent) 
       inputTokens: null,
       outputTokens: null,
     };
-    let countedInputTokens = 0;
     const result = await protect<TutorInferenceReply | ChatGPTResearchResult>(async () => {
       const active = await activeAccount(controller.signal);
       if (active._tag === "Failure") return active;
@@ -169,16 +167,6 @@ export function registerChatGptLocal(trustedSender: (event: IpcMainInvokeEvent) 
         return failure;
       };
       const body = research ? researchBody(input) : chatGPTTutorBody(input);
-      if (!research) {
-        const counted = await countLocalChatGPTContext(body, {
-          request: fetch,
-          resource,
-          signal: controller.signal,
-          accessToken: active.value.credentials?.accessToken ?? "",
-        });
-        if (Either.isLeft(counted)) return fail(counted.left);
-        countedInputTokens = counted.right;
-      }
       const requestId = randomUUID();
       const reserved = await usageOperation(
         Effect.gen(function* () {
@@ -234,7 +222,7 @@ export function registerChatGptLocal(trustedSender: (event: IpcMainInvokeEvent) 
         _tag: "Success",
         value: {
           text: text.right,
-          usage: readChatGPTTokenUsage(streamed.right, input.model, countedInputTokens),
+          usage: readChatGPTTokenUsage(streamed.right, input.model),
         },
       };
     });

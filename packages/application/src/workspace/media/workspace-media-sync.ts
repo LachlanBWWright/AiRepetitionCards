@@ -162,7 +162,6 @@ export function syncWorkspaceMedia(
       unique.set(decoded.right.id, decoded.right);
     }
 
-    const downloads: StoredMediaAsset[] = [];
     for (const reference of unique.values()) {
       const local = yield* mediaStore
         .get(reference.id)
@@ -180,11 +179,9 @@ export function syncWorkspaceMedia(
       if (!remote) return yield* Effect.fail(syncFailure("media-not-found"));
       if (!sameReference(remote.reference, reference) || !verifyMediaAsset(remote))
         return yield* Effect.fail(syncFailure("invalid-media"));
-      downloads.push(remote);
+      yield* persistMediaAssets(mediaStore, [remote]).pipe(
+        Effect.mapError(() => syncFailure("persistence-failed")),
+      );
     }
-
-    yield* persistMediaAssets(mediaStore, downloads).pipe(
-      Effect.mapError(() => syncFailure("persistence-failed")),
-    );
   });
 }

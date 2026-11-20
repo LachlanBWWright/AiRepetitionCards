@@ -108,13 +108,22 @@ public sealed partial class LearningActivityOperations
         return Uri.TryCreate(raw, UriKind.Absolute, out project!) && (project.Scheme == Uri.UriSchemeHttps || project.Host is "localhost" or "127.0.0.1" or "::1");
     }
 
+    private static IResult ManagedProviderError(Recall.Api.Features.Tutor.TutorProviderFailure failure, string fallback) => failure.Kind switch
+    {
+        Recall.Api.Features.Tutor.TutorProviderFailureKind.ManagedNotEntitled => Error("Managed AI is unavailable for this account. Check your allowance in AI settings.", 403),
+        Recall.Api.Features.Tutor.TutorProviderFailureKind.SharedBudgetExceeded => Error("You have reached today’s hosted AI budget. Try again tomorrow.", 429),
+        Recall.Api.Features.Tutor.TutorProviderFailureKind.RateLimited => Error("The tutor is busy. Try again shortly.", 429),
+        _ => Error(fallback, 503)
+    };
+
     private string? ConfiguredModel(string taskKey)
     {
+        if (configuration["MANAGED_AI_ENABLED"] == "true") return "managed";
         var model = configuration[taskKey];
         return string.IsNullOrEmpty(model) ? configuration["OPENAI_MODEL"] : model;
     }
 
-    private bool ValidConfiguredModel(string? model) => !string.IsNullOrWhiteSpace(configuration["OPENAI_API_KEY"]) &&
+    private bool ValidConfiguredModel(string? model) => (configuration["MANAGED_AI_ENABLED"] == "true" || !string.IsNullOrWhiteSpace(configuration["OPENAI_API_KEY"])) &&
         !string.IsNullOrWhiteSpace(model) && model.Length <= 120 && model.Trim() == model && !model.Any(char.IsWhiteSpace);
 
     private static async Task<byte[]?> ReadBodyAsync(HttpContext http, int limit, CancellationToken token)
@@ -180,7 +189,7 @@ public sealed partial class LearningActivityOperations
 
     private static bool ValidAttempt(JsonElement entry)
     {
-        if (entry.ValueKind != JsonValueKind.Object || !String(entry, "id", 200, 1) || !entry.TryGetProperty("activity", out var activity) || !ValidActivity(activity) ||
+        if (entry.ValueKind != JsonValueKind.Object || !ValidOptionalRuntime(entry) || !String(entry, "id", 200, 1) || !entry.TryGetProperty("activity", out var activity) || !ValidActivity(activity) ||
             !entry.TryGetProperty("response", out var response) || !ValidResponse(response) || !entry.TryGetProperty("result", out var result) || !ValidResult(result) ||
             !TryTime(entry, "startedAt", out var started) || !TryTime(entry, "submittedAt", out var submitted) || !TryTime(entry, "acceptedAt", out var accepted) ||
             started > submitted || submitted > accepted || !result.TryGetProperty("evidence", out var evidence)) return false;
@@ -224,7 +233,7 @@ public sealed partial class LearningActivityOperations
         item.TryGetProperty("payload", out var payload) && payload.ValueKind == JsonValueKind.Object && payload.GetRawText().Length <= 100_000 &&
         (!item.TryGetProperty("archived", out var archived) || archived.ValueKind is JsonValueKind.True or JsonValueKind.False);
 
-    private static bool ValidResponse(JsonElement response) => response.ValueKind == JsonValueKind.Object && response.TryGetProperty("answers", out var answers) && answers.ValueKind == JsonValueKind.Array && answers.GetArrayLength() <= 20 && answers.EnumerateArray().All(x => x.ValueKind == JsonValueKind.String && x.GetString()!.Length <= 40_000) &&
+    private static bool ValidResponse(JsonElement response) => response.ValueKind == JsonValueKind.Object && ValidOptionalInteraction(response) && response.TryGetProperty("answers", out var answers) && answers.ValueKind == JsonValueKind.Array && answers.GetArrayLength() <= 20 && answers.EnumerateArray().All(x => x.ValueKind == JsonValueKind.String && x.GetString()!.Length <= 40_000) &&
         response.TryGetProperty("selectedOptionIds", out var selected) && selected.ValueKind == JsonValueKind.Array && selected.GetArrayLength() <= 20 && selected.EnumerateArray().All(x => x.ValueKind == JsonValueKind.String && x.GetString()!.Length <= 200) &&
         response.TryGetProperty("selfScore", out var score) && Number(score, out var scoreValue) && scoreValue is >= 0 and <= 1 &&
         response.TryGetProperty("assistance", out var assistance) && assistance.ValueKind == JsonValueKind.String && assistance.GetString() is "none" or "hint" or "worked-example" or "answer-revealed" &&
@@ -258,11 +267,11 @@ public sealed partial class LearningActivityOperations
     private static bool ValidCodingPayload(JsonElement activity)
     {
         if (!activity.TryGetProperty("payload", out var payload) || !String(payload, "rubric", 20_000, 1) || !String(payload, "reference", 20_000) ||
-            !payload.TryGetProperty("language", out var language) || language.ValueKind != JsonValueKind.String || language.GetString() != "javascript" ||
+            !payload.TryGetProperty("language", out var language) || language.ValueKind != JsonValueKind.String || language.GetString() is not ("javascript" or "python" or "rust") ||
             !payload.TryGetProperty("prompts", out var prompts) || prompts.ValueKind != JsonValueKind.Array || prompts.GetArrayLength() is < 1 or > 10 ||
             !payload.TryGetProperty("tests", out var tests) || tests.ValueKind != JsonValueKind.Array || tests.GetArrayLength() is < 1 or > 20) return false;
         return prompts.EnumerateArray().All(prompt => prompt.ValueKind == JsonValueKind.String && prompt.GetString() is { Length: > 0 and <= 20_000 } text && text.Trim().Length > 0) &&
-            tests.EnumerateArray().All(test => test.ValueKind == JsonValueKind.Object && test.TryGetProperty("input", out var input) && input.ValueKind == JsonValueKind.Array && input.GetArrayLength() <= 10 && test.TryGetProperty("expected", out _));
+            tests.EnumerateArray().All(test => test.ValueKind == JsonValueKind.Object && test.TryGetProperty("input", out var input) && input.ValueKind == JsonValueKind.Array && input.GetArrayLength() <= 10 && test.TryGetProperty("expected", out _)) && ValidCodingOptions(payload);
     }
 
     private static bool ValidResult(JsonElement result) => result.ValueKind == JsonValueKind.Object &&

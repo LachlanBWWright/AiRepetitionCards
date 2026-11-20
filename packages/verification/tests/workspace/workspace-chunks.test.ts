@@ -69,3 +69,34 @@ await test("a failed desktop chunk write rolls back to the complete previous sna
   assert.equal(readDesktopWorkspaceSnapshot(database), previous);
   database.close();
 });
+
+await test("snapshot commits update only changed chunks and remove stale tail rows", () => {
+  const database = new DatabaseSync(":memory:");
+  database.exec(`
+    CREATE TABLE local_workspace(id INTEGER PRIMARY KEY,serialized_workspace TEXT,updated_at TEXT);
+    CREATE TABLE local_workspace_chunks(part INTEGER PRIMARY KEY,payload TEXT);
+    CREATE TABLE chunk_writes(part INTEGER);
+    CREATE TRIGGER count_update AFTER UPDATE ON local_workspace_chunks BEGIN INSERT INTO chunk_writes VALUES(new.part); END;
+  `);
+  const previous = "a".repeat(200_000);
+  assert.equal(writeDesktopWorkspaceSnapshot(database, previous), true);
+  assert.equal(writeDesktopWorkspaceSnapshot(database, `${previous.slice(0, -1)}b`), true);
+  assert.deepEqual(
+    database
+      .prepare("SELECT part FROM chunk_writes")
+      .all()
+      .map((row) => row.part),
+    [3],
+  );
+  database.exec("DELETE FROM chunk_writes");
+  assert.equal(writeDesktopWorkspaceSnapshot(database, previous.slice(0, 100_000)), true);
+  assert.equal(readDesktopWorkspaceSnapshot(database), previous.slice(0, 100_000));
+  assert.deepEqual(
+    database
+      .prepare("SELECT part FROM chunk_writes")
+      .all()
+      .map((row) => row.part),
+    [1],
+  );
+  database.close();
+});

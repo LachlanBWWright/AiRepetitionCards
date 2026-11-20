@@ -1,3 +1,4 @@
+import { NativeWorkspaceSyncStatus } from "./src/components/account/NativeWorkspaceSyncStatus";
 import { Text, View } from "react-native";
 import { Either } from "effect";
 import * as Crypto from "expo-crypto";
@@ -78,6 +79,28 @@ export default function App() {
     : {};
   return (
     <NativeAppShell
+      syncStatus={
+        model.ready && workspace ? (
+          <NativeWorkspaceSyncStatus
+            writable={model.cacheWritable}
+            busy={model.syncStatus.busy}
+            signedIn={Boolean(accountUserId)}
+            error={model.syncStatus.error}
+            confirmed={model.syncStatus.confirmed}
+            conflict={Boolean(
+              syncOwnershipIssue ||
+              syncConflictWorkspace ||
+              workspace.studySettingsConflict ||
+              workspace.reviewConflictIds?.length ||
+              workspace.syncContentConflictAreaIds?.length,
+            )}
+            pending={
+              (workspace.pendingReviewEventIds?.length ?? 0) +
+              (workspace.syncPendingContentAreaIds?.length ?? 0)
+            }
+          />
+        ) : null
+      }
       activeTab={activeTab}
       onTabChange={setActiveTab}
       areas={workspace?.areas ?? []}

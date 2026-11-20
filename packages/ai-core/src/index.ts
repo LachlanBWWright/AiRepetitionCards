@@ -76,6 +76,7 @@ export type AiProviderError =
   | { readonly _tag: "AiBudgetExceeded" }
   | { readonly _tag: "AiBudgetUnavailable" }
   | { readonly _tag: "AiProviderUnavailable" }
+  | { readonly _tag: "AiManagedAccessDenied" }
   | { readonly _tag: "AiRateLimited" }
   | { readonly _tag: "AiQuotaExceeded" }
   | { readonly _tag: "AiRefusal" }

@@ -1,10 +1,18 @@
 import type { ActivityResponse, LearningActivity, LearningAttempt } from "@recall/domain";
-import { useState, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { Text, View } from "react-native";
-import { NativeSelect, NativeTextField } from "@recall/ui-native";
+import { NativeCollapsible, NativeSelect, NativeTextField } from "@recall/ui-native";
 import { NativeButton } from "../ui/NativeButton";
+import { NativeActivityAuthoringFields } from "./interactive/NativeActivityAuthoringFields";
 import { NativeLearningActivityAttemptPanel } from "./NativeLearningActivitiesPanelAttempt";
-import { diagnoseLearningObjectives, findActivityPlugin } from "@recall/application";
+import type { LuaRuntime } from "@recall/application";
+import {
+  builtinActivityRegistry,
+  createLuaActivityRegistry,
+  unavailableLuaRuntime,
+  diagnoseLearningObjectives,
+  findActivityPlugin,
+} from "@recall/application";
 import { NativeObjectiveDiagnostics } from "../review/NativeObjectiveDiagnostics";
 import { NativeActivityPluginTools } from "./ActivityPluginTools";
 import { NativeOfflineReliabilityStatus } from "../workspace/NativeOfflineReliabilityStatus";
@@ -65,6 +73,7 @@ function AttemptHistoryRow({ attempt }: { readonly attempt: LearningAttempt }) {
 
 export function NativeLearningActivitiesPanel(
   props: LearningActivitiesProps & {
+    readonly luaRuntime?: LuaRuntime;
     readonly renderInteraction?: (input: {
       readonly activity: LearningActivity;
       readonly response: ActivityResponse;
@@ -73,7 +82,12 @@ export function NativeLearningActivitiesPanel(
     }) => ReactNode;
   },
 ) {
-  const model = useLearningActivities({ ...props, platform: "native" });
+  const luaRuntime = props.luaRuntime ?? props.services?.lua ?? unavailableLuaRuntime;
+  const registry = useMemo(
+    () => createLuaActivityRegistry(luaRuntime, props.registry ?? builtinActivityRegistry),
+    [luaRuntime, props.registry],
+  );
+  const model = useLearningActivities({ ...props, registry, platform: "native" });
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historyLimit, setHistoryLimit] = useState(20);
   const locked = props.disabled === true || model.busy;
@@ -86,10 +100,14 @@ export function NativeLearningActivitiesPanel(
       })
     : null;
   const activities = model.library.activities.filter(
-    (activity) => activity.areaId === props.areaId,
+    (activity) =>
+      activity.areaId === props.areaId &&
+      (!props.activityIds || props.activityIds.includes(activity.id)),
   );
   const attempts = model.library.attempts.filter(
-    (attempt) => attempt.activity.areaId === props.areaId,
+    (attempt) =>
+      attempt.activity.areaId === props.areaId &&
+      (!props.activityIds || props.activityIds.includes(attempt.activity.id)),
   );
   const objectiveIds = Array.from(
     new Set([
@@ -158,7 +176,7 @@ export function NativeLearningActivitiesPanel(
       {props.services && (
         <NativeButton
           label="Synchronize activities"
-          tone="soft"
+          variant="default"
           disabled={locked || !!model.activity || model.creating}
           onPress={model.sync}
         />
@@ -167,7 +185,7 @@ export function NativeLearningActivitiesPanel(
         <NativeButton
           key={draft.id}
           label={`Resume activity draft: ${draft.title || "Untitled"}`}
-          tone="soft"
+          variant="default"
           disabled={locked || !!model.activity || model.creating}
           onPress={() => {
             model.resumeEditor(draft.id);
@@ -193,7 +211,7 @@ export function NativeLearningActivitiesPanel(
         <NativeButton
           key={draft.id}
           label={`Resume: ${draft.activity.title}`}
-          tone="soft"
+          variant="default"
           disabled={
             locked ||
             !!model.activity ||
@@ -216,7 +234,7 @@ export function NativeLearningActivitiesPanel(
       {model.message && <Text accessibilityRole="alert">{model.message}</Text>}
       <NativeButton
         label="New activity"
-        tone="soft"
+        variant="default"
         disabled={locked || !!model.activity || model.creating}
         onPress={model.newActivity}
       />
@@ -248,19 +266,12 @@ export function NativeLearningActivitiesPanel(
               disabled={locked}
             />
           )}
-          {model.authorFields.map((field) => (
-            <NativeTextField
-              key={field.key}
-              label={field.label}
-              value={model.fieldValue(field.key)}
-              onChangeText={(value) => {
-                model.setFields((current) => ({ ...current, [field.key]: value }));
-              }}
-              editable={!locked}
-              multiline={field.multiline}
-              maxLength={field.key === "payload" ? 100_000 : 20_000}
-            />
-          ))}
+          <NativeActivityAuthoringFields
+            model={model}
+            disabled={locked}
+            luaRuntime={luaRuntime}
+            areaId={props.areaId}
+          />
           <NativeButton
             label={model.editing ? "Save activity changes" : "Save activity"}
             disabled={locked || !model.title.trim()}
@@ -268,7 +279,7 @@ export function NativeLearningActivitiesPanel(
           />
           <NativeButton
             label="Save draft and close"
-            tone="soft"
+            variant="default"
             disabled={locked}
             onPress={model.closeEditor}
           />
@@ -282,6 +293,7 @@ export function NativeLearningActivitiesPanel(
         canAssessHosted={!!canAssessHosted}
         locked={locked}
         customInteraction={customInteraction}
+        luaRuntime={luaRuntime}
       />
       {!model.activity &&
         activities.map((activity) => (
@@ -290,7 +302,7 @@ export function NativeLearningActivitiesPanel(
             <Text className="text-sm text-recall-muted">{activity.fallback}</Text>
             <NativeButton
               label={activityAvailabilityLabel(activity, model.registry)}
-              tone="soft"
+              variant="default"
               disabled={
                 locked ||
                 model.creating ||
@@ -303,7 +315,7 @@ export function NativeLearningActivitiesPanel(
             />
             <NativeButton
               label="Edit activity"
-              tone="soft"
+              variant="default"
               disabled={
                 locked || model.creating || !isActivityAvailableOnNative(activity, model.registry)
               }
@@ -313,7 +325,7 @@ export function NativeLearningActivitiesPanel(
             />
             <NativeButton
               label={activity.archived ? "Restore activity" : "Archive activity"}
-              tone="soft"
+              variant="default"
               disabled={locked || model.creating}
               onPress={() => {
                 model.archive(activity);
@@ -323,33 +335,36 @@ export function NativeLearningActivitiesPanel(
         ))}
       {activities.length === 0 && !model.creating && (
         <Text className="text-sm text-recall-muted">
-          Add a multiple-choice question, a rubric-based exercise, or a coding challenge.
+          Add an ordering, matching, code-tracing, multiple-choice, rubric-based, or coding
+          activity.
         </Text>
       )}
-      {attempts.length > 0 && (
-        <NativeButton
-          label={`Attempt history (${String(attempts.length)})`}
-          tone="soft"
-          onPress={() => {
+      {attempts.length > 0 ? (
+        <NativeCollapsible
+          open={historyOpen}
+          title={`Attempt history (${String(attempts.length)})`}
+          onToggle={() => {
             setHistoryOpen((current) => !current);
           }}
-        />
-      )}
-      {historyOpen &&
-        attempts
-          .slice()
-          .reverse()
-          .slice(0, historyLimit)
-          .map((attempt) => <AttemptHistoryRow key={attempt.id} attempt={attempt} />)}
-      {historyOpen && attempts.length > historyLimit && (
-        <NativeButton
-          label="Show more attempts"
-          tone="soft"
-          onPress={() => {
-            setHistoryLimit((count) => count + 20);
-          }}
-        />
-      )}
+        >
+          {attempts
+            .slice()
+            .reverse()
+            .slice(0, historyLimit)
+            .map((attempt) => (
+              <AttemptHistoryRow key={attempt.id} attempt={attempt} />
+            ))}
+          {attempts.length > historyLimit ? (
+            <NativeButton
+              label="Show more attempts"
+              variant="default"
+              onPress={() => {
+                setHistoryLimit((count) => count + 20);
+              }}
+            />
+          ) : null}
+        </NativeCollapsible>
+      ) : null}
       <NativeObjectiveDiagnostics diagnostics={diagnostics} />
     </View>
   );

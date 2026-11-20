@@ -27,7 +27,7 @@ export function NativeNotebookBatchReview({ model }: { readonly model: NativeNot
           <Text className="text-recall-muted">{entry.proposal.rationale}</Text>
           <NativeButton
             label={selected.includes(entry.id) ? "Selected" : "Select proposal"}
-            tone="soft"
+            variant="default"
             disabled={
               model.busy ||
               !!model.unsaved ||

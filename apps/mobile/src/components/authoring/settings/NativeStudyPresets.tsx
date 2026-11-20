@@ -59,7 +59,7 @@ export function NativeStudyPresets({
       />
       <NativeButton
         label="Create preset from defaults"
-        tone="soft"
+        variant="default"
         disabled={disabled || !canCreate}
         onPress={create}
       />
@@ -112,7 +112,7 @@ export function NativeStudyPresets({
           />
           <NativeButton
             label="Delete unassigned preset"
-            tone="soft"
+            variant="default"
             disabled={disabled || Object.values(settings.areaPresets ?? {}).includes(selected.id)}
             onPress={deleteSelected}
           />

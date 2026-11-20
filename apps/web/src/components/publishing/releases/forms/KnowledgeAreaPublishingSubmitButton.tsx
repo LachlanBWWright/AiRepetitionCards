@@ -17,7 +17,7 @@ export function KnowledgeAreaPublishingSubmitButton({
 }: Props) {
   return (
     <Button
-      className="self-start"
+      className="w-full sm:w-auto sm:self-start"
       type="submit"
       disabled={busy || blocked || !license.trim() || (needsReuseConfirmation && !reuseConfirmed)}
     >

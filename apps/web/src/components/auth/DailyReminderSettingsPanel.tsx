@@ -1,4 +1,6 @@
 "use client";
+
+import { Label } from "@recall/ui-web/components/label";
 import { useEffect, useState } from "react";
 import { Effect, Either } from "effect";
 import { Button } from "@/components/ui/Button";
@@ -58,14 +60,14 @@ export function DailyReminderSettingsPanel({
     } else setMessage(result.left.message);
   }
   return (
-    <section className="grid gap-4 py-4" aria-label="Daily reminder settings">
-      <div>
-        <h2 className="text-lg font-semibold">Daily reminder</h2>
-        <p className="leading-relaxed text-muted-foreground">
+    <section className="flex w-full max-w-3xl flex-col gap-4" aria-label="Daily reminder settings">
+      <div className="flex flex-col gap-2">
+        <h2 className="m-0 text-lg font-semibold">Daily reminder</h2>
+        <p className="m-0 leading-relaxed text-muted-foreground">
           {desktop ? "Requires the app to be running." : "Requires this page to stay open."}
         </p>
       </div>
-      <label className="flex items-center gap-2" htmlFor="daily-reminder-enabled">
+      <Label className="flex items-center gap-2" htmlFor="daily-reminder-enabled">
         <Checkbox
           id="daily-reminder-enabled"
           checked={settings.enabled}
@@ -75,8 +77,8 @@ export function DailyReminderSettingsPanel({
           }}
         />{" "}
         Enable daily reminder
-      </label>
-      <label className="grid max-w-[280px] gap-2" htmlFor="daily-reminder-time-input">
+      </Label>
+      <Label className="grid w-full gap-2" htmlFor="daily-reminder-time-input">
         Reminder time
         <Input
           id="daily-reminder-time-input"
@@ -95,17 +97,15 @@ export function DailyReminderSettingsPanel({
               setSettings({ ...settings, hour, minute });
           }}
         />
-      </label>
-      <Collapsible className="grid justify-items-start gap-2">
-        <CollapsibleTrigger className="text-sm font-medium underline underline-offset-4 hover:text-primary">
-          Notification permissions
-        </CollapsibleTrigger>
-        <CollapsibleContent>
-          <p className="max-w-[56ch] leading-relaxed text-muted-foreground">
+      </Label>
+      <Collapsible>
+        <CollapsibleTrigger>Notification permissions</CollapsibleTrigger>
+        <CollapsibleContent className="flex flex-col gap-2">
+          <p className="m-0 max-w-[56ch] leading-relaxed text-muted-foreground">
             Enabling requests notification permission. Change blocked permissions in your browser or
             device settings.
           </p>
-          <p className="max-w-[56ch] leading-relaxed text-muted-foreground">
+          <p className="m-0 max-w-[56ch] leading-relaxed text-muted-foreground">
             {desktop
               ? "Reminders can appear with the window minimized, but stop when you quit."
               : "Suspended pages may miss reminders. Reopening after the chosen time can show today's reminder."}
@@ -118,7 +118,7 @@ export function DailyReminderSettingsPanel({
       )}
       {snapshot?.error && <Alert variant="destructive">{snapshot.error}</Alert>}
       <Button
-        className="justify-self-start"
+        className="w-full sm:w-auto sm:self-start"
         type="button"
         disabled={busy}
         onClick={() => void save()}

@@ -35,7 +35,7 @@ function DeckRow({
       </Text>
       <NativeButton
         label="Open subject"
-        tone="soft"
+        variant="default"
         disabled={locked}
         onPress={() => {
           onRetainCurrentDraft();

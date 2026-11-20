@@ -1,4 +1,6 @@
-import type React from "react";
+import { WorkspaceBackupActions } from "./WorkspaceBackupActions";
+import { useRef, type ChangeEvent } from "react";
+import { ToggleGroup, ToggleGroupItem } from "@recall/ui-web/components/toggle-group";
 import { Effect } from "effect";
 import type { AnkiImportProposal, ImportedPortableDeckPackage } from "@recall/application";
 import type { Workspace } from "@/features/workspace/types";
@@ -40,11 +42,11 @@ type Props = {
     restorePrivateHistory: boolean,
   ) => Promise<boolean>;
   readonly onAcceptAnkiImport: (proposal: AnkiImportProposal) => Effect.Effect<void, unknown>;
-  readonly onImportDelimited: (event: React.ChangeEvent<HTMLInputElement>) => void;
+  readonly onImportDelimited: (event: ChangeEvent<HTMLInputElement>) => void;
   readonly onExportDelimited: (delimiter: "," | "\t") => void;
   readonly onExportWorkspaceBackup: () => void;
   readonly onRestoreDesktopBackup: () => void;
-  readonly onRestoreWorkspaceBackup: (event: React.ChangeEvent<HTMLInputElement>) => void;
+  readonly onRestoreWorkspaceBackup: (event: ChangeEvent<HTMLInputElement>) => void;
   readonly color: string;
 };
 
@@ -52,12 +54,6 @@ function taskLabel(task: LibraryTool): string {
   if (task === "import") return "Import cards";
   if (task === "export") return "Export deck";
   return "Workspace backup";
-}
-
-function createTaskSelectionHandler(setLibraryTools: Props["setLibraryTools"], task: LibraryTool) {
-  return () => {
-    setLibraryTools(task);
-  };
 }
 
 function createDelimitedExportHandler(
@@ -95,10 +91,24 @@ export function RecallDashboardImportExportDialog({
   onRestoreWorkspaceBackup,
   color,
 }: Props) {
+  const delimitedPicker = useRef<HTMLInputElement>(null);
+  const backupPicker = useRef<HTMLInputElement>(null);
+  const restoreBackup = () => {
+    if (isDesktopRuntime()) onRestoreDesktopBackup();
+    else backupPicker.current?.click();
+  };
+  const chooseTask = (value: string) => {
+    if (value === "import" || value === "export") setLibraryTools(value);
+  };
+  const taskChoices = (["import", "export"] as const).map((task) => (
+    <ToggleGroupItem key={task} value={task}>
+      {taskLabel(task)}
+    </ToggleGroupItem>
+  ));
   return (
     <Dialog open={open && workspaceUnlocked} onOpenChange={onOpenChange}>
       <DialogContent
-        className="max-h-[calc(100dvh-2rem)] gap-5 overflow-y-auto sm:max-w-2xl"
+        className="max-h-[calc(100dvh-2rem)] gap-6 overflow-y-auto sm:max-w-xl"
         onCloseAutoFocus={onCloseAutoFocus}
       >
         <DialogHeader>
@@ -114,22 +124,21 @@ export function RecallDashboardImportExportDialog({
               ? "Validate and preview cards before adding a separate deck. Existing decks stay available."
               : libraryTools === "export"
                 ? `Export ${area?.title ?? "the selected deck"} as CSV or TSV. These formats include text and tags, but omit attachments and review history.`
-                : "A backup includes all decks, schedules, review history and attachments. Restore replaces the workspace. Drafts and editing flags are stored separately."}
+                : "Save a copy of your workspace or restore an existing backup."}
           </DialogDescription>
         </DialogHeader>
-        <div className="flex flex-wrap gap-2" aria-label="Deck transfer tools">
-          <div className="flex flex-wrap gap-2" role="group" aria-label="Choose transfer task">
-            {(["import", "export", "backup"] as const).map((task) => (
-              <Button
-                key={task}
-                variant="secondary"
-                aria-pressed={libraryTools === task}
-                onClick={createTaskSelectionHandler(setLibraryTools, task)}
-              >
-                {taskLabel(task)}
-              </Button>
-            ))}
-          </div>
+        <div className="flex min-w-0 flex-col gap-4" aria-label="Deck transfer tools">
+          {libraryTools !== "backup" && (
+            <ToggleGroup
+              type="single"
+              value={libraryTools}
+              onValueChange={chooseTask}
+              className="flex flex-wrap gap-2"
+              aria-label="Choose transfer task"
+            >
+              {taskChoices}
+            </ToggleGroup>
+          )}
           {libraryTools !== "backup" && deckTransferWorkspace && notesLoaded && (
             <PortableDeckTransfer
               key={`portable:${notesScope}`}
@@ -147,16 +156,13 @@ export function RecallDashboardImportExportDialog({
             />
           )}
           {libraryTools === "import" && (
-            <div className="flex flex-wrap gap-2">
+            <div className="grid grid-cols-1 gap-2 sm:flex sm:flex-wrap">
               <AnkiImportAction color={color} onAccept={onAcceptAnkiImport} />
-              <label
-                className="inline-flex min-h-8 cursor-pointer items-center rounded-md px-2 text-sm text-[var(--ink)] underline-offset-4 hover:bg-[var(--surface-hover)] hover:underline"
-                htmlFor="delimited-import"
-              >
+              <Button variant="secondary" onClick={() => delimitedPicker.current?.click()}>
                 Import CSV/TSV
-              </label>
+              </Button>
               <input
-                id="delimited-import"
+                ref={delimitedPicker}
                 className="sr-only"
                 type="file"
                 accept=".csv,.tsv,text/csv,text/tab-separated-values"
@@ -165,10 +171,9 @@ export function RecallDashboardImportExportDialog({
             </div>
           )}
           {libraryTools === "export" && (
-            <div className="flex flex-wrap gap-2">
+            <div className="grid grid-cols-1 gap-2 sm:flex sm:flex-wrap">
               <Button
                 variant="secondary"
-                className="inline-flex min-h-8 items-center rounded-md px-2 text-sm text-[var(--ink)] underline-offset-4 hover:bg-[var(--surface-hover)] hover:underline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
                 onClick={createDelimitedExportHandler(onExportDelimited, ",")}
                 disabled={!area}
               >
@@ -176,7 +181,6 @@ export function RecallDashboardImportExportDialog({
               </Button>
               <Button
                 variant="secondary"
-                className="inline-flex min-h-8 items-center rounded-md px-2 text-sm text-[var(--ink)] underline-offset-4 hover:bg-[var(--surface-hover)] hover:underline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
                 onClick={createDelimitedExportHandler(onExportDelimited, "\t")}
                 disabled={!area}
               >
@@ -185,29 +189,16 @@ export function RecallDashboardImportExportDialog({
             </div>
           )}
           {libraryTools === "backup" && (
-            <div className="flex flex-wrap gap-2">
-              <Button
-                variant="secondary"
-                className="inline-flex min-h-8 items-center rounded-md px-2 text-sm text-[var(--ink)] underline-offset-4 hover:bg-[var(--surface-hover)] hover:underline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
-                onClick={onExportWorkspaceBackup}
-              >
-                Backup workspace
-              </Button>
-              <label
-                className="inline-flex min-h-8 cursor-pointer items-center rounded-md px-2 text-sm text-[var(--ink)] underline-offset-4 hover:bg-[var(--surface-hover)] hover:underline"
-                htmlFor={isDesktopRuntime() ? undefined : "workspace-backup-import"}
-                onClick={isDesktopRuntime() ? onRestoreDesktopBackup : undefined}
-              >
-                Restore backup
-              </label>
+            <>
+              <WorkspaceBackupActions onSave={onExportWorkspaceBackup} onRestore={restoreBackup} />
               <input
-                id="workspace-backup-import"
+                ref={backupPicker}
                 className="sr-only"
                 type="file"
                 accept="application/zip,.zip,application/json,.json"
                 onChange={onRestoreWorkspaceBackup}
               />
-            </div>
+            </>
           )}
         </div>
       </DialogContent>

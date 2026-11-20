@@ -1,3 +1,5 @@
+import { useState } from "react";
+import { NativeCollapsible } from "./NativeCollapsible";
 import type { Meta, StoryObj } from "@storybook/react";
 import { Text, View } from "react-native";
 import { NativeButton } from "./NativeButton";
@@ -20,8 +22,13 @@ function NativeCatalog({ state }: { readonly state: "actions" | "empty" | "offli
                 : "12 cards are due. Reveal an answer, then rate your recall."}
             </Text>
             <NativeButton label="Show answer" onPress={() => undefined} />
-            <NativeButton label="Import Anki deck" tone="soft" onPress={() => undefined} />
-            <NativeButton label="Sync unavailable" tone="soft" disabled onPress={() => undefined} />
+            <NativeButton label="Import Anki deck" variant="default" onPress={() => undefined} />
+            <NativeButton
+              label="Sync unavailable"
+              variant="default"
+              disabled
+              onPress={() => undefined}
+            />
           </View>
         )}
       </View>
@@ -40,3 +47,27 @@ type Story = StoryObj<typeof meta>;
 export const StudyActions: Story = { args: { state: "actions" } };
 export const CaughtUp: Story = { args: { state: "empty" } };
 export const OfflineLibrary: Story = { args: { state: "offline" } };
+
+export const Disclosure: Story = {
+  args: { state: "actions" },
+  render: () => <NativeDisclosureExample />,
+};
+
+function NativeDisclosureExample() {
+  const [open, setOpen] = useState(false);
+  return (
+    <View className="gap-4 bg-recall-paper p-6">
+      <NativeButton label="Save changes" onPress={() => undefined} />
+      <NativeButton label="Cancel" variant="default" onPress={() => undefined} />
+      <NativeCollapsible
+        open={open}
+        title="Memory and study details"
+        onToggle={() => {
+          setOpen(!open);
+        }}
+      >
+        <Text className="text-recall-ink">12 successful recalls from 15 first daily attempts.</Text>
+      </NativeCollapsible>
+    </View>
+  );
+}

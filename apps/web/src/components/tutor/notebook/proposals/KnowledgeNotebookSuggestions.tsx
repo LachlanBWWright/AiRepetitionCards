@@ -1,3 +1,4 @@
+import { revealAndFocusTarget } from "../../../search/search-focus";
 import { ProposedCardPreview } from "../../proposals/ProposedCardPreview";
 import { NotebookBatchApproval } from "./NotebookBatchApproval";
 import { SavedSuggestionActions } from "./SavedSuggestionActions";
@@ -54,11 +55,7 @@ export function KnowledgeNotebookSuggestions({
   function openSource(sectionId: string) {
     setActivity("materials");
     const source = document.getElementById(`study-source-${sectionId}`);
-    if (source instanceof HTMLElement)
-      window.requestAnimationFrame(() => {
-        source.focus();
-        source.scrollIntoView({ block: "start" });
-      });
+    if (source instanceof HTMLElement) revealAndFocusTarget(source);
   }
   async function applyRefinement(
     entry: KnowledgeNotebookModel["pendingProposals"][number],
@@ -114,8 +111,8 @@ export function KnowledgeNotebookSuggestions({
       <div key={topic.objectiveId} className="flex items-center justify-between gap-4 py-3">
         <p className="text-sm font-medium">{topic.objectiveTitle}</p>
         <Button
-          variant="outline"
-          size="small"
+          variant="default"
+          size="default"
           disabled={busy || quickQuestionsBusy}
           onClick={() => {
             setActivity("quick");
@@ -193,17 +190,21 @@ export function KnowledgeNotebookSuggestions({
     pendingQuestion != null ||
     !hasReinforcementGaps;
   return (
-    <TabsContent value="suggestions" forceMount className="data-[state=inactive]:hidden">
+    <TabsContent
+      value="suggestions"
+      forceMount
+      className="flex flex-col gap-6 data-[state=inactive]:hidden"
+    >
       {notebook ? (
         <>
-          <div className="space-y-4">
+          <div className="flex flex-col gap-4">
             {!chat && <ReviewSuggestionsHeading />}
             {pendingProposals.length === 0 && <p>No suggestions to review.</p>}
             {!chat && (
               <Button
                 type="button"
-                variant="secondary"
-                size="small"
+                variant="default"
+                size="default"
                 disabled={proposingDisabled}
                 onClick={proposeGaps}
               >
@@ -229,7 +230,7 @@ export function KnowledgeNotebookSuggestions({
         </p>
       ) : null}
       {practiceTopics && practiceTopics.length > 0 && onPracticeTopic && (
-        <section className="space-y-3" aria-label="Suggested practice topics">
+        <section className="flex flex-col gap-3" aria-label="Suggested practice topics">
           <h3 className="text-base font-semibold">Topics to practise</h3>
           <div className="divide-y">{practiceTopics.map(renderPracticeTopic)}</div>
         </section>
@@ -241,7 +242,7 @@ export function KnowledgeNotebookSuggestions({
 
 function ReviewSuggestionsHeading() {
   return (
-    <div className="space-y-1">
+    <div className="flex flex-col gap-1">
       <h3 className="text-lg font-semibold">Review suggestions</h3>
       <p className="text-sm text-muted-foreground">
         Check suggested cards before adding them to your library.

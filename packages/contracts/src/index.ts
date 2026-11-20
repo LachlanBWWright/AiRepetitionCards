@@ -270,3 +270,5 @@ export * from "./deck-sharing";
 export * from "./workspace-study";
 
 export * from "./workspace-study-pages";
+
+export { ManagedAiStatusSchema, type ManagedAiStatus } from "./managed-ai";

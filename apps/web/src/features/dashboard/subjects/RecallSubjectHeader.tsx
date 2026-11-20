@@ -1,6 +1,6 @@
 import { RecallDashboardDeckToolbar } from "../library/RecallDashboardDeckToolbar";
 import { isSubjectActivity } from "@recall/application";
-import { Button } from "@/components/ui/Button";
+import { SubjectHomeLink } from "../navigation/SubjectHomeLink";
 import {
   Select,
   SelectContent,
@@ -27,24 +27,22 @@ export function RecallSubjectHeader({ model }: { readonly model: RecallDashboard
       className={
         chat
           ? "flex w-full shrink-0 items-center justify-between gap-4 border-b px-4 py-3 sm:px-6"
-          : "mx-auto flex w-full max-w-[1080px] flex-wrap items-start justify-between gap-x-6 gap-y-5 px-4 pt-8 sm:px-8 sm:pt-10"
+          : "mx-auto flex w-full max-w-[1080px] flex-wrap items-start justify-between gap-4 px-4 pt-5 sm:px-8 sm:pt-8"
       }
     >
-      <div className="min-w-0">
-        <Button
-          variant="link"
-          className="h-auto p-0 text-muted-foreground"
-          onClick={() => {
+      <div className="flex min-w-0 flex-col gap-2">
+        <SubjectHomeLink
+          onNavigate={() => {
             model.setActiveView(DashboardView.Today);
           }}
         >
-          {chat ? "Subjects" : "Home / Subjects"}
-        </Button>
+          Subjects
+        </SubjectHomeLink>
         <h1
           className={
             chat
               ? "truncate text-lg font-semibold"
-              : "mt-3 break-words text-3xl font-semibold tracking-tight sm:text-4xl"
+              : "break-words text-2xl font-semibold tracking-tight sm:text-3xl"
           }
         >
           {model.practiceId === "all"
@@ -59,7 +57,10 @@ export function RecallSubjectHeader({ model }: { readonly model: RecallDashboard
         }}
         disabled={model.reviewSaving || model.reviewSaveFailed || !model.area}
       >
-        <SelectTrigger className="w-44" aria-label="Subject activity">
+        <SelectTrigger
+          className={chat ? "w-40 shrink-0" : "w-32 shrink-0 sm:w-44"}
+          aria-label="Subject activity"
+        >
           <SelectValue />
         </SelectTrigger>
         <SelectContent>

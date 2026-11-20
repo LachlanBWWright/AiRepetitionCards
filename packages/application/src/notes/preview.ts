@@ -22,6 +22,7 @@ export type NoteCardPreview = {
   readonly presentation?: ReviewPresentation | undefined;
   readonly front: string;
   readonly back: string;
+  readonly explanation?: string | undefined;
   readonly deletionIndex?: number | undefined;
   readonly cloze?: { readonly text: string; readonly deletionIndex: number };
 };
@@ -63,7 +64,15 @@ export function previewStudyNote(
             : note.fields;
         const front = renderNoteTemplate(template.front, frontFields, allowed);
         const back = renderNoteTemplate(template.back, backFields, allowed);
-        if (front === undefined || back === undefined)
+        const explanation =
+          template.explanation === undefined
+            ? ""
+            : renderNoteTemplate(template.explanation, backFields, allowed);
+        if (explanation && explanation.length > 10000)
+          return yield* Effect.fail(
+            noteFailure("Keep the rendered explanation within 10,000 characters."),
+          );
+        if (front === undefined || back === undefined || explanation === undefined)
           return yield* Effect.fail(
             noteFailure(
               "Check template fields and matching {{#Field}}, {{^Field}} and {{/Field}} sections.",
@@ -81,6 +90,7 @@ export function previewStudyNote(
             templateId: template.id,
             front,
             back,
+            ...(explanation ? { explanation } : {}),
             ...clozeContent,
           });
         }

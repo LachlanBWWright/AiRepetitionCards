@@ -15,7 +15,7 @@ export function DeckUpdatePanel(props: DeckUpdateProps) {
         existing cards.
       </p>
       {!model.baseline && (
-        <Button variant="secondary" disabled={model.busy} onClick={() => void model.load()}>
+        <Button variant="default" disabled={model.busy} onClick={() => void model.load()}>
           Compare with original version
         </Button>
       )}

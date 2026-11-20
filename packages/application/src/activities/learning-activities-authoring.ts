@@ -1,5 +1,8 @@
+import { codingAuthoringFields, buildCodingAuthoringPayload } from "./coding/coding-authoring";
+import { luaAuthoringFields, buildLuaAuthoringPayload } from "./lua/authoring";
+import { interactiveAuthoringFields, buildInteractivePayload } from "./interactive/authoring";
 import { Effect, Schema } from "effect";
-import { CodingPayloadSchema, type LearningActivity } from "@recall/domain";
+import { ActivityJsonSchema, type LearningActivity } from "@recall/domain";
 import { failure, type ActivityFailure } from "./learning-activities-plugins";
 
 export type ActivityAuthoringField = {
@@ -9,6 +12,9 @@ export type ActivityAuthoringField = {
   readonly multiline: boolean;
 };
 export function activityAuthoringFields(pluginId: string): readonly ActivityAuthoringField[] {
+  if (pluginId === "recall.lua") return luaAuthoringFields;
+  const interactive = interactiveAuthoringFields(pluginId);
+  if (interactive) return interactive;
   if (pluginId === "recall.multiple-choice")
     return [
       {
@@ -39,6 +45,7 @@ export function activityAuthoringFields(pluginId: string): readonly ActivityAuth
   const interrogation = pluginId === "recall.interrogation";
   const coding = pluginId === "recall.coding";
   return [
+    ...(coding ? codingAuthoringFields : []),
     {
       key: "prompt",
       label: interrogation ? "Question stages (separate with a blank line)" : "Prompt",
@@ -89,19 +96,61 @@ export function buildAuthoredLearningActivity(
   },
   validate: (input: unknown) => Effect.Effect<LearningActivity, ActivityFailure>,
 ): Effect.Effect<LearningActivity, ActivityFailure> {
+  if (input.pluginId === "recall.lua")
+    return buildLuaAuthoringPayload(input.fields).pipe(
+      Effect.flatMap((payload) =>
+        validate({
+          id: input.id,
+          areaId: input.areaId,
+          title: input.title.trim(),
+          pluginId: input.pluginId,
+          pluginVersion: 1,
+          revision: 1,
+          objectiveIds: [input.objectiveId],
+          fallback: input.fields.fallback ?? luaAuthoringFields[3].initial,
+          payload,
+        }),
+      ),
+    );
+  if (interactiveAuthoringFields(input.pluginId))
+    return buildInteractivePayload(input.pluginId, input.fields).pipe(
+      Effect.flatMap((payload) =>
+        validate({
+          id: input.id,
+          areaId: input.areaId,
+          title: input.title.trim(),
+          pluginId: input.pluginId,
+          pluginVersion: 1,
+          revision: 1,
+          objectiveIds: [input.objectiveId],
+          fallback: input.fields.prompt ?? "",
+          payload,
+        }),
+      ),
+    );
+  if (input.pluginId === "recall.coding")
+    return buildCodingAuthoringPayload(input.fields).pipe(
+      Effect.flatMap((value) =>
+        Schema.decodeUnknown(Schema.Record({ key: Schema.String, value: ActivityJsonSchema }))(
+          value,
+        ).pipe(Effect.mapError(() => failure("invalid-input", "Invalid coding metadata."))),
+      ),
+      Effect.flatMap((payload) =>
+        validate({
+          id: input.id,
+          areaId: input.areaId,
+          title: input.title.trim(),
+          pluginId: input.pluginId,
+          pluginVersion: 1,
+          revision: 1,
+          objectiveIds: [input.objectiveId],
+          fallback: input.fields.prompt ?? "",
+          payload,
+        }),
+      ),
+    );
   const prompt = input.fields.prompt ?? "";
   const reference = input.fields.reference ?? "";
-  const codingTests =
-    input.pluginId === "recall.coding"
-      ? Schema.decodeUnknownEither(Schema.parseJson(CodingPayloadSchema.fields.tests))(
-          input.fields.tests ??
-            '[{"input":[[1,2,3]],"expected":6},{"input":[[]],"expected":0},{"input":[[-2,1]],"expected":-1}]',
-        )
-      : null;
-  if (codingTests && codingTests._tag === "Left")
-    return Effect.fail(
-      failure("invalid-input", "Tests must be JSON objects with input arrays and expected values."),
-    );
   const payload =
     input.pluginId === "recall.multiple-choice"
       ? {
@@ -113,7 +162,6 @@ export function buildAuthoredLearningActivity(
           explanation: reference,
         }
       : {
-          ...(codingTests ? { language: "javascript", tests: codingTests.right } : {}),
           prompts:
             input.pluginId === "recall.interrogation"
               ? prompt.split(/\n\s*\n/).map((value) => value.trim())

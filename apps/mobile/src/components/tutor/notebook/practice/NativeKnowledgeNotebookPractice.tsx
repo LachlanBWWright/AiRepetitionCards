@@ -1,5 +1,3 @@
-const practiceActionClassName =
-  "min-h-[36px] justify-center items-center px-[10px] rounded-[10px] bg-transparent";
 import { NativeKnowledgeNotebookConcepts } from "../NativeKnowledgeNotebookConcepts";
 import { NativeButton } from "../../../ui/NativeButton";
 import { Text, TextInput, View } from "react-native";
@@ -54,10 +52,6 @@ export function NativeKnowledgeNotebookPractice({
               disabled={busy || !!unsaved}
               onPress={onStartReview}
               label="Start reviewing saved cards"
-              className={
-                "min-h-[40px] justify-center items-center px-[13px] rounded-[10px] bg-recall-darkGreen"
-              }
-              labelClassName="text-recall-surface text-[12px] font-bold"
             />
           ) : null}
         </View>
@@ -71,10 +65,6 @@ export function NativeKnowledgeNotebookPractice({
             })
           }
           label="Continue tutor practice"
-          className={
-            "min-h-[40px] justify-center items-center px-[13px] rounded-[10px] bg-recall-darkGreen"
-          }
-          labelClassName="text-recall-surface text-[12px] font-bold"
         />
       ) : notebook.session.pendingQuestion ? (
         <View className={"gap-[8px] py-[12px]"}>
@@ -111,8 +101,6 @@ export function NativeKnowledgeNotebookPractice({
               })
             }
             label="Save answer draft"
-            className={practiceActionClassName}
-            labelClassName="text-recall-darkGreen text-[11px] font-bold"
           />
           <Text className={"text-recall-muted text-[11px] leading-[16px]"}>How sure are you?</Text>
           <View className={"flex-row flex-wrap gap-[7px]"}>
@@ -121,8 +109,6 @@ export function NativeKnowledgeNotebookPractice({
                 key={item}
                 onPress={chooseConfidence(item)}
                 label={`${confidence === item ? "✓ " : ""}${item}`}
-                className={practiceActionClassName}
-                labelClassName="text-recall-darkGreen text-[11px] font-bold"
               />
             ))}
           </View>
@@ -131,17 +117,11 @@ export function NativeKnowledgeNotebookPractice({
               disabled={busy || !api || !mayWrite()}
               onPress={() => void answerQuestion(answer, confidence)}
               label="Submit answer"
-              className={
-                "min-h-[40px] justify-center items-center px-[13px] rounded-[10px] bg-recall-darkGreen"
-              }
-              labelClassName="text-recall-surface text-[12px] font-bold"
             />
             <NativeButton
               disabled={busy || !api || !mayWrite()}
               onPress={() => void answerQuestion("I don't know", "guess")}
               label="I don't know"
-              className={practiceActionClassName}
-              labelClassName="text-recall-darkGreen text-[11px] font-bold"
             />
           </View>
           {!api ? (
@@ -162,10 +142,6 @@ export function NativeKnowledgeNotebookPractice({
             disabled={busy || !api || !mayWrite()}
             onPress={() => void ask()}
             label="Next question"
-            className={
-              "min-h-[40px] justify-center items-center px-[13px] rounded-[10px] bg-recall-darkGreen"
-            }
-            labelClassName="text-recall-surface text-[12px] font-bold"
           />
           {!api ? (
             <Text className={"text-recall-muted text-[11px] leading-[16px]"}>
@@ -185,8 +161,6 @@ export function NativeKnowledgeNotebookPractice({
               })
             }
             label={action}
-            className={practiceActionClassName}
-            labelClassName="text-recall-darkGreen text-[11px] font-bold"
           />
         ))}
       </View>
@@ -219,8 +193,6 @@ function NativeKnowledgeNotebookSuggestedConcept({
           })
         }
         label="Add suggested concept"
-        className={practiceActionClassName}
-        labelClassName="text-recall-darkGreen text-[11px] font-bold"
       />
     </View>
   );

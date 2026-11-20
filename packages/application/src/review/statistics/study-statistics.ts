@@ -1,3 +1,4 @@
+import { localStudyDay } from "../study-day";
 import { reviewPlacement, effectiveReviewEvents } from "@recall/domain";
 import type { Workspace } from "@recall/domain";
 import { recallProbability } from "@recall/scheduler";
@@ -13,11 +14,17 @@ export function studyCalendar(
   now: number,
   pastDays = 30,
   futureDays = 30,
+  startHour = 0,
 ): { readonly past: readonly CalendarBucket[]; readonly future: readonly CalendarBucket[] } {
-  const date = new Date(now);
+  const date = new Date(localStudyDay(now, startHour).startsAt);
   const bucket = (offset: number): CalendarBucket => {
-    const start = new Date(date.getFullYear(), date.getMonth(), date.getDate() + offset);
-    const end = new Date(date.getFullYear(), date.getMonth(), date.getDate() + offset + 1);
+    const start = new Date(date.getFullYear(), date.getMonth(), date.getDate() + offset, startHour);
+    const end = new Date(
+      date.getFullYear(),
+      date.getMonth(),
+      date.getDate() + offset + 1,
+      startHour,
+    );
     const label = `${String(start.getFullYear())}-${String(start.getMonth() + 1).padStart(2, "0")}-${String(start.getDate()).padStart(2, "0")}`;
     return { label, startsAt: start.getTime(), endsAt: end.getTime() };
   };

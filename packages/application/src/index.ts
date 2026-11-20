@@ -13,3 +13,5 @@ export * from "./activities";
 export * from "./subjects";
 
 export * from "./card-history";
+
+export * from "./workspace/sync/sync-status";

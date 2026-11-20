@@ -63,6 +63,9 @@ export function useNoteLifecycle({
         ...template,
         front: replace(template.front),
         back: replace(template.back),
+        ...(template.explanation === undefined
+          ? {}
+          : { explanation: replace(template.explanation) }),
         ...(template.clozeField === name ? { clozeField: next } : {}),
       })),
     });

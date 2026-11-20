@@ -18,8 +18,10 @@ public static partial class AuthoredMetadataValidator
         plain = string.Empty;
         if (depth > 8) return false;
         var answer = new StringBuilder();
+        var groupDepth = 0;
         while (offset < text.Length)
         {
+            if (text[offset] == '}' && groupDepth > 0) { groupDepth--; answer.Append(text[offset++]); continue; }
             if (text.AsSpan(offset).StartsWith("}}", StringComparison.Ordinal) || (nested && text.AsSpan(offset).StartsWith("::", StringComparison.Ordinal)))
             {
                 if (!nested || string.IsNullOrWhiteSpace(answer.ToString())) return false;
@@ -41,7 +43,11 @@ public static partial class AuthoredMetadataValidator
                 if (!ParseCloze(text, ref offset, true, depth + 1, indices, out var child)) return false;
                 answer.Append(child);
             }
-            else answer.Append(text[offset++]);
+            else
+            {
+                if (text[offset] == '{' && (offset == 0 || text[offset - 1] != '\\')) groupDepth++;
+                answer.Append(text[offset++]);
+            }
         }
         plain = answer.ToString();
         return !nested;

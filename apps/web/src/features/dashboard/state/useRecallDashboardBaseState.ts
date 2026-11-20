@@ -1,3 +1,4 @@
+import type { DashboardConfirmation, ConfirmationOptions } from "../dialogs/dashboard-confirmation";
 import { readRef } from "@/lib/read-ref";
 import {
   useCallback,
@@ -74,17 +75,21 @@ export function useRecallDashboardBaseState({
   const [creationChoices, setCreationChoices] = useState(false);
   const [tutorActivity, setTutorActivity] = useState<"materials" | undefined>(initialTutorActivity);
   const saveAnother = useRef(false);
-  const [pendingConfirmation, setPendingConfirmation] = useState<{
-    readonly description: string;
-    readonly onConfirm: () => unknown;
-    readonly onCancel?: () => void;
-  } | null>(null);
+  const [pendingConfirmation, setPendingConfirmation] = useState<DashboardConfirmation | null>(
+    null,
+  );
   const requestConfirmation = (
     description: string,
     onConfirm: () => unknown,
     onCancel?: () => void,
+    options: ConfirmationOptions = {},
   ) => {
-    setPendingConfirmation({ description, onConfirm, ...(onCancel ? { onCancel } : {}) });
+    setPendingConfirmation({
+      ...options,
+      description,
+      onConfirm,
+      ...(onCancel ? { onCancel } : {}),
+    });
   };
   const demoArea =
     demo?.areaDraft ?? demo?.workspace.areas.find((item) => item.id === demo.editAreaId);

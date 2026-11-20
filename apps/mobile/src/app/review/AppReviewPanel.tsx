@@ -1,3 +1,7 @@
+import { mergeActivityLibraries } from "@recall/application";
+import { emptyActivityLibrary } from "@recall/domain";
+import { Effect, Either } from "effect";
+import * as Crypto from "expo-crypto";
 import {
   applyMediaTrashPurge,
   nextStudyArea,
@@ -38,8 +42,45 @@ export function AppReviewPanel({ model }: { readonly model: AppModel }) {
     resetLocalWorkspace,
     importAnkiDeck,
   } = model;
+  const reviewActivities = activeArea
+    ? {
+        areaId: activeArea.id,
+        objectives: activeArea.objectives ?? [],
+        ...(libraryNotes.notes.activityLibrary
+          ? { library: libraryNotes.notes.activityLibrary }
+          : {}),
+        ...(model.activityServices ? { services: model.activityServices } : {}),
+        disabled: reviewPending || !libraryNotes.loaded || authoringDisabledReason !== undefined,
+        createId: Crypto.randomUUID,
+        onSave: async (incoming: import("@recall/domain").ActivityLibrary) => {
+          if (
+            model.workspaceLifetime.isBlocked() ||
+            model.workspaceLifetime.generation() !== model.operationGeneration ||
+            !libraryNotes.loaded ||
+            authoringDisabledReason !== undefined
+          )
+            return false;
+          const validation = { valid: true };
+          libraryNotes.update((notes) => {
+            const merged = Effect.runSync(
+              Effect.either(
+                mergeActivityLibraries(incoming, notes.activityLibrary ?? emptyActivityLibrary),
+              ),
+            );
+            if (Either.isLeft(merged)) {
+              validation.valid = false;
+              return notes;
+            }
+            return { ...notes, activityLibrary: merged.right };
+          });
+          return validation.valid ? libraryNotes.flush() : false;
+        },
+      }
+    : undefined;
   return (
     <NativeTodayScreen
+      {...(reviewActivities ? { reviewActivities } : {})}
+      reviewRepairApi={model.tutorApi}
       workspaceStore={store ?? undefined}
       onPurged={(result) => {
         model.setWorkspace((current) =>

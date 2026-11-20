@@ -1,11 +1,16 @@
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
 import { JSONSchema } from "effect";
-import { AuthSessionResponseSchema, WorkspaceSnapshotSchema } from "@recall/contracts";
+import {
+  AuthSessionResponseSchema,
+  WorkspaceSnapshotSchema,
+  ManagedAiStatusSchema,
+} from "@recall/contracts";
 
 const directory = resolve(process.argv[2] ?? ".", "contracts/generated");
 await mkdir(directory, { recursive: true });
 const schemas = {
+  "managed-ai-status": JSONSchema.make(ManagedAiStatusSchema),
   "auth-session": JSONSchema.make(AuthSessionResponseSchema),
   "workspace-snapshot": JSONSchema.make(WorkspaceSnapshotSchema),
 };

@@ -1,4 +1,4 @@
-import { NativeButton } from "../../ui/NativeButton";
+import { NativeWorkflowSections, NativeSelect } from "@recall/ui-native";
 import { useEffect, useRef, useState } from "react";
 import { Text, View } from "react-native";
 import { Effect, Either } from "effect";
@@ -60,7 +60,6 @@ export function NativeStudyMaterialsPanel({
   ) => Effect.Effect<void, { readonly message: string }>;
   readonly runAction: (operation: (isCurrent: () => boolean) => Promise<void>) => Promise<void>;
 }) {
-  const [showAdd, setShowAdd] = useState(false);
   const selection = useNativeStudyMaterialsSelectionState(searchTarget);
   const generation = useNativeStudyMaterialsGenerationState();
   const {
@@ -211,15 +210,125 @@ export function NativeStudyMaterialsPanel({
     });
   }
 
-  const button = (label: string, action: () => void, blocked = disabled) => (
-    <NativeButton
-      key={label}
-      label={label}
-      onPress={action}
-      disabled={blocked}
-      className={"py-[10px] px-[4px]"}
-      labelClassName="text-recall-surface text-[12px] font-bold"
-    />
+  const sectionContent1 = (
+    <>
+      <NativeStudyMaterialsPanelIntake
+        disabled={disabled}
+        runAction={runAction}
+        onPreview={(previewName, extraction) => {
+          setPreview({ name: previewName, extraction });
+        }}
+        onNotice={setNotice}
+      />
+      {preview ? (
+        <NativeStudyMaterialsPanelPreview
+          name={preview.name}
+          extraction={preview.extraction}
+          onImport={() => void importPreview(preview)}
+          onCancel={() => {
+            setPreview(null);
+          }}
+        />
+      ) : null}
+    </>
+  );
+  const sectionContent2 = material ? (
+    <>
+      <NativeStudyMaterialsPanelMetadata
+        material={material}
+        coverage={coverage}
+        disabled={disabled}
+        onUpdate={updateMaterial}
+        onEditPassage={(id) => {
+          setSectionId(id);
+          setShowPassage(true);
+        }}
+      />
+      <NativeStudyMaterialsPanelPassage
+        material={material}
+        section={section}
+        visible={showPassage}
+        disabled={disabled}
+        text={editedText}
+        onClose={() => {
+          setShowPassage(false);
+        }}
+        onTextChange={(text) => {
+          if (section) setPassageDraft({ sectionId: section.id, text });
+        }}
+        onSave={updateMaterial}
+      />
+      <NativeStudyMaterialsPanelRemove disabled={disabled} onRemove={() => void removeMaterial()} />
+    </>
+  ) : (
+    <Text className="text-recall-muted">Import a material first.</Text>
+  );
+  const sectionContent3 = material ? (
+    <>
+      <View className="gap-[8px]">
+        <Text className="text-recall-ink text-[14px] font-bold">Choose topics</Text>
+        <NativeStudyMaterialsPanelClaimControls
+          disabled={disabled}
+          planDisabled={disabled || !api || hasUnsavedPassage === true || !section}
+          onPlan={() => void planSection()}
+          onClearTarget={() => {
+            setTargetClaimId(null);
+          }}
+        />
+        <NativeStudyMaterialsPanelClaims
+          plans={plans}
+          sections={material.sections}
+          coverage={claimCoverage}
+          expandedClaimId={expandedClaimId}
+          targetClaimId={targetClaimId}
+          disabled={disabled}
+          onToggleClaim={(claimId) => {
+            setExpandedClaimId((current) => (current === claimId ? null : claimId));
+          }}
+          onChangeClaim={(planId, claimId, decision, priority) =>
+            void changeClaim(planId, claimId, decision, priority)
+          }
+          onFocusClaim={setTargetClaimId}
+        />
+      </View>
+    </>
+  ) : (
+    <Text className="text-recall-muted">Import a material first.</Text>
+  );
+  const sectionContent4 = material ? (
+    <>
+      <NativeStudyMaterialsPanelSuggestions
+        suggestions={suggestions}
+        disabled={disabled}
+        onAdd={addSuggestion}
+      />
+      <NativeStudyMaterialsPanelGenerationSettings
+        notebook={notebook}
+        conceptId={conceptId}
+        depth={depth}
+        count={count}
+        visible={showGenerationSettings}
+        disabled={disabled}
+        onConceptChange={setConceptId}
+        onDepthChange={setDepth}
+        onCountChange={setCount}
+        onToggle={() => {
+          setShowGenerationSettings((current) => !current);
+        }}
+      />
+      <NativeStudyMaterialsPanelGenerationActions
+        disabled={disabled}
+        hasApi={api !== null}
+        hasUnsavedPassage={hasUnsavedPassage === true}
+        generating={generating}
+        onGenerate={() => void generate()}
+        onPause={() => {
+          pause.current = true;
+        }}
+      />
+    </>
+  ) : (
+    <Text className="text-recall-muted">Import a material first.</Text>
   );
   return (
     <View className={"gap-[12px] py-[12px]"} testID="native-study-materials">
@@ -232,124 +341,51 @@ export function NativeStudyMaterialsPanel({
           claimTitle={searchedClaim?.title ?? null}
         />
       ) : null}
-      {button(showAdd ? "Close import" : "Add material", () => {
-        setShowAdd((current) => !current);
-      })}
-      <View className={showAdd || !notebook?.materials?.length ? "gap-[10px]" : "hidden"}>
-        <NativeStudyMaterialsPanelIntake
-          disabled={disabled}
-          runAction={runAction}
-          onPreview={(previewName, extraction) => {
-            setPreview({ name: previewName, extraction });
-          }}
-          onNotice={setNotice}
-        />
-      </View>
-      {preview ? (
-        <NativeStudyMaterialsPanelPreview
-          name={preview.name}
-          extraction={preview.extraction}
-          onImport={() => void importPreview(preview)}
-          onCancel={() => {
-            setPreview(null);
-          }}
-        />
-      ) : null}
-      <View className={"gap-[10px]"}>
-        {notebook?.materials?.map((item) =>
-          button(`${material?.id === item.id ? "✓ " : ""}${item.name}`, () => {
-            setSelectedId(item.id);
+      {notebook?.materials?.length ? (
+        <NativeSelect
+          label="Material"
+          value={material?.id ?? ""}
+          options={notebook.materials.map((item) => ({ value: item.id, label: item.name }))}
+          onValueChange={(id) => {
+            setSelectedId(id);
             setSectionId(null);
-          }),
-        )}
-      </View>
-      {material ? (
-        <>
-          <NativeStudyMaterialsPanelMetadata
-            material={material}
-            coverage={coverage}
-            disabled={disabled}
-            onUpdate={updateMaterial}
-            onEditPassage={(id) => {
-              setSectionId(id);
-              setShowPassage(true);
-            }}
-          />
-          <NativeStudyMaterialsPanelPassage
-            material={material}
-            section={section}
-            visible={showPassage}
-            disabled={disabled}
-            text={editedText}
-            onClose={() => {
-              setShowPassage(false);
-            }}
-            onTextChange={(text) => {
-              if (section) setPassageDraft({ sectionId: section.id, text });
-            }}
-            onSave={updateMaterial}
-          />
-          <View className="gap-[8px]">
-            <Text className="text-recall-ink text-[14px] font-bold">Choose topics</Text>
-            <NativeStudyMaterialsPanelClaimControls
-              disabled={disabled}
-              planDisabled={disabled || !api || hasUnsavedPassage === true || !section}
-              onPlan={() => void planSection()}
-              onClearTarget={() => {
-                setTargetClaimId(null);
-              }}
-            />
-            <NativeStudyMaterialsPanelClaims
-              plans={plans}
-              sections={material.sections}
-              coverage={claimCoverage}
-              expandedClaimId={expandedClaimId}
-              targetClaimId={targetClaimId}
-              disabled={disabled}
-              onToggleClaim={(claimId) => {
-                setExpandedClaimId((current) => (current === claimId ? null : claimId));
-              }}
-              onChangeClaim={(planId, claimId, decision, priority) =>
-                void changeClaim(planId, claimId, decision, priority)
-              }
-              onFocusClaim={setTargetClaimId}
-            />
-          </View>
-          <NativeStudyMaterialsPanelSuggestions
-            suggestions={suggestions}
-            disabled={disabled}
-            onAdd={addSuggestion}
-          />
-          <NativeStudyMaterialsPanelGenerationSettings
-            notebook={notebook}
-            conceptId={conceptId}
-            depth={depth}
-            count={count}
-            visible={showGenerationSettings}
-            disabled={disabled}
-            onConceptChange={setConceptId}
-            onDepthChange={setDepth}
-            onCountChange={setCount}
-            onToggle={() => {
-              setShowGenerationSettings((current) => !current);
-            }}
-          />
-          <NativeStudyMaterialsPanelGenerationActions
-            disabled={disabled}
-            hasApi={api !== null}
-            hasUnsavedPassage={hasUnsavedPassage === true}
-            generating={generating}
-            onGenerate={() => void generate()}
-            onPause={() => {
-              pause.current = true;
-            }}
-          />
-          <NativeStudyMaterialsPanelRemove
-            disabled={disabled}
-            onRemove={() => void removeMaterial()}
-          />
-        </>
+          }}
+        />
       ) : null}
+      <NativeWorkflowSections
+        label="Study material steps"
+        revealKey={searchTarget}
+        revealSection={
+          searchTarget?.kind === "claim"
+            ? "topics"
+            : searchTarget?.kind === "passage" || searchTarget?.kind === "material"
+              ? "text"
+              : undefined
+        }
+        sections={[
+          {
+            id: "import",
+            label: "1. Import",
+            content: sectionContent1,
+          },
+          {
+            id: "text",
+            label: "2. Check text",
+            content: sectionContent2,
+          },
+          {
+            id: "topics",
+            label: "3. Choose topics",
+            content: sectionContent3,
+          },
+          {
+            id: "generate",
+            label: "4. Generate",
+            content: sectionContent4,
+          },
+        ]}
+      />
+
       {notice ? (
         <Text accessibilityRole="alert" className={"text-recall-muted text-[11px] leading-[16px]"}>
           {notice}

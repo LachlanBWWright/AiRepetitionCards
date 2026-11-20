@@ -29,11 +29,9 @@ const meta = {
   parameters: { layout: "fullscreen" },
   decorators: [
     (Story) => (
-      <main className="mx-auto max-w-5xl space-y-6 p-8">
-        <div>
-          <h1 className="my-0 text-3xl font-semibold tracking-tight">Settings</h1>
-          <Story />
-        </div>
+      <main className="mx-auto flex w-full max-w-5xl flex-col gap-6 px-4 py-6 sm:p-8">
+        <h1 className="my-0 text-3xl font-semibold tracking-tight">Settings</h1>
+        <Story />
       </main>
     ),
   ],

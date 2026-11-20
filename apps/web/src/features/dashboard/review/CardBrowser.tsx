@@ -1,8 +1,12 @@
+import { useId } from "react";
+import { CardBrowserSelection } from "./CardBrowserSelection";
+import { FieldError } from "@recall/ui-web/components/field";
+import { Label } from "@recall/ui-web/components/label";
 import { CardBrowserTable, columnLabels } from "./CardBrowserTable";
 import { CardBrowserReplacement } from "./CardBrowserReplacement";
 import { useCardBrowser } from "@recall/react";
 import { Either } from "effect";
-import type { LearningArea, Workspace } from "@recall/domain";
+import type { Assessment, LearningArea, Workspace } from "@recall/domain";
 import { browserColumns, type BrowserColumn } from "@recall/application";
 import type { StudyCommandSave } from "@recall/react";
 import {
@@ -26,15 +30,18 @@ export function CardBrowser({
   area,
   now,
   save,
+  onEdit,
 }: {
   readonly workspace: Workspace;
   readonly area: LearningArea;
   readonly now: number;
   readonly save: StudyCommandSave;
+  readonly onEdit?: ((card: Assessment) => void) | undefined;
 }) {
+  const queryErrorId = useId();
   const browser = useCardBrowser(workspace, area, now, save);
   const columnControls = browserColumns.map((column) => (
-    <label key={column} className="flex gap-2">
+    <Label key={column} className="flex gap-2">
       <Checkbox
         checked={browser.columns.includes(column)}
         disabled={browser.controls.busy}
@@ -43,7 +50,7 @@ export function CardBrowser({
         }}
       />
       {columnLabels[column]}
-    </label>
+    </Label>
   ));
   const tagControls = browser.tags.map((tag) => (
     <Button
@@ -60,18 +67,20 @@ export function CardBrowser({
   return (
     <section className="grid min-w-0 gap-4" aria-label="Card browser">
       <h3 className="sr-only">Card browser</h3>
-      <label className="grid gap-2 text-sm font-medium">
+      <Label className="grid gap-2 text-sm font-medium">
         Search cards and notes
         <Input
           placeholder="Try tag:exam, note:Basic, or field:Front:ATP"
+          aria-invalid={Either.isLeft(browser.matches)}
+          aria-describedby={Either.isLeft(browser.matches) ? queryErrorId : undefined}
           value={browser.query}
           maxLength={500}
           onChange={(event) => {
             browser.setQuery(event.target.value);
           }}
         />
-      </label>
-      <div className="flex flex-wrap items-center gap-3">
+      </Label>
+      <div className="grid min-w-0 items-center gap-3 sm:grid-cols-3">
         <Select value={browser.mode} onValueChange={browser.setMode}>
           <SelectTrigger aria-label="Browser mode">
             <SelectValue />
@@ -108,7 +117,7 @@ export function CardBrowser({
             ))}
           </SelectContent>
         </Select>
-        <label className="flex gap-2">
+        <Label className="flex gap-2">
           <Checkbox
             checked={browser.descending}
             onCheckedChange={(value) => {
@@ -116,13 +125,11 @@ export function CardBrowser({
             }}
           />
           Descending
-        </label>
+        </Label>
       </div>
       <Accordion type="single" collapsible>
         <AccordionItem value="options">
-          <AccordionTrigger className="py-2 text-sm text-muted-foreground">
-            View options
-          </AccordionTrigger>
+          <AccordionTrigger className="text-muted-foreground">View options</AccordionTrigger>
           <AccordionContent className="grid gap-3">
             <div className="flex flex-wrap gap-4">{columnControls}</div>
             {browser.tags.length > 0 && (
@@ -134,19 +141,40 @@ export function CardBrowser({
           </AccordionContent>
         </AccordionItem>
       </Accordion>
-      {Either.isLeft(browser.matches) && <p role="alert">{browser.matches.left.message}</p>}
+      {Either.isLeft(browser.matches) && (
+        <FieldError id={queryErrorId}>{browser.matches.left.message}</FieldError>
+      )}
       <p className="text-sm text-muted-foreground">
         {browser.entries.length} {browser.mode}. Select a row to see related cards.
       </p>
-      <CardBrowserTable
-        entries={browser.rows}
-        columns={browser.columns}
-        page={browser.page}
-        onSelect={browser.setSelectedId}
-      />
+      <div
+        className={
+          browser.selected
+            ? "grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(16rem,22rem)]"
+            : "min-w-0"
+        }
+      >
+        {browser.selected && (
+          <div className="lg:order-2">
+            <CardBrowserSelection
+              selected={browser.selected}
+              onEdit={onEdit}
+              onClose={() => {
+                browser.setSelectedId("");
+              }}
+            />
+          </div>
+        )}
+        <CardBrowserTable
+          entries={browser.rows}
+          columns={browser.columns}
+          page={browser.page}
+          onSelect={browser.setSelectedId}
+        />
+      </div>
       <div className="flex gap-2">
         <Button
-          variant="secondary"
+          variant="default"
           disabled={!browser.page}
           onClick={() => {
             browser.setPage(browser.page - 1);
@@ -155,7 +183,7 @@ export function CardBrowser({
           Previous page
         </Button>
         <Button
-          variant="secondary"
+          variant="default"
           disabled={(browser.page + 1) * 50 >= browser.entries.length}
           onClick={() => {
             browser.setPage(browser.page + 1);

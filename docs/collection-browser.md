@@ -6,8 +6,13 @@ expanded-data, media and document byte budgets. A large card count does not over
 The browser shows 50 rows per page in Cards or Notes mode. Notes mode groups generated siblings
 under one source note; independent cards remain separate rows. Search normalization, source-note
 lookups and review-event grouping are indexed once per immutable workspace revision. Changing page
-does not rebuild or sort the collection. Filtering still scans the in-memory index; this is not a
-server-side search engine or an unlimited collection store.
+does not rebuild or sort the collection. Plain text searches of three or more normalized characters use sorted trigram posting lists to
+select candidate rows before verifying substring matches. The browser retains an instance-scoped
+revision indexer: schedule-only changes reuse normalized text and posting lists, while card/source
+field changes invalidate the affected text and rebuild postings. Boolean AND/OR combines candidate sets;
+negation, short text and structured-only queries fall back to scanning. Exact verification preserves
+substring and Unicode normalization semantics. This is an in-memory index, not a server-side
+search engine or an unlimited collection store.
 
 Alongside existing Boolean, scheduling, deck and tag searches, use:
 
@@ -30,7 +35,10 @@ that structural change. Each bulk proposal remains bounded to 500 matching rows 
 ## Durable storage and sync
 
 Native and Electron SQLite snapshots use Unicode-safe chunks of at most 65,536 UTF-16 characters
-per row, avoiding large SQLite cursor rows. The manifest and chunk replacement commit atomically.
+per row, avoiding large SQLite cursor rows. The manifest and changed chunks commit atomically. SQLite upserts compare payloads and update
+only changed rows; shrinking snapshots remove stale tail chunks. Equal-length localized edits
+therefore avoid rewriting every chunk. Insertions that shift subsequent chunk boundaries may still
+update the remaining chunks.
 Existing single-row snapshots are read until the next write. Missing or out-of-order chunks fail
 the read; they never become an empty workspace. Snapshot writes have an explicit 100 MB UTF-8
 budget. Recovery archives use the same chunk codec.
@@ -56,3 +64,20 @@ updates. Very large workspaces therefore still require memory proportional to th
 
 Apply `20261024000000_atomic_linked_notes.sql` after the paged-metadata migration to enforce
 whole-family writes, preserved card movement and protected source deletion.
+
+## Reproducible collection benchmark
+
+Run `pnpm benchmark:collection` through the root tooling slot.
+The synthetic 50,000-card fixture measures serialization, initial SQLite write, opening reads,
+search-index construction, selective search, a real scheduled answer, review serialization/write,
+a localized edit and backup reading/encoding.
+It reports changed chunk counts in addition to timings. It uses in-memory SQLite to isolate
+application work; disk durability, network sync, app launch, review workflow latency and physical
+device performance require separate acceptance measurements. Timings are diagnostic, not CI gates.
+Regression checks assert selective candidate counts, scan-equivalent results at 50,000 cards,
+changed-row counts, Unicode round trips, tail deletion and rollback after write failure.
+
+The workspace is still serialized and read as a complete document. Revision reconciliation still
+visits each card, even when text/postings are reused; edits and reviews do not yet apply entity-level database
+deltas. This improvement reduces database page writes and repeated query scans without claiming
+constant-memory collection opening or background persistence.

@@ -1,7 +1,7 @@
+import { NativeCollapsibleTrigger, NativeCollapsibleContent } from "@recall/ui-native";
 import type { Dispatch, ReactNode, SetStateAction } from "react";
 import { Pressable, Text } from "react-native";
 import type { LearningArea } from "@recall/domain";
-import { NativeButton } from "../../ui/NativeButton";
 
 export type NativeWorkspaceObjectiveChoice = {
   readonly value: string;
@@ -43,15 +43,15 @@ export function NativeWorkspaceCardFilters({
     <>
       {renderField("Search cards", query, setQuery)}
       {choices.length > 1 && (
-        <NativeButton
-          label={showFilters ? "Hide filters" : "Filter"}
-          tone="soft"
-          onPress={() => {
+        <NativeCollapsibleTrigger
+          open={showFilters}
+          title="Filter"
+          onToggle={() => {
             setShowFilters((value) => !value);
           }}
         />
       )}
-      {showFilters && (
+      <NativeCollapsibleContent open={showFilters}>
         <>
           <Text className="text-recall-ink text-[13px] font-semibold">
             Filter by learning objective
@@ -65,18 +65,18 @@ export function NativeWorkspaceCardFilters({
                 selected: objectiveFilter === choice.value,
                 disabled: locked,
               }}
-              className="p-[10px] bg-recall-surface rounded-[8px]"
+              className="min-h-12 px-3 py-3 bg-recall-surface rounded-xl"
               onPress={() => {
                 setObjectiveSelection({ areaId, value: choice.value });
               }}
             >
-              <Text>
+              <Text className="text-sm text-recall-ink">
                 {objectiveFilter === choice.value ? "◉" : "○"} {choice.title}
               </Text>
             </Pressable>
           ))}
         </>
-      )}
+      </NativeCollapsibleContent>
     </>
   );
 }

@@ -90,6 +90,7 @@ export { prepareManualSchedulingCommand } from "./administration/manual-command"
 
 export {
   simulateStudyWorkload,
+  compareStudyWorkload,
   type WorkloadOptions,
   type WorkloadSimulation,
 } from "./statistics/workload-simulation";
@@ -116,8 +117,15 @@ export { todayStudyLimits } from "./study-limits";
 export { studySessionArea, studySubjectTree, studySessionQueue } from "./study-navigation";
 export * from "./presentation/plain-text";
 
-export { createStudySearchIndex, type StudySearchIndex } from "./search/search-index";
+export {
+  createStudySearchIndex,
+  createStudySearchIndexer,
+  type StudySearchIndex,
+} from "./search/search-index";
 export { browserNoteRows } from "./search/card-browser";
 
 export * from "./presentation/reviewer-controls";
 export { previewNoteFieldReplacement } from "./search/note-replacement";
+
+export { dailyReviewCopy } from "./daily-review-copy";
+export * from "./administration/manual-burial";

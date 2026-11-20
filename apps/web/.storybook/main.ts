@@ -24,13 +24,18 @@ const config: StorybookConfig = {
   ],
   addons: ["@storybook/addon-a11y", "@storybook/addon-docs"],
   framework: "@storybook/react-vite",
-  typescript: { reactDocgen: "react-docgen-typescript" },
+  // Stories remain typechecked by tsc. Automatic prop extraction both duplicates
+  // TypeScript memory and traverses React Native source that Babel cannot parse.
+  typescript: { reactDocgen: false },
   staticDirs: ["../public"],
   viteFinal(config) {
     const merged: UserConfig = mergeConfig(config, {
       // React Native navigation dependencies expect Metro's development flag.
       define: { "process.env": {}, __DEV__: false },
       optimizeDeps: {
+        rolldownOptions: {
+          resolve: { extensions: [".web.js", ".js", ".web.tsx", ".tsx", ".ts", ".mjs", ".json"] },
+        },
         include: [
           "react",
           "react/jsx-runtime",
@@ -38,6 +43,8 @@ const config: StorybookConfig = {
           "react-dom",
           "react-dom/client",
           "react-native-web",
+          "nativewind/jsx-runtime",
+          "nativewind/jsx-dev-runtime",
           "sql.js",
           // This linked adapter contains MathJax CommonJS modules; prebundle them for browser ESM.
           "@recall/infra-rich-content",
@@ -63,6 +70,28 @@ const config: StorybookConfig = {
       plugins: [
         svgParserEsm(),
         {
+          name: "storybook-nativewind-jsx",
+          enforce: "post",
+          async transform(code: string, id: string) {
+            if (
+              !id.endsWith(".tsx") ||
+              (!id.includes("/apps/mobile/") && !id.includes("/packages/ui-native/"))
+            )
+              return null;
+            return transformWithEsbuild(
+              code
+                .replaceAll("react/jsx-dev-runtime", "nativewind/jsx-dev-runtime")
+                .replaceAll("react/jsx-runtime", "nativewind/jsx-runtime"),
+              id,
+              {
+                loader: "tsx",
+                jsx: "automatic",
+                jsxImportSource: "nativewind",
+              },
+            );
+          },
+        },
+        {
           name: "storybook-rn-primitives-jsx",
           enforce: "pre",
           async transform(code: string, id: string) {
@@ -81,6 +110,22 @@ const config: StorybookConfig = {
     merged.resolve = {
       ...merged.resolve,
       alias: [
+        {
+          find: /^(?:.*\/)?native-knowledge-notebook-store(?:\.ts)?$/,
+          replacement: path.resolve(configDirectory, "NativeNotebookStoreMock.ts"),
+        },
+        {
+          find: /^nativewind\/(.*)$/,
+          replacement: path.resolve(configDirectory, "../../mobile/node_modules/nativewind/$1"),
+        },
+        {
+          find: /^expo-font$/,
+          replacement: fileURLToPath(new URL("./ExpoFontMock.ts", import.meta.url)),
+        },
+        {
+          find: /^expo-audio$/,
+          replacement: fileURLToPath(new URL("./ExpoAudioMock.ts", import.meta.url)),
+        },
         {
           find: /^expo-crypto$/,
           replacement: fileURLToPath(new URL("./ExpoCryptoMock.ts", import.meta.url)),

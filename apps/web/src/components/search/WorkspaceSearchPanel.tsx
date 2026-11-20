@@ -206,7 +206,7 @@ export function WorkspaceSearchPanel({
     );
   }
   return (
-    <section aria-label="Search library" className="grid gap-4">
+    <section aria-label="Search library" className="flex min-w-0 flex-col gap-4">
       <Command
         shouldFilter={false}
         aria-label="Search library"
@@ -227,7 +227,10 @@ export function WorkspaceSearchPanel({
             {results.length === 1 ? "result" : "results"}
           </p>
         )}
-        <CommandList aria-label="Search results" className="min-h-48 max-h-[min(55dvh,28rem)]">
+        <CommandList
+          aria-label="Search results"
+          className="min-h-48 max-h-[min(55dvh,28rem)] overflow-x-hidden"
+        >
           {query.trim() ? (
             <>
               <CommandEmpty className="px-6 py-12">
@@ -246,8 +249,8 @@ export function WorkspaceSearchPanel({
           <AlertDescription>{queryError}</AlertDescription>
         </Alert>
       )}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="min-w-0">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+        <div className="flex min-w-0 flex-col gap-2">
           <Label htmlFor="workspace-search-kind" className="text-sm font-medium">
             Filter results
           </Label>
@@ -263,7 +266,7 @@ export function WorkspaceSearchPanel({
           <SelectTrigger
             id="workspace-search-kind"
             aria-label="Filter results"
-            className="w-44 bg-background"
+            className="w-full bg-background sm:w-44"
           >
             <SelectValue placeholder="Everything" />
           </SelectTrigger>
@@ -287,10 +290,10 @@ export function WorkspaceSearchPanel({
           <AlertDescription>
             {message}{" "}
             <Button
-              variant="link"
-              size="small"
+              variant="default"
+              size="sm"
               type="button"
-              className="h-auto p-0 align-baseline"
+              className="align-baseline"
               onClick={() => {
                 setRevision((value) => value + 1);
               }}
@@ -338,14 +341,14 @@ function WorkspaceSearchResultItem({
       value={result.id}
       disabled={disabled}
       onSelect={onSelect}
-      className="items-start gap-1 whitespace-normal rounded-lg px-3 py-3"
+      className="min-w-0 flex-col items-stretch gap-2 whitespace-normal rounded-lg px-3 py-3"
     >
-      <span className="flex flex-wrap items-center gap-2">
+      <span className="flex min-w-0 flex-wrap items-center gap-2">
         <Badge variant="secondary">{result.areaTitle}</Badge>
         <Badge variant="outline">{labels[result.kind]}</Badge>
       </span>
-      <strong>{result.title}</strong>
-      <span className="font-normal">{result.snippet}</span>
+      <strong className="min-w-0 [overflow-wrap:anywhere]">{result.title}</strong>
+      <span className="min-w-0 font-normal [overflow-wrap:anywhere]">{result.snippet}</span>
     </CommandItem>
   );
 }

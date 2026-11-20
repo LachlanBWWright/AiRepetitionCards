@@ -44,7 +44,7 @@ function StudyMaterialsClaim({
     <article
       tabIndex={-1}
       data-search-target={`claim:${claim.id}`}
-      className="space-y-4 border-b py-5"
+      className="flex flex-col gap-4 border-b py-5"
     >
       <strong>{claim.title}</strong>
       <p>{claim.description}</p>
@@ -52,15 +52,13 @@ function StudyMaterialsClaim({
         {progress?.status ?? "pending"} · {progress?.pendingCards ?? 0} pending ·{" "}
         {progress?.approvedCards ?? 0} approved
       </p>
-      <section className="space-y-3">
+      <section className="flex flex-col gap-3">
         <h3 className="text-sm font-semibold leading-6">Source passages</h3>
-        <div className="space-y-4 pt-3">
-          {claim.sourceReferences.map((reference, index) => (
-            <blockquote key={index}>{reference.quote}</blockquote>
-          ))}
-        </div>
+        {claim.sourceReferences.map((reference, index) => (
+          <blockquote key={index}>{reference.quote}</blockquote>
+        ))}
       </section>
-      <Label>
+      <Label className="flex flex-col items-stretch gap-2">
         Include topic
         <Select
           disabled={disabled}
@@ -80,7 +78,7 @@ function StudyMaterialsClaim({
           </SelectContent>
         </Select>
       </Label>
-      <Label>
+      <Label className="flex flex-col items-stretch gap-2">
         Priority
         <Select
           disabled={disabled}

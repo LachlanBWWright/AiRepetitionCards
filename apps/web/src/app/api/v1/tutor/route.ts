@@ -20,7 +20,7 @@ import {
 } from "@recall/application";
 import { TutorSessionQuerySchema } from "@recall/contracts";
 import { hostedTutorModel, createHostedTutorProvider } from "@/lib/ai/openai";
-import { readSupabaseConfig } from "@/lib/supabase/config";
+import { authenticateApiRequest } from "@/lib/supabase/api-auth";
 import { readJsonBody } from "@/lib/http/read-json";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createTutorApprovalAdmin } from "@/lib/supabase/tutor-approval-admin";
@@ -49,38 +49,23 @@ type AuthResult =
     }
   | { readonly _tag: "AuthFailure"; readonly status: 401 | 502 | 503 };
 
-async function requireUser(): Promise<AuthResult> {
-  const config = readSupabaseConfig();
-  if (Either.isLeft(config)) return { _tag: "AuthFailure", status: 503 };
-  const result = await Effect.runPromise(
-    Effect.either(
-      Effect.tryPromise({
-        try: async () => {
-          const client = await createSupabaseServerClient(
-            config.right.url,
-            config.right.publishableKey,
-          );
-          const claims = await client.auth.getClaims();
-          return { client, userId: claims.data?.claims.sub ?? null };
-        },
-        catch: () => ({ _tag: "TutorAuthUnavailable" }) as const,
-      }),
-    ),
-  );
-  if (Either.isLeft(result)) return { _tag: "AuthFailure", status: 502 };
-  return result.right.userId
-    ? { _tag: "Authenticated", client: result.right.client, userId: result.right.userId }
-    : { _tag: "AuthFailure", status: 401 };
-}
-
-async function loadSession(client: SupabaseServerClient, userId: string, sessionId: string) {
-  return Effect.runPromise(Effect.either(loadTutorSession(client, userId, sessionId)));
+async function requireUser(request: Request): Promise<AuthResult> {
+  const auth = await authenticateApiRequest(request);
+  if (auth._tag === "Authenticated") return auth;
+  return {
+    _tag: "AuthFailure",
+    status: auth.reason === "not-configured" ? 503 : auth.reason === "unavailable" ? 502 : 401,
+  };
 }
 
 function aiFailureResponse(error: AiProviderError): NextResponse {
   let status = 503;
   let message = "AI tutoring is temporarily unavailable.";
   switch (error._tag) {
+    case "AiManagedAccessDenied":
+      status = 403;
+      message = "Managed AI is unavailable for this account. Check your allowance in AI settings.";
+      break;
     case "AiRateLimited":
       status = 429;
       message = "The tutor is busy. Try again shortly.";
@@ -177,7 +162,7 @@ function loadWorkflowSnapshot(client: SupabaseServerClient, userId: string, sess
 }
 
 async function handlePOST(request: NextRequest): Promise<NextResponse> {
-  const auth = await requireUser();
+  const auth = await requireUser(request);
   if (auth._tag === "AuthFailure") {
     return privateJson(
       { error: auth.status === 401 ? "unauthenticated" : "auth-unavailable" },
@@ -252,10 +237,15 @@ async function handlePOST(request: NextRequest): Promise<NextResponse> {
   const model = hostedTutorModel(
     operation.action === "evaluate-quiz-answer" ? "evaluate" : operation.action,
   );
-  if (!process.env.OPENAI_API_KEY || !model)
+  if ((process.env.MANAGED_AI_ENABLED !== "true" && !process.env.OPENAI_API_KEY) || !model)
     return aiFailureResponse({ _tag: "AiProviderUnavailable" });
-  const aiCallId = crypto.randomUUID();
-  const provider = createHostedTutorProvider(auth.userId, aiCallId, new Date());
+  const aiCallId = request.headers.get("x-recall-ai-request-id") ?? crypto.randomUUID();
+  const provider = createHostedTutorProvider(
+    auth.userId,
+    aiCallId,
+    new Date(),
+    request.headers.get("x-recall-ai-funding"),
+  );
   if (Either.isLeft(provider)) return aiFailureResponse(provider.left);
   const reservation = await Effect.runPromise(
     Effect.either(
@@ -309,11 +299,11 @@ async function handlePOST(request: NextRequest): Promise<NextResponse> {
 }
 
 async function handlePATCH(request: NextRequest): Promise<NextResponse> {
-  return handleTutorProposalPatch(request, requireUser, workflowFailureResponse);
+  return handleTutorProposalPatch(request, () => requireUser(request), workflowFailureResponse);
 }
 
 async function handleGET(request: NextRequest): Promise<NextResponse> {
-  const auth = await requireUser();
+  const auth = await requireUser(request);
   if (auth._tag === "AuthFailure") {
     return privateJson(
       { error: auth.status === 401 ? "unauthenticated" : "auth-unavailable" },
@@ -333,7 +323,9 @@ async function handleGET(request: NextRequest): Promise<NextResponse> {
   if (sessionId === undefined) {
     return privateJson({ error: "invalid-session-id" }, { status: 400 });
   }
-  const loaded = await loadSession(auth.client, auth.userId, sessionId);
+  const loaded = await Effect.runPromise(
+    Effect.either(loadTutorSession(auth.client, auth.userId, sessionId)),
+  );
   if (Either.isLeft(loaded) && loaded.left._tag === "TutorSessionNotFound") {
     return privateJson({ error: "session-not-found" }, { status: 404 });
   }

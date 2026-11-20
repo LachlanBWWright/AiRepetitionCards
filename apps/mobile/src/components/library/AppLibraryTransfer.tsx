@@ -1,3 +1,4 @@
+import { NativeWorkspaceBackupActions } from "./NativeWorkspaceBackupActions";
 import type { ReactNode } from "react";
 import { Text, View } from "react-native";
 import { NativeButton } from "../ui/NativeButton";
@@ -56,7 +57,7 @@ export function AppLibraryTransfer({
       <View className="gap-2">
         <NativeButton
           label="Export deck"
-          tone="soft"
+          variant="default"
           disabled={reviewPending || !canExport || transferPending}
           onPress={() => {
             onOpenTransfer("export");
@@ -64,7 +65,7 @@ export function AppLibraryTransfer({
         />
         <NativeButton
           label="Workspace backup"
-          tone="soft"
+          variant="default"
           disabled={reviewPending || transferPending}
           onPress={() => {
             onOpenTransfer("backup");
@@ -72,14 +73,14 @@ export function AppLibraryTransfer({
         />
       </View>
       {transfer && (
-        <View className="gap-3 rounded-xl border border-recall-line p-4">
+        <View className="gap-4 rounded-xl border border-recall-line p-4">
           <Text className="text-lg font-bold">
             {transfer === "export" ? "Export deck" : "Workspace backup"}
           </Text>
           <Text className="text-sm text-recall-muted">
             {transfer === "export"
               ? `Export ${activeAreaTitle ?? "the selected deck"}. CSV/TSV contains text and tags; deck packages also include attachments. Reviews stay private.`
-              : "Backups include decks, schedules, review history and attachments. Restoring replaces the workspace. Drafts and editing flags are stored separately."}
+              : "Save a copy of your workspace or restore an existing backup."}
           </Text>
           {transfer === "export" ? (
             <>
@@ -91,43 +92,35 @@ export function AppLibraryTransfer({
               />
               <NativeButton
                 label="Export TSV"
-                tone="soft"
+                variant="default"
                 disabled={transferPending}
                 onPress={runTransfer(() => onExportActiveArea("tsv"))}
               />
               <NativeButton
                 label="Export deck package"
-                tone="soft"
+                variant="default"
                 disabled={transferPending}
                 onPress={runTransfer(() => onExportActiveArea())}
               />
             </>
           ) : (
-            <>
-              <NativeButton
-                label="Save workspace backup"
-                disabled={transferPending}
-                onPress={runTransfer(onExportPrivateBackup)}
-              />
-              <NativeButton
-                label="Restore workspace backup"
-                tone="soft"
-                disabled={transferPending}
-                onPress={runTransfer(onRestorePrivateBackup)}
-              />
-            </>
+            <NativeWorkspaceBackupActions
+              disabled={transferPending}
+              onSave={runTransfer(onExportPrivateBackup)}
+              onRestore={runTransfer(onRestorePrivateBackup)}
+            />
           )}
           {message && <Text accessibilityRole="alert">{message}</Text>}
           <NativeButton
             label="Close file tools"
-            tone="soft"
+            variant="default"
             disabled={transferPending}
             onPress={onCloseTransfer}
           />
         </View>
       )}
       {importChoicesOpen && (
-        <View className="gap-3 rounded-xl border border-recall-line p-4">
+        <View className="gap-4 rounded-xl border border-recall-line p-4">
           {portableDeckTransfer}
           <Text className="text-lg font-bold text-recall-ink">Import cards</Text>
           <Text className="text-sm text-recall-muted">
@@ -141,25 +134,25 @@ export function AppLibraryTransfer({
           />
           <NativeButton
             label="Import CSV"
-            tone="soft"
+            variant="default"
             disabled={importingCards || reviewPending}
             onPress={importCards("csv")}
           />
           <NativeButton
             label="Import TSV"
-            tone="soft"
+            variant="default"
             disabled={importingCards || reviewPending}
             onPress={importCards("tsv")}
           />
           <NativeButton
             label="Import deck package"
-            tone="soft"
+            variant="default"
             disabled={importingCards || reviewPending}
             onPress={importCards()}
           />
           <NativeButton
             label="Close import"
-            tone="soft"
+            variant="default"
             disabled={importingCards}
             onPress={onCloseImportChoices}
           />

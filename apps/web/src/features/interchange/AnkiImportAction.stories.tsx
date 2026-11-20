@@ -1,3 +1,6 @@
+import { useState } from "react";
+import { Button } from "@recall/ui-web";
+import { eraseLocalData } from "../workspace/erase-local-data";
 import { Effect } from "effect";
 import {
   createAreaId,
@@ -77,8 +80,19 @@ const proposal = {
 };
 
 function ImportStory({ initialState }: { readonly initialState: AnkiImportState }) {
+  const [cleanup, setCleanup] = useState("");
   return (
     <main style={{ minHeight: "100vh", background: "#f2f4ef", padding: 30 }}>
+      <Button
+        onClick={() => {
+          void Effect.runPromise(eraseLocalData()).then((cleared) => {
+            setCleanup(cleared ? "Device data cleared" : "Device cleanup failed");
+          });
+        }}
+      >
+        Clear device data
+      </Button>
+      <p role="status">{cleanup}</p>
       <AnkiImportAction
         color="#c4ed68"
         initialState={initialState}

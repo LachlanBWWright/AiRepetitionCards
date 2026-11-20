@@ -34,6 +34,7 @@ function sectionHasProposals(
 }
 
 export type StudyMaterialsPanelSourcesProps = {
+  readonly view?: "text" | "topics";
   readonly notebook: KnowledgeNotebook;
   readonly coverage: readonly StudyMaterialCoverage[];
   readonly claimCoverage: readonly ClaimCoverage[];
@@ -55,6 +56,7 @@ export type StudyMaterialsPanelSourcesProps = {
 };
 
 export function StudyMaterialsPanelSources({
+  view,
   notebook,
   coverage,
   claimCoverage,
@@ -72,13 +74,17 @@ export function StudyMaterialsPanelSources({
   const materials = notebook.materials ?? [];
   return (
     <>
-      {materials.length > 0 && <h4 className="text-sm font-semibold">Your sources</h4>}
+      {materials.length > 0 ? (
+        <h4 className="text-sm font-semibold">Your sources</h4>
+      ) : (
+        <p className="text-sm text-muted-foreground">Import a material first.</p>
+      )}
       {materials.map((material) => (
         <article
           key={material.id}
           tabIndex={-1}
-          data-search-target={`material:${material.id}`}
-          className="space-y-4 border-b py-5"
+          data-search-target={view === "topics" ? undefined : `material:${material.id}`}
+          className="flex flex-col gap-4 border-b py-5"
         >
           <h4 className="text-sm font-semibold">{material.name}</h4>
           {material.warnings.map((warning, index) => (
@@ -88,7 +94,7 @@ export function StudyMaterialsPanelSources({
           ))}
           <Button
             type="button"
-            variant="outline"
+            variant="default"
             disabled={disabled}
             onClick={() => {
               onMaterialRemove(material.id);
@@ -99,6 +105,7 @@ export function StudyMaterialsPanelSources({
           {material.sections.map((section) => (
             <StudyMaterialSourceSection
               key={section.id}
+              {...(view ? { view } : {})}
               material={material}
               section={section}
               progress={coverage.find(

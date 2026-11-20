@@ -19,7 +19,7 @@ Build on the target OS. macOS x64 and ARM64 are packaged separately with explici
 
 ## Signed release candidates
 
-The manual `Desktop packages (signed release candidates)` workflow builds macOS x64/ARM64 and Windows x64, and uploads `recall-signed-*` artifacts. Its separate Linux x64 job uploads `recall-publisher-signed-linux-x64` with a signed checksum manifest. It does not publish a release or provide automatic updates. Signed commands are `dist:mac:signed`, `dist:mac:arm64:signed` and `dist:windows:signed`.
+The manual `Desktop packages (signed release candidates)` workflow builds macOS x64/ARM64 and Windows x64, and uploads `recall-signed-*` artifacts. Its separate Linux x64 job uploads `recall-publisher-signed-linux-x64` with a signed checksum manifest. It does not publish a release. Signed builds can opt into the startup update mechanism described below. Signed commands are `dist:mac:signed`, `dist:mac:arm64:signed` and `dist:windows:signed`.
 
 Before enabling it, create the GitHub environment **desktop-release**, restrict deployment branches/tags to reviewed release source, and require approval with self-review disabled. Configure these environment secrets:
 
@@ -53,4 +53,37 @@ Before shipping, obtain a successful signed workflow run and retain its verifica
 3. Encrypted credential storage and configured ChatGPT sign-in work on the installed app.
 4. OS trust assessment succeeds on downloaded artifacts without development tools.
 
-These device checks, production service configuration, independently trusted Linux publisher fingerprint distribution and any future update mechanism remain pending until independently verified. Do not distribute unsigned development artifacts as a production release.
+These device checks, production service configuration, independently trusted Linux publisher fingerprint distribution and actual signed update delivery remain pending until independently verified. Do not distribute unsigned development artifacts as a production release.
+
+## Startup updates and upgrade recovery
+
+Signed macOS/Windows builds support optional startup update checks with pinned `electron-updater`
+6.8.3, matching this repository's electron-builder 26 API. Configure protected-environment variable
+`RECALL_DESKTOP_UPDATE_URL` with an HTTPS generic-provider feed. Windows also requires
+`RECALL_DESKTOP_UPDATE_PUBLISHER` matching the signing certificate subject. The build rejects
+update-enabled unsigned packages and insecure, credential-bearing or malformed feed addresses.
+The runtime embeds and revalidates that configured feed. Leaving it unset disables update checks;
+Linux retains its separately signed-manifest distribution.
+
+The signed workflow includes generated `latest*.yml` update metadata and `.blockmap` files in the
+artifact alongside installers/ZIPs. Publish the appropriate platform/architecture files and metadata
+at the configured feed after signed artifact acceptance, preserving generated names and hashes.
+Keep architecture-specific feeds separate (particularly macOS x64 and ARM64), and use increasing
+application versions. Publishing/hosting the feed is an external release step; the workflow never
+uploads it automatically. Never point the stable feed at unsigned development artifacts.
+
+Checks run before the main window opens, with a five-second limit on the initial network check.
+Offline/unavailable checks leave local startup available. Available updates require download consent
+and installation consent. The installer runs only during this startup phase, so it cannot interrupt a
+review or unsaved editor. Install-on-normal-quit, prereleases, downgrades and NSIS web installers are
+disabled. macOS verifies update signatures against the application identity; Windows uses the
+configured publisher verification. Both also verify downloaded hashes. Actual signature rejection
+and download/install/relaunch behavior must be exercised on signed target-OS candidates.
+
+Before installation, Recall makes an online SQLite backup including WAL content and media. Startup
+also creates a backup before the first run of a different application version against an existing
+collection. A failed backup blocks upgrade processing/installation. Copies remain in the app's
+`userData/upgrade-backups` directory; they are private, unencrypted SQLite recovery files and are
+retained until deliberately removed. With Recall closed, preserve the current database and its
+sidecars before restoring a copy as `recall.sqlite`. Prefer the normal private backup import for
+routine transfers. Test previous-version upgrades and recovery on signed candidates before shipping.

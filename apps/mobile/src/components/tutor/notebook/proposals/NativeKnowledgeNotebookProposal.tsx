@@ -1,3 +1,4 @@
+import { NativeCollapsibleTrigger, NativeCollapsibleContent } from "@recall/ui-native";
 import { useState } from "react";
 import { NativeProposedCardPreview } from "./NativeProposedCardPreview";
 import { NativeKnowledgeNotebookSources } from "../NativeKnowledgeNotebookSources";
@@ -94,16 +95,17 @@ export function NativeKnowledgeNotebookProposal({
         <View className={"gap-[7px] py-[12px]"}>
           <Text className={"text-recall-ink font-bold text-[13px]"}>Suggested card</Text>
           {pendingProposal.sourceReferences?.length ? (
-            <NativeButton
-              label={showSources ? "Hide sources" : "Sources"}
-              onPress={() => {
+            <NativeCollapsibleTrigger
+              open={showSources}
+              title="Sources"
+              onToggle={() => {
                 setShowSources((current) => !current);
               }}
-              className={"py-[9px] px-[4px]"}
-              labelClassName="text-recall-darkGreen text-[11px] font-bold"
             />
           ) : null}
-          {showSources && <NativeKnowledgeNotebookSources model={model} />}
+          <NativeCollapsibleContent open={showSources}>
+            {<NativeKnowledgeNotebookSources model={model} />}
+          </NativeCollapsibleContent>
           <TextInput
             accessibilityLabel="Proposal question"
             value={proposalContent?.front ?? ""}
@@ -142,10 +144,6 @@ export function NativeKnowledgeNotebookProposal({
               })
             }
             label="Save proposal edits"
-            className={
-              "min-h-[36px] justify-center items-center px-[10px] rounded-[10px] bg-transparent"
-            }
-            labelClassName="text-recall-darkGreen text-[11px] font-bold"
           />
           <NativeProposalDuplicateWarning
             matches={duplicateMatches}
@@ -160,19 +158,12 @@ export function NativeKnowledgeNotebookProposal({
               disabled={busy || !!unsaved || !mayWrite() || !duplicatesAllowed}
               onPress={() => void resolveProposal("accepted")}
               label="Save & approve"
-              className={
-                "min-h-[40px] justify-center items-center px-[13px] rounded-[10px] bg-recall-darkGreen"
-              }
-              labelClassName="text-recall-surface text-[12px] font-bold"
             />
             <NativeButton
+              variant="secondary"
               disabled={busy || !!unsaved || !mayWrite()}
               onPress={() => void resolveProposal("discarded")}
               label="Discard proposal"
-              className={
-                "min-h-[36px] justify-center items-center px-[10px] rounded-[10px] bg-transparent"
-              }
-              labelClassName="text-recall-darkGreen text-[11px] font-bold"
             />
           </View>
         </View>

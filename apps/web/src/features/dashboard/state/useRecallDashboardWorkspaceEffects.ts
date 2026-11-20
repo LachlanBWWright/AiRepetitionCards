@@ -132,9 +132,7 @@ export function useRecallDashboardWorkspaceEffects(
         let loaded: Workspace = starter;
         let canWriteCache = true;
         let cacheProblem: string | null = null;
-        if (!window.recallDesktop) {
-          loaded = starter;
-        } else if (Either.isLeft(loadResult)) {
+        if (Either.isLeft(loadResult)) {
           canWriteCache = false;
           cacheProblem = "Saved data could not be read. Your saved data has been left untouched.";
         } else if (loadResult.right._tag === "Loaded") {

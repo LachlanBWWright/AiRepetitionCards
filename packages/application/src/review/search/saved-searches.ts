@@ -42,6 +42,9 @@ export function suspensionSettings(
   const ids = settings.suspendedCardIds ?? [];
   return {
     ...settings,
+    leechSuspensions: Object.fromEntries(
+      Object.entries(settings.leechSuspensions ?? {}).filter(([id]) => id !== cardId),
+    ),
     suspendedCardIds: ids.includes(cardId) ? ids.filter((id) => id !== cardId) : [...ids, cardId],
   };
 }

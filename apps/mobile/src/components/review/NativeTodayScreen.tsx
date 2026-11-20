@@ -1,38 +1,42 @@
+import { NativeCollapsibleTrigger, NativeCollapsibleContent } from "@recall/ui-native";
+
+import type { LearningActivitiesProps } from "../../hooks/use-learning-activities";
+import { NativeReviewActivityCard } from "./activities/NativeReviewActivityCard";
+import { nativeReviewDelays, nativeReviewRatingColors } from "./native-review-presentation";
+import { NativeReviewCardHelp } from "./assistance/NativeReviewCardHelp";
 import type { MediaTrashPurgeResult } from "@recall/application";
 import type { MediaReference } from "@recall/domain";
 import { effectiveReviewEvents } from "@recall/domain";
 import type { WorkspaceStore, MediaStore } from "@recall/local-store";
 import { NativeButton } from "../ui/NativeButton";
 import { Card } from "../../../components/ui/card";
-import { ActivityIndicator, Pressable, ScrollView, Text, View } from "react-native";
+import { ActivityIndicator, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { designTokens } from "@recall/design-tokens";
 import type { Workspace, ReviewEvent } from "@recall/domain";
-import { previewReviewSchedules, type ReviewRating } from "@recall/scheduler";
-import { Effect, Either } from "effect";
+import type { ReviewRating } from "@recall/scheduler";
 import { useState, type ReactNode } from "react";
 import {
+  localStudyDay,
   studySessionQueue,
   studySessionArea,
   nextStudyArea,
   summarizeStudySubjects,
-  reviewParameters,
   summarizeReviews,
   summarizeStudySession,
-  formatReviewDelay,
 } from "@recall/application";
-import { NativeTodayScreenReviewCard } from "./NativeTodayScreenReviewCard";
 import { DeckChoiceButton, DecksSection, FlaggedCardsAction } from "./NativeTodayScreenDecks";
 import { NativeCramPractice } from "./NativeCramPractice";
 import { NativeAdditionalStudyTools } from "./NativeAdditionalStudyTools";
 import type { NativeStudyCommand } from "../../hooks/use-native-study-command";
 
 const palette = designTokens.color;
-
 export type NativeTodayScreenProps = {
+  readonly reviewActivities?: LearningActivitiesProps;
   readonly workspaceStore?: WorkspaceStore | undefined;
   readonly onPurged?: ((result: MediaTrashPurgeResult) => void) | undefined;
   readonly protectedReferences?: readonly MediaReference[] | undefined;
+  readonly reviewRepairApi?: Parameters<typeof NativeReviewCardHelp>[0]["api"];
   readonly embedded?: boolean;
   readonly deepPractice?: ReactNode;
   readonly flaggedCardIds?: readonly string[];
@@ -66,10 +70,12 @@ export type NativeTodayScreenProps = {
 };
 
 export function NativeTodayScreen({
+  reviewActivities,
   protectedReferences,
   workspaceStore,
   onPurged,
   embedded = false,
+  reviewRepairApi,
   deepPractice,
   sessionEvents = [],
   flaggedCardIds = [],
@@ -100,6 +106,7 @@ export function NativeTodayScreen({
   tutorPanel,
   authoringPanel,
 }: NativeTodayScreenProps) {
+  const [repairOpen, setRepairOpen] = useState(false);
   const [toolsOpen, setToolsOpen] = useState(false);
   const [choosingArea, setChoosingArea] = useState(false);
   const [cramAreaId, setCramAreaId] = useState<string | null>(null);
@@ -122,23 +129,12 @@ export function NativeTodayScreen({
   const dueCards = queue?.cards ?? [];
   const card = dueCards[0];
   const session = activeArea ? summarizeStudySession(activeArea, sessionEvents, now, queue) : null;
-  const preview = card
-    ? Effect.runSync(
-        Effect.either(
-          previewReviewSchedules(
-            card.schedule,
-            new Date(now),
-            reviewParameters(workspace, activeArea?.id ?? "", card.id),
-          ),
-        ),
-      )
-    : null;
   const nextDeck = nextStudyArea(workspace, now, activeArea?.id);
   const totalDue = dueCards.length;
   const date = new Date(now);
   const totalReviews = summarizeReviews(
     [...new Map(effectiveReviewEvents(workspace).map((event) => [event.id, event])).values()],
-    new Date(date.getFullYear(), date.getMonth(), date.getDate()),
+    new Date(localStudyDay(now, workspace.schedulerSettings?.studyDayStartHour).startsAt),
     date,
   ).inWindow;
   const retainedCards = (workspace.retainedReviewAreas ?? []).flatMap((area) => area.cards).length;
@@ -149,15 +145,7 @@ export function NativeTodayScreen({
       month: "short",
       day: "numeric",
     });
-  const reviewDelays =
-    preview && Either.isRight(preview)
-      ? {
-          again: formatReviewDelay(preview.right.again.due, now),
-          hard: formatReviewDelay(preview.right.hard.due, now),
-          good: formatReviewDelay(preview.right.good.due, now),
-          easy: formatReviewDelay(preview.right.easy.due, now),
-        }
-      : {};
+  const reviewDelays = nativeReviewDelays(workspace, activeArea?.id ?? "", card, now);
   const chooseDeck = (areaId: string) => {
     setCramAreaId(null);
     onSelectArea(areaId);
@@ -181,7 +169,7 @@ export function NativeTodayScreen({
             : "Already caught up";
   const emptyStateDescription =
     deferred > 0
-      ? `${String(queue?.deferredReviewCount ?? 0)} returning cards deferred; ${String(queue?.deferredNewCount ?? 0)} new cards deferred by your daily settings; ${String(queue?.filteredCount ?? 0)} cards excluded by the study filter; ${String(queue?.buriedCount ?? 0)} related cards buried until tomorrow.`
+      ? `${String(queue?.deferredReviewCount ?? 0)} returning cards deferred; ${String(queue?.deferredNewCount ?? 0)} new cards deferred by your daily settings; ${String(queue?.filteredCount ?? 0)} cards excluded by the study filter; ${String(queue?.buriedCount ?? 0)} cards buried until the next study day.`
       : !activeArea || activeArea.cards.length === 0
         ? "Add cards in Overview to start studying."
         : session && session.reviewed > 0
@@ -216,26 +204,17 @@ export function NativeTodayScreen({
 
         {!embedded && workspace.areas.length > 1 && (
           <View className={"mb-[8px]"}>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={`Deck: ${activeArea?.title ?? "Choose deck"}`}
-              accessibilityState={{ expanded: choosingArea, disabled: reviewPending }}
-              disabled={reviewPending}
-              onPress={() => {
+            <NativeCollapsibleTrigger
+              open={choosingArea}
+              title={activeArea?.title ?? "Choose deck"}
+              onToggle={() => {
                 setChoosingArea((value) => !value);
               }}
-              className={
-                "flex-row items-center border-t-recall-line border-t py-[12px] justify-between"
-              }
-            >
-              <Text className={"text-recall-ink text-[13px] font-semibold"}>
-                {activeArea?.title ?? "Choose deck"}
-              </Text>
-              <Text className={"text-recall-muted text-[24px] mt-[-3px]"}>
-                {choosingArea ? "⌃" : "⌄"}
-              </Text>
-            </Pressable>
-            {choosingArea && deckChoiceRows}
+              disabled={reviewPending}
+            />
+            <NativeCollapsibleContent open={choosingArea}>
+              {deckChoiceRows}
+            </NativeCollapsibleContent>
           </View>
         )}
         <Text className={"text-recall-muted text-[14px] mb-[8px]"}>
@@ -264,6 +243,12 @@ export function NativeTodayScreen({
 
         {activeArea && (
           <NativeAdditionalStudyTools
+            onSuspend={onSuspend}
+            onPractice={() => {
+              setCramAreaId(activeArea.id);
+              onHideAnswer();
+            }}
+            card={card}
             onInteractionChange={setToolsOpen}
             workspaceStore={workspaceStore}
             onPurged={onPurged}
@@ -274,25 +259,6 @@ export function NativeTodayScreen({
             now={now}
             save={onStudyCommand}
             disabled={reviewPending}
-          />
-        )}
-        {card && onSuspend && (
-          <NativeButton
-            label="Suspend this card"
-            tone="soft"
-            disabled={reviewPending}
-            onPress={onSuspend}
-          />
-        )}
-        {activeArea && (
-          <NativeButton
-            label="Extra practice"
-            tone="soft"
-            disabled={reviewPending || activeArea.cards.length === 0}
-            onPress={() => {
-              setCramAreaId(activeArea.id);
-              onHideAnswer();
-            }}
           />
         )}
         {activeArea && cramAreaId === activeArea.id ? (
@@ -314,25 +280,39 @@ export function NativeTodayScreen({
                 {activeArea?.title ?? "Study"}
               </Text>
             )}
-            <NativeTodayScreenReviewCard
+            {Boolean(queue?.learningAheadCount) && (
+              <Text accessibilityLiveRegion="polite">
+                Learning ahead: no other cards are due. This answer updates the normal schedule.
+              </Text>
+            )}
+            <NativeReviewActivityCard
+              {...(reviewActivities ? { activities: reviewActivities } : {})}
               card={card}
               reviewerSettings={workspace.schedulerSettings?.reviewer}
-              automationPaused={toolsOpen || choosingArea}
+              automationPaused={toolsOpen || choosingArea || repairOpen}
               flagged={flaggedCardIds.includes(card.id)}
               {...(onFlag ? { onFlag } : {})}
               showAnswer={showAnswer}
               reviewPending={reviewPending}
+              interactionPaused={repairOpen}
               mediaUris={mediaUris}
               reviewDelays={reviewDelays}
-              ratingColors={{
-                again: palette.coral,
-                hard: palette.amber,
-                good: palette.green,
-                easy: palette.violet,
-              }}
+              ratingColors={nativeReviewRatingColors}
               onReview={onReview}
               onShowAnswer={onShowAnswer}
             />
+            {activeArea && (
+              <NativeReviewCardHelp
+                key={card.id}
+                workspace={workspace}
+                area={activeArea}
+                card={card}
+                api={reviewRepairApi ?? null}
+                save={onStudyCommand}
+                disabled={reviewPending}
+                onInteractionChange={setRepairOpen}
+              />
+            )}
           </View>
         ) : (
           <Card className="mt-5 gap-3 p-5">
@@ -366,7 +346,7 @@ export function NativeTodayScreen({
         {onOpenLibrary ? (
           <NativeButton
             label={activeArea?.cards.length ? "Back to Overview" : "Add cards in Overview"}
-            tone="soft"
+            variant="default"
             onPress={onOpenLibrary}
           />
         ) : (

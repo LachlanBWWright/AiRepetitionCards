@@ -68,7 +68,7 @@ export function NativeDeckSharingPanelVersionActions({
               ? `Following in ${currentArea.title}`
               : `Follow updates in ${currentArea.title}`
           }
-          tone="soft"
+          variant="default"
           disabled={busy || !currentArea.sourceVersionId}
           onPress={() => {
             onFollowVersion(currentArea.sourceVersionId ?? "", !isFollowing);

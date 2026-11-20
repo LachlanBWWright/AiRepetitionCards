@@ -39,7 +39,7 @@ export function NativeRichTextEditor({
   };
   return (
     <View className="gap-2">
-      <Text className="text-recall-ink text-[13px] font-semibold">{label}</Text>
+      <Text className="text-recall-ink text-[14px] font-semibold">{label}</Text>
       <TextInput
         ref={editor}
         accessibilityLabel={label}
@@ -57,7 +57,7 @@ export function NativeRichTextEditor({
           setSelection(event.nativeEvent.selection);
           setReplacementSelection(undefined);
         }}
-        className="min-h-[90px] border border-recall-line rounded-[9px] p-[10px] text-recall-ink bg-recall-surface"
+        className="min-h-[90px] border border-recall-line rounded-[9px] p-[10px] text-base text-recall-ink bg-recall-surface"
         style={{ textAlignVertical: "top" }}
       />
       <NativeRichFormattingToolbar
@@ -66,6 +66,7 @@ export function NativeRichTextEditor({
         disabled={disabled}
         media={media}
         showPreview={showPreview}
+        maxLength={maxLength}
         selection={selection}
         onEdit={apply}
       />

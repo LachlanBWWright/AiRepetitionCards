@@ -1,8 +1,9 @@
+import { NativeCollapsibleTrigger } from "@recall/ui-native";
 import { useState } from "react";
 import { View } from "react-native";
 import { Effect } from "effect";
 import type { NativeWorkspaceAuthoringPanelProps } from "../NativeWorkspaceAuthoringPanel.types";
-import { NativeButton } from "../../ui/NativeButton";
+
 import { NativeNoteLibraryEditor } from "./NativeNoteLibraryEditor";
 
 type Props = Pick<
@@ -35,13 +36,13 @@ export function NativeNoteAuthoringSection(props: Props) {
   return (
     <View className="gap-3">
       {!props.initialNoteId && (
-        <NativeButton
-          label={open ? "Hide shared note editor ▴" : "Create or edit shared notes ▾"}
-          tone="soft"
-          disabled={props.disabled ?? false}
-          onPress={() => {
+        <NativeCollapsibleTrigger
+          open={open}
+          title="Create or edit shared notes"
+          onToggle={() => {
             setOpen(!open);
           }}
+          disabled={props.disabled ?? false}
         />
       )}
       {(open || Boolean(props.initialNoteId)) && (

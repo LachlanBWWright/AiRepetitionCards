@@ -1,5 +1,7 @@
 "use client";
 
+import { EmptyState } from "@recall/ui-web";
+
 import type { DeckSummary } from "@recall/contracts";
 import { Button } from "@/components/ui/Button";
 import { ArrowUpRight } from "lucide-react";
@@ -17,12 +19,11 @@ type CardProps = {
 
 function DeckCard({ deck, selected, onSelect, loadDetail, onOpenDeck, initialToken }: CardProps) {
   return (
-    <article
-      className={`rounded-xl border p-4 transition hover:border-primary ${selected ? "border-primary bg-muted/40" : "bg-card"}`}
-    >
+    <article className="flex min-w-0 flex-col gap-3">
       <Button
-        variant="link"
-        className="h-auto w-full min-w-0 flex-col items-stretch p-0 text-left text-foreground no-underline hover:no-underline"
+        size="row"
+        variant="default"
+        className="w-full min-w-0 flex-col items-stretch text-left"
         aria-pressed={selected}
         onClick={() => {
           onSelect();
@@ -31,28 +32,28 @@ function DeckCard({ deck, selected, onSelect, loadDetail, onOpenDeck, initialTok
       >
         <span className="flex items-start justify-between gap-3">
           <span className="font-semibold">{deck.title}</span>
-          <span className="text-xs text-muted-foreground">
+          <span>
             v{deck.version} · {deck.cardCount} cards
           </span>
         </span>
-        <span className="mt-1 block line-clamp-2 text-sm text-muted-foreground">
+        <span className="text-sm mt-1 block line-clamp-2">
           {deck.description || "No description provided."}
         </span>
-        <span className="mt-2 block text-xs text-muted-foreground">
+        <span className="text-xs mt-2 block">
           {deck.authorName} · {deck.language} · {deck.visibility}
           {deck.status === "withdrawn" ? " · withdrawn" : ""}
         </span>
         {deck.tags.length > 0 ? (
-          <span className="mt-2 block text-xs">{deck.tags.join(" · ")}</span>
+          <span className="text-xs mt-2 block">{deck.tags.join(" · ")}</span>
         ) : null}
         {deck.catalog ? (
-          <span className="mt-2 block text-xs text-muted-foreground">
+          <span className="text-xs mt-2 block">
             {deckSharingDifficultyLabel(deck.catalog.difficulty)}
             About {deck.catalog.estimatedMinutes} minutes
           </span>
         ) : null}
         {deck.catalog?.preview[0] ? (
-          <span className="mt-2 block rounded-md bg-muted/50 p-2 text-xs">
+          <span className="text-xs mt-2 block rounded-md bg-muted/50 p-2">
             Preview: {deck.catalog.preview[0].prompt}
             {deck.catalog.preview[0].answer ? ` → ${deck.catalog.preview[0].answer}` : ""}
           </span>
@@ -60,8 +61,9 @@ function DeckCard({ deck, selected, onSelect, loadDetail, onOpenDeck, initialTok
       </Button>
       {onOpenDeck ? (
         <Button
-          variant="link"
-          className="mt-3 h-auto gap-1 p-0 text-xs"
+          size="sm"
+          variant="default"
+          className="gap-1 self-start"
           onClick={() => {
             onOpenDeck(deck.id, initialToken);
           }}
@@ -119,16 +121,20 @@ export function DeckSharingPanelBrowseResults({
           />
         ))}
         {decks.length === 0 && !busy ? (
-          <p className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">
-            {ownedOnly
-              ? "You haven’t published any decks yet."
-              : "No shared decks found. Try a different search or clear the filters."}
-          </p>
+          <EmptyState
+            className="rounded-lg border border-dashed p-6"
+            title={ownedOnly ? "No published decks" : "No shared decks found"}
+            description={
+              ownedOnly
+                ? "You haven’t published any decks yet."
+                : "Try a different search or clear the filters."
+            }
+          />
         ) : null}
       </div>
       {nextCursor ? (
         <Button
-          variant="outline"
+          variant="default"
           disabled={busy}
           onClick={() => void loadList({ cursor: nextCursor, append: true })}
         >

@@ -1,3 +1,4 @@
+import { MAX_ARCHIVE_BYTES, MAX_MEDIA_ASSETS, MAX_EXPANDED_BYTES } from "./anki-import-archive";
 import { areaMediaReferences } from "../../workspace/media/media-references";
 import { Effect, Either, Schema } from "effect";
 import { zipSync, strToU8 } from "fflate";
@@ -81,6 +82,7 @@ export function exportAnkiApkg(
     )
       return yield* Effect.fail(failure("limits-exceeded"));
     const refs = areaMediaReferences(area);
+    if (refs.length > MAX_MEDIA_ASSETS) return yield* Effect.fail(failure("limits-exceeded"));
     const files: Record<string, Uint8Array> = {};
     const media: Record<string, string> = {};
     let total = 0;
@@ -97,7 +99,7 @@ export function exportAnkiApkg(
       )
         return yield* Effect.fail(failure("media-unavailable"));
       total += asset.bytes.length;
-      if (total > 100_000_000) return yield* Effect.fail(failure("limits-exceeded"));
+      if (total > MAX_EXPANDED_BYTES) return yield* Effect.fail(failure("limits-exceeded"));
       files[String(index)] = asset.bytes;
       media[String(index)] = ankiMediaName(ref.id, ref.mimeType);
     }
@@ -105,11 +107,13 @@ export function exportAnkiApkg(
     if (files["collection.anki2"].length > 80_000_000)
       return yield* Effect.fail(failure("limits-exceeded"));
     files.media = strToU8(JSON.stringify(media));
+    if (total + files["collection.anki2"].byteLength + files.media.byteLength > MAX_EXPANDED_BYTES)
+      return yield* Effect.fail(failure("limits-exceeded"));
     const archive = yield* Effect.try({
       try: () => zipSync(files, { level: 6 }),
       catch: () => failure("database-failed"),
     });
-    if (archive.length > 50_000_000) return yield* Effect.fail(failure("limits-exceeded"));
+    if (archive.length > MAX_ARCHIVE_BYTES) return yield* Effect.fail(failure("limits-exceeded"));
     return archive;
   });
 }

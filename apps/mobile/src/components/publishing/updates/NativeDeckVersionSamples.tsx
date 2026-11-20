@@ -27,7 +27,7 @@ function CardSample({ card }: { readonly card: KnowledgeArea["cards"][number] })
       ) : null}
       <NativeButton
         label={revealed ? "Hide answer" : "Reveal answer"}
-        tone="soft"
+        variant="default"
         onPress={() => {
           setRevealed((value) => !value);
         }}

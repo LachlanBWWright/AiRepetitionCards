@@ -1,3 +1,4 @@
+import { TableHead } from "@recall/ui-web/components/table";
 import { Checkbox } from "@recall/ui-web/components/checkbox";
 
 type KnowledgeAreaCardLibrarySelectionHeaderProps = {
@@ -14,7 +15,7 @@ export function KnowledgeAreaCardLibrarySelectionHeader({
   onChange,
 }: KnowledgeAreaCardLibrarySelectionHeaderProps) {
   return (
-    <th scope="col" className="w-12 px-3 py-3">
+    <TableHead scope="col" className="w-12 px-3 py-3">
       <Checkbox
         aria-label="Select visible cards"
         disabled={disabled}
@@ -23,6 +24,6 @@ export function KnowledgeAreaCardLibrarySelectionHeader({
           onChange(checked === true);
         }}
       />
-    </th>
+    </TableHead>
   );
 }

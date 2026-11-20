@@ -81,3 +81,17 @@ await test("appending dialogue preserves stable deck and message cache boundarie
   assert.equal(next.store, false);
   assert.equal(next.input.at(-1)?.content, "Show an example.");
 });
+
+await test("ChatGPT response telemetry needs no preflight count and never invents missing usage", () => {
+  assert.deepEqual(readChatGPTTokenUsage({}, "gpt-6-luna"), {
+    model: "gpt-6-luna",
+    inputTokens: null,
+    outputTokens: null,
+    cachedInputTokens: null,
+    cacheWriteTokens: null,
+  });
+  assert.equal(
+    readChatGPTTokenUsage({ usage: { input_tokens: 42 } }, "gpt-6-luna").inputTokens,
+    42,
+  );
+});

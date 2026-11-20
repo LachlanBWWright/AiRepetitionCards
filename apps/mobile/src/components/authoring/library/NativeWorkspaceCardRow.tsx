@@ -1,6 +1,7 @@
+import { NativeButton, NativeButtonPrimitive, NativeButtonText } from "@recall/ui-native";
+
 import { Pressable, Text, View } from "react-native";
 import type { LearningArea } from "@recall/domain";
-import { NativeButton } from "../../ui/NativeButton";
 
 type Card = LearningArea["cards"][number];
 
@@ -31,14 +32,19 @@ function CardRowMenu({
       {onFlag && (
         <NativeButton
           label={flagged ? "Remove editing flag" : "Improve later"}
-          tone="soft"
+          variant="secondary"
           disabled={locked}
           onPress={onFlag}
         />
       )}
-      <NativeButton label="Edit" tone="soft" disabled={locked} onPress={onEdit} />
-      <NativeButton label="Version history" tone="soft" disabled={locked} onPress={onShowHistory} />
-      <NativeButton label="Delete" tone="soft" disabled={locked} onPress={onDelete} />
+      <NativeButton label="Edit" variant="secondary" disabled={locked} onPress={onEdit} />
+      <NativeButton
+        label="Version history"
+        variant="secondary"
+        disabled={locked}
+        onPress={onShowHistory}
+      />
+      <NativeButton label="Delete" variant="destructive" disabled={locked} onPress={onDelete} />
     </View>
   );
 }
@@ -46,41 +52,42 @@ function CardRowMenu({
 export function NativeWorkspaceCardRow(props: NativeWorkspaceCardRowProps) {
   const { card, selected, flagged, locked, showMenu, onSelect, onEdit, onToggleMenu } = props;
   return (
-    <View className="border-t border-recall-line py-[8px]">
-      <Pressable
-        accessibilityRole="checkbox"
-        accessibilityLabel={`Select card: ${card.front}`}
-        accessibilityState={{ checked: selected, disabled: locked }}
-        disabled={locked}
-        onPress={onSelect}
-        className="min-h-12 justify-center"
-      >
-        <Text>
-          {selected ? "☑ Selected" : "☐ Select card"}
-          {flagged ? " · Flagged for editing" : ""}
-        </Text>
-      </Pressable>
-      <View className="flex-row items-center justify-between gap-[12px]">
+    <View className="border-t border-recall-line py-3">
+      <View className="flex-row items-start gap-2">
         <Pressable
-          accessibilityRole="button"
+          accessibilityRole="checkbox"
+          accessibilityLabel={`Select card: ${card.front}`}
+          accessibilityState={{ checked: selected, disabled: locked }}
+          disabled={locked}
+          onPress={onSelect}
+          className="min-h-12 w-12 items-center justify-center"
+        >
+          <Text className="text-xl text-recall-muted">{selected ? "☑" : "☐"}</Text>
+        </Pressable>
+        <NativeButtonPrimitive
+          variant="secondary"
+          layout="column"
+          className="flex-1"
           accessibilityLabel={`Edit ${card.front}`}
           disabled={locked}
-          accessibilityState={{ disabled: locked }}
           onPress={onEdit}
-          className="flex-1 min-h-[44px] justify-center"
         >
-          <Text className="text-recall-ink text-[13px] font-semibold">{card.front}</Text>
-        </Pressable>
-        <Pressable
-          accessibilityRole="button"
+          <NativeButtonText variant="secondary">{card.front}</NativeButtonText>
+          {flagged && (
+            <NativeButtonText variant="secondary" detail>
+              Flagged for editing
+            </NativeButtonText>
+          )}
+        </NativeButtonPrimitive>
+        <NativeButton
+          label="⋯"
+          variant="secondary"
+          size="icon"
           accessibilityLabel={`Actions for ${card.front}`}
           accessibilityState={{ expanded: showMenu, disabled: locked }}
           disabled={locked}
           onPress={onToggleMenu}
-          className="min-w-[44px] min-h-[44px] items-center justify-center"
-        >
-          <Text className="text-recall-ink text-[16px] font-bold">⋯</Text>
-        </Pressable>
+        />
       </View>
       {showMenu && <CardRowMenu {...props} />}
     </View>

@@ -58,22 +58,22 @@ export function AnkiExportAction({
     setBusy(false);
   }
   return (
-    <div>
+    <div className="grid gap-2">
       <Button
         type="button"
-        variant="outline"
+        variant="default"
         disabled={busy || disabled || !area}
         onClick={() => void run()}
       >
         {busy ? "Preparing Anki…" : "Export Anki .apkg"}
       </Button>
-      <p className="mt-2 text-xs text-recall-muted">
+      <p className="text-xs text-recall-muted">
         Anki files include text templates and attachments. Actual answer history is included when
         private history is selected. Use Recall ZIP to retain rich formatting, image masks and
         answer/speech preferences.
       </p>
       {status && (
-        <p className="mt-2 text-sm text-recall-muted" role="status">
+        <p className="text-sm text-recall-muted" role="status">
           {status}
         </p>
       )}

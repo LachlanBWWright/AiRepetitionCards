@@ -59,7 +59,7 @@ function SavedActivityRow({
           <Text>{activity.fallback}</Text>
           <NativeButton
             label="Prepare full activity export"
-            tone="soft"
+            variant="default"
             disabled={disabled}
             onPress={onExport}
           />
@@ -68,7 +68,7 @@ function SavedActivityRow({
       {migrationTarget && (
         <NativeButton
           label={`Preview migration to v${String(migrationTarget.version)}`}
-          tone="soft"
+          variant="default"
           disabled={disabled}
           onPress={onMigration}
         />
@@ -298,7 +298,7 @@ export function NativeActivityPluginTools(props: NativeActivityPluginToolsProps)
           />
           <NativeButton
             label="Cancel"
-            tone="soft"
+            variant="secondary"
             disabled={Boolean(props.disabled)}
             onPress={() => {
               setPreview(null);

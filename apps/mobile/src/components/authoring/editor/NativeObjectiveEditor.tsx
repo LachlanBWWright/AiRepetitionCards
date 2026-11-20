@@ -53,7 +53,7 @@ export function NativeObjectiveEditor({
               checked: objective.prerequisiteIds.includes(prerequisite.id),
               disabled: locked,
             }}
-            className={"p-[10px] bg-recall-surface rounded-[8px]"}
+            className="min-h-12 px-3 py-3 bg-recall-surface rounded-xl"
             onPress={() => {
               onTogglePrerequisite(objective.id, prerequisite.id);
             }}
@@ -66,7 +66,7 @@ export function NativeObjectiveEditor({
       {
         <NativeButton
           label={"Remove objective"}
-          tone="soft"
+          variant="default"
           disabled={locked}
           onPress={() => {
             onRemove(objective.id);

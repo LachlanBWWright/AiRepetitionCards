@@ -1,3 +1,4 @@
+import { Label } from "@recall/ui-web/components/label";
 import type { AnswerDifference } from "@recall/application";
 import { useTypedAnswer } from "@recall/react";
 import type { Assessment } from "@recall/domain";
@@ -19,7 +20,7 @@ export function TypedReviewAnswer({
   return (
     <div className="mx-auto mb-4 grid w-full max-w-md gap-2 px-4">
       {!revealed ? (
-        <label className="grid gap-2 text-sm">
+        <Label className="grid gap-2 text-sm">
           Type your answer
           <Input
             value={typed.answer}
@@ -37,7 +38,7 @@ export function TypedReviewAnswer({
               }
             }}
           />
-        </label>
+        </Label>
       ) : (
         <div role="status" className="grid gap-2 text-sm">
           <p>Your answer: {typed.answer || "(blank)"}</p>
@@ -55,7 +56,8 @@ export function TypedReviewAnswer({
 }
 
 function AnswerPart({ part }: { readonly part: AnswerDifference }) {
-  if (part.kind === "extra") return <del className="text-destructive">{part.text} </del>;
+  if (part.kind === "extra")
+    return <del className="text-[var(--recall-danger-foreground)]">{part.text} </del>;
   if (part.kind === "missing") return <ins className="text-green-700">{part.text} </ins>;
   return <span>{part.text} </span>;
 }

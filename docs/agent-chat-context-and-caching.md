@@ -1,26 +1,21 @@
 # Agent chat context and caching
 
-Desktop Tutor and Improve enforce an application limit of **100,000 input tokens**
-per generation request. The count covers the actual request messages, developer
-instructions, deck, and JSON output instructions. The desktop process calls
-`POST /v1/responses/input_tokens` once when sending, using the same model and
-request content as generation. Requests above the limit, or whose tokens cannot
-be counted, do not proceed to generation. There are no token-count requests while
-typing and no automatic retry loop.
+Desktop Tutor and Improve send requests directly to `POST /v1/responses`.
+ChatGPT plan credentials cannot use `POST /v1/responses/input_tokens`: the live
+endpoint returns HTTP 401, `hardened_oauth_rule_missing`, with
+`rejected_by_hardened_oauth_boundary`. Requiring that preflight blocked every
+request before generation. There is no token-count preflight or local estimate.
+Web managed AI and native ChatGPT already avoid this desktop-only preflight.
 
-ChatGPT plan usage does not support `max_output_tokens`. This is therefore an
-input-context cap, not a guarantee on generated reasoning/output length. The
-response token count appears separately in the meter and subsequent conversational
-history is counted again before its next request. Recall does not silently drop
-older chat turns to satisfy the former 40-message/48 KiB window. Transport/schema
-safety ceilings remain separate from this token limit.
+The selected model and provider enforce their context limits. The chart uses
+100,000 tokens as a visual reference, not an application admission limit.
+Transport/schema safety ceilings remain separate. ChatGPT plan usage does not
+support `max_output_tokens`, so Recall does not send that parameter.
 
-The pie shows the latest request's measured input tokens divided by 100,000.
-It is neither cumulative billing nor an estimate of the unsent composer text.
-Each response carries input, output, cache-read and cache-write token counts back
-through the desktop bridge to the current chat. Missing cache telemetry is shown
-as unavailable, rather than being inferred as a miss. Cached tokens still occupy
-the context window.
+Each completed response supplies input, output, cache-read and cache-write token
+counts through the desktop bridge. Missing telemetry remains unavailable rather
+than being replaced by an estimate or zero. Cached tokens still occupy context.
+Recall does not silently drop older chat turns to fit the chart reference.
 
 ## Prompt caching
 
@@ -46,5 +41,5 @@ Official references:
 - [Prompt caching and message boundaries](https://developers.openai.com/api/docs/guides/prompt-caching)
 - [ChatGPT plan request restrictions](https://developers.openai.com/siwc/token-sharing-open-source/preview-limitations)
 
-The OAuth token-count endpoint and resulting cache hits have not been exercised
-against a live account as part of this change.
+The token-count rejection was verified against a live connected account. Cache
+hits are not guaranteed.

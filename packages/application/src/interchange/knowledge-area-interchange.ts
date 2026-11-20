@@ -103,6 +103,7 @@ export function toKnowledgeArea(
       ...(card.sourceId ? { sourceId: card.sourceId } : {}),
       ...(card.noteId ? { noteId: card.noteId } : {}),
       ...(card.templateId ? { templateId: card.templateId } : {}),
+      ...(card.explanation ? { explanation: card.explanation } : {}),
       ...(card.presentation ? { presentation: card.presentation } : {}),
       ...(card.imageOcclusion ? { imageOcclusion: card.imageOcclusion } : {}),
       ...(card.media ? { media: card.media } : {}),
@@ -231,6 +232,7 @@ export function fromKnowledgeArea(
           ...(card.media ? { media: card.media } : {}),
           ...(card.noteId ? { noteId: card.noteId } : {}),
           ...(card.templateId ? { templateId: card.templateId } : {}),
+          ...(card.explanation ? { explanation: card.explanation } : {}),
           ...(card.presentation ? { presentation: card.presentation } : {}),
           ...(card.imageOcclusion ? { imageOcclusion: card.imageOcclusion } : {}),
           objective:

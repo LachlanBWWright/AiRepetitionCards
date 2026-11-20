@@ -4,7 +4,7 @@ import { AnkiExportAction } from "../interchange/AnkiExportAction";
 import { reviewEventsInArea } from "@recall/domain";
 import { privateDeckHistory } from "@recall/application";
 
-import { useEffect, useRef, useState, type ChangeEvent } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { Effect, Either, Schema } from "effect";
 import {
   KnowledgeAreaSchema,
@@ -16,10 +16,13 @@ import type { MediaStore } from "@recall/local-store";
 import {
   exportPortableDeckPackage,
   importPortableDeckPackage,
+  MAX_PORTABLE_DECK_PACKAGE_BYTES,
   toKnowledgeArea,
   type ImportedPortableDeckPackage,
 } from "@recall/application";
 import { Button } from "@recall/ui-web/components/button";
+import { Checkbox } from "@recall/ui-web/components/checkbox";
+import { Label } from "@recall/ui-web/components/label";
 
 export type PortableDeckTransferProps = {
   readonly area: LearningArea | null;
@@ -40,11 +43,13 @@ export function PortableDeckTransfer({
   disabled = false,
 }: PortableDeckTransferProps) {
   const picker = useRef<HTMLInputElement>(null);
+  const includePrivateId = useId();
+  const restorePrivateId = useId();
   const [includePrivate, setIncludePrivate] = useState(false);
   const [restorePrivate, setRestorePrivate] = useState(false);
-  function handleRestorePrivateChange(event: ChangeEvent<HTMLInputElement>) {
-    setRestorePrivate(event.currentTarget.checked);
-  }
+  const changeRestorePrivate = (checked: boolean | "indeterminate") => {
+    setRestorePrivate(checked === true);
+  };
   const [preview, setPreview] = useState<{
     readonly filename: string;
     readonly value: ImportedPortableDeckPackage;
@@ -132,8 +137,8 @@ export function PortableDeckTransfer({
     setPreview(null);
     setStatus("");
     if (!file) return;
-    if (file.size > 25_000_000) {
-      if (mounted.current) setStatus("This file is larger than the 25 MB deck package limit.");
+    if (file.size > MAX_PORTABLE_DECK_PACKAGE_BYTES) {
+      if (mounted.current) setStatus("This file is larger than the 100 MB deck package limit.");
       return;
     }
     setBusy(true);
@@ -177,26 +182,28 @@ export function PortableDeckTransfer({
 
   return (
     <section
-      className="rounded-xl border border-recall-line bg-recall-surface p-4"
+      className="flex flex-col gap-4 rounded-xl border border-recall-line bg-recall-surface p-4"
       aria-label="Portable deck transfer"
     >
       <h3 className="text-base font-semibold text-recall-ink">Portable deck file</h3>
-      <p className="mt-1 text-sm text-recall-muted">
+      <p className="text-sm text-recall-muted">
         Move one deck with its definitions and media. Private study data is excluded unless you
         choose it.
       </p>
-      <label className="mt-3 flex items-start gap-2 text-sm text-recall-ink">
-        <input
-          type="checkbox"
+      <div className="flex items-start gap-2 text-sm text-recall-ink">
+        <Checkbox
+          id={includePrivateId}
           checked={includePrivate}
-          onChange={(event) => {
-            setIncludePrivate(event.currentTarget.checked);
+          onCheckedChange={(checked) => {
+            setIncludePrivate(checked === true);
           }}
         />
-        Include private history for current cards, saved schedules, activity attempts and drafts.
-        Deleted-card history stays in a full workspace backup.
-      </label>
-      <div className="mt-3 flex flex-wrap gap-2">
+        <Label htmlFor={includePrivateId} className="leading-normal">
+          Include private history for current cards, saved schedules, activity attempts and drafts.
+          Deleted-card history stays in a full workspace backup.
+        </Label>
+      </div>
+      <div className="flex flex-wrap gap-2">
         <Button
           type="button"
           onClick={() => void exportDeck()}
@@ -206,7 +213,7 @@ export function PortableDeckTransfer({
         </Button>
         <Button
           type="button"
-          variant="outline"
+          variant="default"
           onClick={() => picker.current?.click()}
           disabled={busy || disabled}
         >
@@ -229,15 +236,18 @@ export function PortableDeckTransfer({
         disabled={busy || disabled}
       />
       {preview ? (
-        <div className="mt-4 rounded-lg border border-recall-line p-3" aria-live="polite">
+        <div
+          className="flex flex-col gap-3 rounded-lg border border-recall-line p-3"
+          aria-live="polite"
+        >
           <p className="font-medium text-recall-ink">Review import: {preview.filename}</p>
-          <p className="mt-1 text-sm text-recall-muted">
+          <p className="text-sm text-recall-muted">
             {preview.value.knowledgeArea.title} · {preview.value.knowledgeArea.cards.length} cards ·{" "}
             {preview.value.knowledgeArea.objectives.length} objectives ·{" "}
             {(preview.value.knowledgeArea.activities ?? []).length} activities ·{" "}
             {preview.value.media.length} media files
           </p>
-          <p className="mt-1 text-sm text-recall-muted">
+          <p className="text-sm text-recall-muted">
             Package type:{" "}
             {preview.value.privacy === "private"
               ? "private single-deck copy"
@@ -245,23 +255,25 @@ export function PortableDeckTransfer({
             . It will be imported as a personal copy.
           </p>
           {preview.value.privacy === "private" ? (
-            <label className="mt-3 flex items-start gap-2 text-sm text-recall-ink">
-              <input
-                type="checkbox"
+            <div className="flex items-start gap-2 text-sm text-recall-ink">
+              <Checkbox
+                id={restorePrivateId}
                 checked={restorePrivate}
-                onChange={handleRestorePrivateChange}
+                onCheckedChange={changeRestorePrivate}
               />
-              Restore private history and saved schedules. This is only allowed when all original
-              deck/history IDs are unused here.
-            </label>
+              <Label htmlFor={restorePrivateId} className="leading-normal">
+                Restore private history and saved schedules. This is only allowed when all original
+                deck/history IDs are unused here.
+              </Label>
+            </div>
           ) : null}
-          <div className="mt-3 flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Button type="button" onClick={() => void approve()} disabled={busy || disabled}>
               {restorePrivate ? "Restore private copy" : "Import personal copy"}
             </Button>
             <Button
               type="button"
-              variant="outline"
+              variant="secondary"
               onClick={() => {
                 setPreview(null);
               }}
@@ -273,7 +285,7 @@ export function PortableDeckTransfer({
         </div>
       ) : null}
       {status ? (
-        <p className="mt-3 text-sm text-recall-muted" role="status">
+        <p className="text-sm text-recall-muted" role="status">
           {status}
         </p>
       ) : null}

@@ -30,7 +30,7 @@ export function KnowledgeAreaCardLibraryDuplicateResults({
 
   return (
     <>
-      <ul className="my-6 list-none p-0">
+      <ul className="flex list-none flex-col gap-4 p-0">
         {pairs.map((pair) => (
           <KnowledgeAreaCardLibraryDuplicatePair
             key={`${pair.left.id}:${pair.right.id}`}

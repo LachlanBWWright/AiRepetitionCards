@@ -1,4 +1,6 @@
 "use client";
+
+import { Label } from "@recall/ui-web/components/label";
 import { useEffect, useState } from "react";
 import { Effect, Either } from "effect";
 import { Button } from "@/components/ui/Button";
@@ -95,10 +97,12 @@ export function BudgetSettingsPanel({
     updateField(index, value);
   };
   return (
-    <section className="space-y-4 py-4" aria-label="AI budget settings">
-      <h2 className="mb-2 text-lg font-semibold">AI usage limits</h2>
-      <p>Request limits for this account on this device. Leave blank for unlimited.</p>
-      <Button variant="secondary" type="button" disabled={busy} onClick={() => void refresh()}>
+    <section className="flex w-full max-w-3xl flex-col gap-4" aria-label="AI budget settings">
+      <h2 className="m-0 text-lg font-semibold">AI usage limits</h2>
+      <p className="m-0">
+        Request limits for this account on this device. Leave blank for unlimited.
+      </p>
+      <Button variant="default" type="button" disabled={busy} onClick={() => void refresh()}>
         Refresh usage
       </Button>
       {snapshot && (
@@ -108,25 +112,25 @@ export function BudgetSettingsPanel({
             this week
           </p>
           <Collapsible>
-            <CollapsibleTrigger className="font-medium underline underline-offset-4 hover:text-primary">
-              Usage details and reset times
-            </CollapsibleTrigger>
-            <CollapsibleContent>
-              <p>
+            <CollapsibleTrigger>Usage details and reset times</CollapsibleTrigger>
+            <CollapsibleContent className="flex flex-col gap-2 pt-2">
+              <p className="m-0">
                 Today: {snapshot.summary.daily.completed} completed ·{" "}
                 {snapshot.summary.daily.failed} failed · {snapshot.summary.daily.pending} pending.
               </p>
-              <p>{snapshot.summary.daily.researchRequests} research requests.</p>
-              <p>
+              <p className="m-0">{snapshot.summary.daily.researchRequests} research requests.</p>
+              <p className="m-0">
                 Known tokens: {snapshot.summary.daily.inputTokens} input ·{" "}
                 {snapshot.summary.daily.outputTokens} output. Usage unavailable for{" "}
                 {snapshot.summary.daily.unknownUsageRequests} requests.
               </p>
-              <p>
+              <p className="m-0">
                 Days reset at midnight UTC; weeks on Monday. Failed and pending requests count. A
                 limit of 0 blocks new requests.
               </p>
-              <p>These limits do not show remaining ChatGPT allowance or set a spending cap.</p>
+              <p className="m-0">
+                These limits do not show remaining ChatGPT allowance or set a spending cap.
+              </p>
             </CollapsibleContent>
           </Collapsible>
           {(["Daily requests", "Weekly requests", "Daily research requests"] as const).map(
@@ -162,7 +166,7 @@ function BudgetLimitField({
   readonly onChange: (value: string) => void;
 }) {
   return (
-    <label className="mb-3 block">
+    <Label className="grid w-full gap-2">
       {label}
       <Input
         aria-label={label}
@@ -175,6 +179,6 @@ function BudgetLimitField({
         }}
         placeholder="Unlimited"
       />
-    </label>
+    </Label>
   );
 }

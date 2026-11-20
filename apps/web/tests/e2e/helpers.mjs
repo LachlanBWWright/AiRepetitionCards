@@ -8,7 +8,7 @@ import { chromium } from "playwright";
 export { test };
 export const appUrl = process.env.RECALL_E2E_URL ?? "http://127.0.0.1:4173";
 export const storyUrl = (id) =>
-  `${appUrl}/storybook/iframe.html?id=${encodeURIComponent(id)}&viewMode=story`;
+  `${process.env.RECALL_E2E_STORYBOOK_URL ?? `${appUrl}/storybook`}/iframe.html?id=${encodeURIComponent(id)}&viewMode=story`;
 export const expectVisible = (locator) => locator.waitFor({ state: "visible", timeout: 10_000 });
 const artifacts = resolve(process.env.RECALL_E2E_ARTIFACTS ?? "../../artifacts/e2e");
 

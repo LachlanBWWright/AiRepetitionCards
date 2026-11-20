@@ -44,7 +44,7 @@ export const FullScreenCatalog: Story = {
             icon="✳"
             title="You’re all caught up."
             description="New cards will appear here when they’re ready to review."
-            action={<Button variant="secondary">Browse your areas</Button>}
+            action={<Button variant="default">Browse your areas</Button>}
           />
         </section>
       </div>
@@ -58,8 +58,8 @@ export const FullScreenCatalog: Story = {
             Its cards will leave your library. Your private review history stays saved.
           </p>
           <div className="mt-4 flex flex-wrap gap-2.5">
-            <Button variant="secondary">Keep area</Button>
-            <Button variant="danger">Delete area</Button>
+            <Button variant="default">Keep area</Button>
+            <Button variant="destructive">Delete area</Button>
           </div>
         </div>
       </Dialog>

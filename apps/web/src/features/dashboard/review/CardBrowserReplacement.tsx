@@ -1,3 +1,4 @@
+import { Label } from "@recall/ui-web/components/label";
 import { useState } from "react";
 import { useCardBrowser } from "@recall/react";
 import {
@@ -99,7 +100,7 @@ function ReplacementFields({
         </SelectContent>
       </Select>
       {browser.field === "note" && (
-        <label>
+        <Label className="grid gap-2">
           Source field name
           <Input
             value={browser.noteField}
@@ -107,9 +108,9 @@ function ReplacementFields({
               browser.setNoteField(event.target.value);
             }}
           />
-        </label>
+        </Label>
       )}
-      <label>
+      <Label className="grid gap-2">
         Find
         <Input
           value={browser.find}
@@ -117,8 +118,8 @@ function ReplacementFields({
             browser.setFind(event.target.value);
           }}
         />
-      </label>
-      <label>
+      </Label>
+      <Label className="grid gap-2">
         Replace with
         <Input
           value={browser.replacement}
@@ -126,7 +127,7 @@ function ReplacementFields({
             browser.setReplacement(event.target.value);
           }}
         />
-      </label>
+      </Label>
       <p>{browser.changes.length} cards would change.</p>
       {browser.changes.slice(0, 3).map((change) => (
         <p className="whitespace-pre-wrap break-words" key={change.card.id}>
@@ -134,7 +135,7 @@ function ReplacementFields({
         </p>
       ))}
       <Button
-        variant="secondary"
+        variant="default"
         disabled={!browser.canApply}
         onClick={() => {
           onReview();

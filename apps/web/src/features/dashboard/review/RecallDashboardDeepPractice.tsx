@@ -40,7 +40,7 @@ function PracticeAreaCard({
           </p>
         </div>
       </div>
-      <Button variant={due > 0 ? "default" : "secondary"} disabled={due === 0} onClick={onStart}>
+      <Button variant="default" disabled={due === 0} onClick={onStart}>
         {due > 0 ? "Start review" : "All caught up"}
       </Button>
     </section>
@@ -64,7 +64,7 @@ function RecommendedActivityCard({
           About {recommendation.estimatedMinutes} minutes · {recommendation.reason}
         </p>
       </div>
-      <Button variant="secondary" disabled={disabled} onClick={onStart}>
+      <Button variant="default" disabled={disabled} onClick={onStart}>
         Start activity
       </Button>
     </article>

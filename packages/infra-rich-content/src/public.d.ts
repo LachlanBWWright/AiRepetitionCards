@@ -7,3 +7,4 @@ export declare function renderCardMath(
   source: string,
   display?: boolean,
 ): Either.Either<CardMathSvg, CardMathFailure>;
+export declare function cardEquationError(source: string, display?: boolean): string | null;

@@ -7,7 +7,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@recall/ui-web/components/collapsible";
-import { ChevronDown, Sparkles } from "lucide-react";
+import { Sparkles } from "lucide-react";
 import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import { Effect, Either } from "effect";
 import {
@@ -235,11 +235,11 @@ export function CardAssistancePanel({
     <Collapsible
       open={expanded}
       onOpenChange={setExpanded}
-      className="space-y-3 border-t pt-4"
+      className="flex flex-col gap-3 border-t pt-4"
       aria-label="Card assistance"
     >
       {Either.isRight(findings) && findings.right.length > 0 && (
-        <ul className="list-disc space-y-1 pl-5 text-sm text-amber-700 dark:text-amber-400">
+        <ul className="flex flex-col list-disc gap-1 pl-5 text-sm text-amber-700 dark:text-amber-400">
           {findings.right.map((finding, index) => (
             <li key={index}>
               {finding.explanation} {finding.suggestion}
@@ -247,29 +247,17 @@ export function CardAssistancePanel({
           ))}
         </ul>
       )}
-      <CollapsibleTrigger asChild>
-        <Button
-          variant="ghost"
-          size="small"
-          type="button"
-          className="group h-8 gap-2 px-2 text-sm"
-          disabled={busy}
-        >
-          <Sparkles className="size-3.5 text-muted-foreground" aria-hidden="true" />
-          Improve with AI
-          <ChevronDown
-            className="ml-1 size-3.5 text-muted-foreground transition-transform group-data-[state=open]:rotate-180"
-            aria-hidden="true"
-          />
-        </Button>
+      <CollapsibleTrigger type="button" disabled={busy}>
+        <Sparkles className="size-3.5 text-muted-foreground" aria-hidden="true" />
+        Improve with AI
       </CollapsibleTrigger>
       {Either.isLeft(findings) && (
         <Alert variant="destructive">
           <AlertDescription>{findings.left.message}</AlertDescription>
         </Alert>
       )}
-      <CollapsibleContent className="space-y-4">
-        <div className="flex flex-wrap items-center gap-1.5">
+      <CollapsibleContent className="flex flex-col gap-4">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
           {(["clearer", "shorter", "split", "example", "cloze"] as const).map((action) => (
             <CardAssistancePanelActionButton
               key={action}
@@ -279,8 +267,8 @@ export function CardAssistancePanel({
             />
           ))}
           <Button
-            variant="secondary"
-            size="small"
+            variant="default"
+            size="default"
             type="button"
             disabled={disabled || networkDisabled || busy}
             onClick={inspect}

@@ -1,3 +1,4 @@
+import { Label } from "@recall/ui-web/components/label";
 import type { SubmitEvent } from "react";
 import { Button } from "@/components/ui/Button";
 import { Alert } from "@recall/ui-web/components/alert";
@@ -73,12 +74,7 @@ function ReopenLatestAreaButton({
   readonly onClick: () => void;
 }) {
   return (
-    <Button
-      type="button"
-      className="inline-flex min-h-8 items-center rounded-md px-2 text-sm text-[var(--ink)] underline-offset-4 hover:bg-[var(--surface-hover)] hover:underline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
-      disabled={disabled}
-      onClick={onClick}
-    >
+    <Button type="button" disabled={disabled} onClick={onClick}>
       Reopen latest saved area
     </Button>
   );
@@ -130,9 +126,9 @@ export function RecallDashboardAreaEditorDialog({
         >
           <Button
             type="button"
-            variant="secondary"
-            size="icon"
-            className="absolute top-4 right-4 size-8 text-[var(--muted)] hover:bg-[var(--surface-hover)]"
+            variant="ghost"
+            size="icon-sm"
+            className="absolute top-4 right-4"
             disabled={busy}
             onClick={onCancel}
             aria-label="Close area editor"
@@ -157,7 +153,7 @@ export function RecallDashboardAreaEditorDialog({
             className="grid gap-3"
             style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}
           >
-            <label htmlFor="area-title">Subject name</label>
+            <Label htmlFor="area-title">Subject name</Label>
             <Input
               id="area-title"
               autoFocus
@@ -173,11 +169,11 @@ export function RecallDashboardAreaEditorDialog({
               <AreaColorChoices colors={colors} color={color} onColorChange={onColorChange} />
               <CustomAreaColorPicker color={color} onColorChange={onColorChange} />
             </div>
-            <DialogFooter className="flex items-center justify-end gap-2">
-              <Button size="small" type="button" onClick={onCancel}>
+            <DialogFooter>
+              <Button variant="secondary" size="default" type="button" onClick={onCancel}>
                 Cancel
               </Button>
-              <Button size="small" type="submit" disabled={busy || !title.trim()}>
+              <Button size="default" type="submit" disabled={busy || !title.trim()}>
                 {busy ? "Saving area…" : editing ? "Save changes" : "Create subject"}
               </Button>
             </DialogFooter>

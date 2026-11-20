@@ -16,6 +16,7 @@ export function RecallDashboardAlert({ model }: { readonly model: RecallDashboar
         Export JSON snapshot
       </Button>
       <Button
+        variant="secondary"
         onClick={() => {
           if (!demo) window.location.reload();
         }}

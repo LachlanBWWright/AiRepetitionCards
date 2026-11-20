@@ -4,6 +4,7 @@ import { Alert, AlertDescription } from "@recall/ui-web/components/alert";
 import { useEffect, useState } from "react";
 import { Effect, Fiber } from "effect";
 import { Button, Dialog } from "@recall/ui-web";
+import { DialogFooter } from "@recall/ui-web/components/dialog";
 import { tutorPrivacyApi } from "@/lib/tutor-privacy-api";
 
 type Policy = {
@@ -35,7 +36,7 @@ export function TutorPrivacyView({
 }) {
   const retention = state.policy?.retentionDays;
   return (
-    <section className="space-y-3 text-sm leading-6" aria-label="Tutor privacy">
+    <section className="grid min-w-0 gap-4 text-sm leading-6" aria-label="Tutor privacy">
       <h3 className="text-sm font-semibold">Tutor history</h3>
       <p className="text-muted-foreground">
         Tutoring sends the selected deck, your answers and relevant conversation to OpenAI.
@@ -54,9 +55,10 @@ export function TutorPrivacyView({
         </p>
       )}
       <Button
-        variant="outline"
+        variant="default"
         type="button"
         disabled={disabled || state.busy || !state.policy?.deletionAvailable}
+        className="w-full"
         onClick={onRequest}
       >
         Clear tutor history
@@ -87,17 +89,19 @@ export function TutorPrivacyView({
               <AlertDescription>{state.message}</AlertDescription>
             </Alert>
           )}
-          <Button type="button" variant="outline" disabled={state.busy} onClick={onCancel}>
-            Cancel
-          </Button>
-          <Button
-            type="button"
-            variant="destructive"
-            disabled={state.busy || disabled}
-            onClick={onDelete}
-          >
-            {state.busy ? "Clearing…" : "Clear tutor history"}
-          </Button>
+          <DialogFooter>
+            <Button type="button" variant="secondary" disabled={state.busy} onClick={onCancel}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={state.busy || disabled}
+              onClick={onDelete}
+            >
+              {state.busy ? "Clearing…" : "Clear tutor history"}
+            </Button>
+          </DialogFooter>
         </Dialog>
       )}
     </section>

@@ -89,6 +89,7 @@ export function createChatGptLocalAccounts(dependencies: {
     };
     if (decrypted.shouldReEncrypt || JSON.stringify(migrated) !== JSON.stringify(decoded.right))
       await save(migrated);
+    else setStore(migrated);
     return { _tag: "Success", value: migrated };
   }
 

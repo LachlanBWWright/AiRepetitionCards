@@ -1,3 +1,4 @@
+import { FieldError } from "@recall/ui-web/components/field";
 import { useCramPractice } from "@recall/react";
 import type { MediaStore } from "@recall/local-store";
 import { useReviewCardMedia, type ReviewMediaPreview } from "./useReviewCardMedia";
@@ -49,7 +50,7 @@ export function CramPractice({
           : "Preview leaves due dates, daily budget and review history unchanged."}{" "}
         Forgotten cards return at the end.
       </p>
-      {message && <p role="alert">{message}</p>}
+      {message && <FieldError>{message}</FieldError>}
       <p role="status">
         {session.answered} answers · {session.recalled} recalled · {session.remainingIds.length}{" "}
         remaining
@@ -68,7 +69,7 @@ export function CramPractice({
       ) : (
         <p>Practice complete.</p>
       )}
-      <Button variant="secondary" onClick={restart}>
+      <Button variant="default" onClick={restart}>
         Restart practice
       </Button>
     </div>

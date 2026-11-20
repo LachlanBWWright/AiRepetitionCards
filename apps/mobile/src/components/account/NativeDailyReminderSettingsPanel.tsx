@@ -1,6 +1,9 @@
-import { NativeButton } from "../ui/NativeButton";
+import { NativeButton } from "@recall/ui-native";
+
+import { NativeCollapsibleTrigger, NativeCollapsibleContent } from "@recall/ui-native";
+
 import { useCallback, useEffect, useState } from "react";
-import { AppState, Linking, Platform, Pressable, Text, View } from "react-native";
+import { AppState, Linking, Platform, Text, View } from "react-native";
 import { Effect, Either } from "effect";
 import { NativeTimePicker } from "@recall/ui-native";
 import {
@@ -115,7 +118,7 @@ export function NativeDailyReminderSettingsPanel({
       );
   };
   return (
-    <View className={"p-[20px] gap-[12px]"}>
+    <View className={"gap-4 p-4"}>
       <Text className={"text-[22px] font-bold text-recall-ink"}>Daily reminder</Text>
       <Text className={"text-recall-ink text-[14px] leading-[21px]"}>
         Remind me to study each day, even when the app is closed.
@@ -125,7 +128,7 @@ export function NativeDailyReminderSettingsPanel({
       </Text>
       <NativeButton
         label={`Reminder time · ${selectedTime.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`}
-        tone="soft"
+        variant="default"
         disabled={!ready || busy}
         onPress={() => {
           setTimePickerVisible(true);
@@ -151,37 +154,33 @@ export function NativeDailyReminderSettingsPanel({
       {settings.enabled ? (
         <NativeButton
           label="Disable reminder"
-          tone="soft"
+          variant="default"
           disabled={!ready || busy}
           onPress={() => void apply(false)}
         />
       ) : null}
-      <Pressable
-        accessibilityRole="button"
-        className={"py-[12px]"}
-        onPress={() => {
+      <NativeCollapsibleTrigger
+        open={detailsVisible}
+        title="Notification permissions"
+        onToggle={() => {
           setDetailsVisible(!detailsVisible);
         }}
-      >
-        <Text>{detailsVisible ? "Hide notification details" : "Notification permissions"}</Text>
-      </Pressable>
-      {detailsVisible ? (
-        <View className={"gap-[8px]"}>
-          <Pressable
-            accessibilityRole="button"
-            className={"py-[12px]"}
+      />
+      <NativeCollapsibleContent open={detailsVisible}>
+        <View className={"gap-4"}>
+          <NativeButton
+            label="Open notification permissions"
+            variant="default"
             onPress={() => {
               void openSettings();
             }}
-          >
-            <Text>Open notification permissions</Text>
-          </Pressable>
+          />
           <Text className={"text-recall-ink text-[14px] leading-[21px]"}>
             Uses your device’s current timezone. Focus modes, battery restrictions and Android alarm
             settings can delay delivery.
           </Text>
         </View>
-      ) : null}
+      </NativeCollapsibleContent>
       {(inputNotice ?? notice) && (
         <Text
           accessibilityLiveRegion="polite"

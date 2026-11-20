@@ -270,9 +270,9 @@ public static partial class PublishingEndpoints
         foreach (var card in cards.OfType<JsonObject>())
         {
             if (card["kind"]?.GetValue<string>() == "basic")
-                KeepOnly(card, "kind", "id", "front", "back", "objectiveIds", "media", "tags", "origin", "sourceId", "noteId", "templateId", "presentation", "imageOcclusion");
+                KeepOnly(card, "kind", "id", "front", "back", "objectiveIds", "media", "tags", "origin", "sourceId", "noteId", "templateId", "presentation", "imageOcclusion", "explanation");
             else
-                KeepOnly(card, "kind", "id", "text", "deletionIndex", "objectiveIds", "media", "tags", "origin", "sourceId", "noteId", "templateId", "presentation", "imageOcclusion");
+                KeepOnly(card, "kind", "id", "text", "deletionIndex", "objectiveIds", "media", "tags", "origin", "sourceId", "noteId", "templateId", "presentation", "imageOcclusion", "explanation");
         }
         if (document["activities"] is JsonArray activities)
             foreach (var activity in activities.OfType<JsonObject>())

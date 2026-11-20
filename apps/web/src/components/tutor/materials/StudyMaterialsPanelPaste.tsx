@@ -36,55 +36,55 @@ export function StudyMaterialsPanelPaste({
   onCancelImport,
 }: StudyMaterialsPanelPasteProps) {
   return (
-    <section className="rounded-xl border bg-card p-5 sm:p-6">
-      <div className="grid gap-6 pt-5 lg:grid-cols-[minmax(0,1fr)_17rem] lg:gap-8">
-        <div className="min-w-0 space-y-5">
-          <Label>
-            Material name
-            <Input
-              disabled={disabled}
-              value={name}
-              maxLength={200}
-              placeholder="e.g. Biology lecture notes"
-              onChange={(event) => {
-                onNameChange(event.target.value);
-              }}
-            />
-          </Label>
-          <Label>
-            Paste study text
-            <Textarea
-              disabled={disabled}
-              value={text}
-              className="min-h-48 resize-y leading-6"
-              maxLength={500000}
-              onChange={(event) => {
-                onTextChange(event.target.value);
-              }}
-              placeholder="Paste lecture notes, a chapter, or code examples…"
-            />
-          </Label>
-          <Button
-            type="button"
-            variant="primary"
-            className="w-full sm:w-fit"
-            disabled={disabled || !text.trim()}
-            onClick={onPaste}
-          >
-            Save pasted material
-          </Button>
+    <section className="grid min-w-0 gap-2 lg:grid-cols-[minmax(0,1fr)_17rem] lg:gap-6">
+      <div className="flex flex-col min-w-0 content-start gap-4">
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="study-material-name">Material name</Label>
+          <Input
+            id="study-material-name"
+            disabled={disabled}
+            value={name}
+            maxLength={200}
+            placeholder="e.g. Biology lecture notes"
+            onChange={(event) => {
+              onNameChange(event.target.value);
+            }}
+          />
         </div>
-        <StudyMaterialsPanelImport
-          disabled={disabled}
-          importing={importing}
-          fileInput={fileInput}
-          ocrScans={ocrScans}
-          onOcrScansChange={onOcrScansChange}
-          ocrProgress={ocrProgress}
-          onFileSelected={onFileSelected}
-          onCancel={onCancelImport}
-        />
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="study-material-text">Paste study text</Label>
+          <Textarea
+            id="study-material-text"
+            disabled={disabled}
+            value={text}
+            className="min-h-48 resize-y leading-6"
+            maxLength={500000}
+            onChange={(event) => {
+              onTextChange(event.target.value);
+            }}
+            placeholder="Paste lecture notes, a chapter, or code examples…"
+          />
+        </div>
+        <Button
+          type="button"
+          variant="default"
+          className="w-full sm:w-fit"
+          disabled={disabled || !text.trim()}
+          onClick={onPaste}
+        >
+          Save pasted material
+        </Button>
       </div>
+      <StudyMaterialsPanelImport
+        disabled={disabled}
+        importing={importing}
+        fileInput={fileInput}
+        ocrScans={ocrScans}
+        onOcrScansChange={onOcrScansChange}
+        ocrProgress={ocrProgress}
+        onFileSelected={onFileSelected}
+        onCancel={onCancelImport}
+      />
     </section>
   );
 }

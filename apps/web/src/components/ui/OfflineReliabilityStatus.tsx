@@ -56,7 +56,7 @@ export function OfflineReliabilityStatus({
         </div>
       )}
       {status !== "saved-locally" && status !== "synchronized" && onRetry && (
-        <Button size="sm" variant="outline" onClick={onRetry}>
+        <Button size="default" variant="default" onClick={onRetry}>
           Retry
         </Button>
       )}

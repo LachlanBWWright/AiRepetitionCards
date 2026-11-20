@@ -23,6 +23,7 @@ import { authenticatedApiRateLimit } from "@/lib/http/api-rate-limit";
 const RequestSchema = Schema.Struct({
   activity: LearningActivitySchema,
   response: ActivityResponseSchema,
+  executionMode: Schema.optional(Schema.Literal("run", "submit")),
 });
 export async function readActivityRequest(request: NextRequest) {
   const auth = await authenticateApiRequest(request);
@@ -196,5 +197,12 @@ export async function readActivityRequest(request: NextRequest) {
         { status: 400 },
       ),
     };
-  return { data: { ...loaded.right, ...auth, context: validatedContext.right } };
+  return {
+    data: {
+      ...loaded.right,
+      ...auth,
+      executionMode: decoded.right.executionMode ?? "submit",
+      context: validatedContext.right,
+    },
+  };
 }

@@ -6,7 +6,12 @@ internal static partial class SyncHandlers
     private static bool StudyEnum(JsonObject value, string key, params string[] choices) => value[key] is null || choices.Contains(StringNode(value[key]), StringComparer.Ordinal);
     private static bool ValidStudySettingDetails(JsonObject settings)
     {
+        if (settings["manualBurials"] is not null &&
+            (settings["manualBurials"] is not JsonObject burials || burials.Count > 50000 ||
+             burials.Any(pair => string.IsNullOrWhiteSpace(pair.Key) || pair.Value is not JsonValue value || !value.TryGetValue<long>(out var until) || until < 0 || until > 8640000000000000))) return false;
         if (!StudyEnum(settings, "reviewOrder", "due", "retrievability", "interval-ascending", "interval-descending") || !StudyEnum(settings, "newReviewOrder", "after", "before", "mix")) return false;
+        if (!StudyEnum(settings, "leechAction", "notify", "suspend")) return false;
+        if (settings["leechSuspensions"] is not null && (settings["leechSuspensions"] is not JsonObject leeches || leeches.Any(pair => string.IsNullOrWhiteSpace(pair.Key) || !TryUuid(pair.Value, out _)))) return false;
         foreach (var key in new[] { "pauseNewWhenOverdue", "burySiblings", "buryNewSiblings", "buryReviewSiblings", "buryLearningSiblings", "rescheduleOnParameterChange" })
             if (settings[key] is not null && (settings[key] is not JsonValue value || !value.TryGetValue<bool>(out _))) return false;
         if (settings["activeStudyQuery"] is not null && !StudyString(settings["activeStudyQuery"], 0, 500) || settings["timeZone"] is not null && !StudyString(settings["timeZone"], 1, 80)) return false;

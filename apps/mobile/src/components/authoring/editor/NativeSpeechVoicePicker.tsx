@@ -18,7 +18,7 @@ export function NativeSpeechVoicePicker({
     <View className="gap-2">
       <NativeButton
         label="Load device voices"
-        tone="soft"
+        variant="default"
         disabled={disabled}
         onPress={() => {
           void voices.refresh();

@@ -33,7 +33,7 @@ export function AppTutorPanel({ model }: { readonly model: AppModel }) {
     <NativeTutorPanel
       initialActivity={tutorActivity}
       key={`${tutorScope}:${activeArea?.id ?? "no-area"}:${tutorActivity ?? "practice"}`}
-      storageScope={chatGPT.tutorMode === "chatgpt" ? tutorScope : undefined}
+      storageScope={tutorScope}
       area={activePublishingArea.right}
       duplicateCandidates={workspace ? workspaceDuplicateCandidates(workspace) : []}
       {...(searchTarget && searchTarget.areaId === activeArea?.id
@@ -75,7 +75,10 @@ export function AppTutorPanel({ model }: { readonly model: AppModel }) {
           void Effect.runPromise(Effect.either(store.write([["active-session", sessionId]])));
           return;
         }
-        setNativeTutorSessionIds((current) => ({ ...current, [activeArea.id]: sessionId }));
+        setNativeTutorSessionIds((current) => ({
+          ...current,
+          [`${tutorScope}:${activeArea.id}`]: sessionId,
+        }));
         void Effect.runPromise(
           Effect.either(
             writeNativeTutorSessionId(
@@ -84,6 +87,7 @@ export function AppTutorPanel({ model }: { readonly model: AppModel }) {
               () =>
                 !workspaceLifetime.isBlocked() &&
                 workspaceLifetime.generation() === operationGeneration,
+              tutorScope,
             ),
           ),
         );

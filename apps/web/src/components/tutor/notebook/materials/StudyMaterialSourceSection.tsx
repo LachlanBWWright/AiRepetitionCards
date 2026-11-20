@@ -13,6 +13,7 @@ type Material = NonNullable<KnowledgeNotebook["materials"]>[number];
 type Section = Material["sections"][number];
 
 export function StudyMaterialSourceSection({
+  view,
   material,
   section,
   progress,
@@ -31,6 +32,7 @@ export function StudyMaterialSourceSection({
   claimCoverage,
   onClaimChange,
 }: {
+  readonly view?: "text" | "topics";
   readonly material: Material;
   readonly section: Section;
   readonly progress: StudyMaterialCoverage | undefined;
@@ -54,6 +56,9 @@ export function StudyMaterialSourceSection({
     priority: StudyCoverageClaim["priority"],
   ) => void;
 }) {
+  const changePassage = (event: import("react").ChangeEvent<HTMLTextAreaElement>) => {
+    onPassageDraftChange(section.id, event.target.value);
+  };
   const savePassage = () => {
     if (passageDraft?.trim()) onPassageSave(material, section.id, passageDraft);
   };
@@ -65,9 +70,9 @@ export function StudyMaterialSourceSection({
   };
   return (
     <section
-      id={`study-source-${section.id}`}
+      id={`study-source-${section.id}${view === "topics" ? "-topics" : ""}`}
       tabIndex={-1}
-      data-search-target={`passage:${section.id}`}
+      data-search-target={view === "topics" ? undefined : `passage:${section.id}`}
     >
       <h3 className="text-sm font-semibold leading-6">
         {section.title}
@@ -85,48 +90,54 @@ export function StudyMaterialSourceSection({
           />
           Include this section
         </Label>
-        <Label>
-          Check extracted text
-          <Textarea
-            value={passageDraft ?? section.text}
-            maxLength={12000}
-            readOnly={hasProposals}
-            disabled={disabled}
-            onChange={(event) => {
-              onPassageDraftChange(section.id, event.target.value);
-            }}
-          />
-        </Label>
-        {!hasProposals && passageDraft !== undefined && (
-          <Button
-            type="button"
-            variant="outline"
-            disabled={disabled || !passageDraft.trim()}
-            onClick={savePassage}
-          >
-            Save corrected passage
-          </Button>
+        {view !== "topics" && (
+          <>
+            <Label>
+              Check extracted text
+              <Textarea
+                value={passageDraft ?? section.text}
+                maxLength={12000}
+                readOnly={hasProposals}
+                disabled={disabled}
+                onChange={changePassage}
+              />
+            </Label>
+            {!hasProposals && passageDraft !== undefined && (
+              <Button
+                type="button"
+                variant="default"
+                disabled={disabled || !passageDraft.trim()}
+                onClick={savePassage}
+              >
+                Save corrected passage
+              </Button>
+            )}
+          </>
         )}
-        <Button
-          type="button"
-          variant="outline"
-          disabled={
-            disabled || networkDisabled || hasPassageDrafts || !goal.trim() || hasCoveragePlan
-          }
-          onClick={() => {
-            onPlan(material.id, section.id);
-          }}
-        >
-          Suggest topics
-        </Button>
-        <StudyMaterialsPanelClaims
-          plans={(coveragePlans ?? []).filter(
-            (plan) => plan.materialId === material.id && plan.sectionId === section.id,
-          )}
-          claimCoverage={claimCoverage}
-          disabled={disabled}
-          onClaimChange={onClaimChange}
-        />
+        {view !== "text" && (
+          <>
+            <Button
+              type="button"
+              variant="default"
+              disabled={
+                disabled || networkDisabled || hasPassageDrafts || !goal.trim() || hasCoveragePlan
+              }
+              onClick={() => {
+                onPlan(material.id, section.id);
+              }}
+            >
+              Suggest topics
+            </Button>
+            <StudyMaterialsPanelClaims
+              plans={(coveragePlans ?? []).filter(
+                (plan) => plan.materialId === material.id && plan.sectionId === section.id,
+              )}
+              claimCoverage={claimCoverage}
+              disabled={disabled}
+              onClaimChange={onClaimChange}
+            />
+          </>
+        )}
         {hasProposals && (
           <p>
             This passage is preserved because cards cite it. Import corrected text as a new source.

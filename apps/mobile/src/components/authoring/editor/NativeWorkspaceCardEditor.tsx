@@ -4,7 +4,9 @@ import { NativePronunciationRecorder } from "./NativePronunciationRecorder";
 import { NativeImageOcclusionEditor } from "../../occlusion/NativeImageOcclusionEditor";
 import { NativeReviewPresentationSettings } from "./NativeReviewPresentationSettings";
 import { NativeRichTextEditor } from "../rich/NativeRichTextEditor";
-import { Pressable, Text, View } from "react-native";
+import { NativeButton } from "@recall/ui-native";
+import { NativeCardEditorSection } from "./NativeCardEditorSection";
+import { Text, View } from "react-native";
 import type { ReactNode } from "react";
 import type { Editor } from "../NativeWorkspaceAuthoringPanel.types";
 
@@ -81,22 +83,20 @@ export function NativeWorkspaceCardEditor({
   return (
     <View className={"gap-[12px] py-[16px] border-t border-recall-line"}>
       <Text className={"text-recall-ink text-[16px] font-bold"}>
-        {editor.mode === "create" ? "New card" : "Edit card"}
+        {editor.mode === "create" ? "Add card" : "Edit card"}
       </Text>
-      <View className={"flex-row gap-[8px]"}>
+      <View className="flex-row flex-wrap gap-2">
         {(["basic", "cloze"] as const).map((kind) => (
-          <Pressable
+          <NativeButton
             key={kind}
             disabled={locked}
-            accessibilityRole="radio"
-            accessibilityState={{ selected: editor.content.kind === kind, disabled: locked }}
-            className={"p-[10px] bg-recall-surface rounded-[8px]"}
+            variant="secondary"
+            selected={editor.content.kind === kind}
+            label={kind === "basic" ? "Question and answer" : "Cloze · fill the gap"}
             onPress={() => {
               changeKind(kind);
             }}
-          >
-            <Text>{kind === "basic" ? "Basic" : "Cloze"}</Text>
-          </Pressable>
+          />
         ))}
       </View>
       {editor.content.kind === "basic" ? (
@@ -139,39 +139,61 @@ export function NativeWorkspaceCardEditor({
           )}
         </>
       )}
-      <NativePronunciationRecorder
-        key={editor.id}
-        disabled={locked || editor.content.media.length >= 20}
-        onAttach={(asset) => {
-          if (editor.content.media.some((item) => item.id === asset.reference.id)) return;
-          setEditor({
-            ...editor,
-            content: { ...editor.content, media: [...editor.content.media, asset.reference] },
-            stagedAssets: [...editor.stagedAssets, asset],
-          });
-        }}
-      />
-      <NativeReviewPresentationSettings
-        value={editor.content.presentation}
-        disabled={locked}
-        onChange={(presentation) => {
-          setEditor({ ...editor, content: { ...editor.content, presentation } });
-        }}
-      />
-      <NativeImageOcclusionEditor
-        value={editor.content.imageOcclusion}
-        media={editor.content.media}
-        field={field}
-        disabled={locked}
-        createId={createId}
-        {...(occlusionUri ? { uri: occlusionUri } : {})}
-        onChange={(imageOcclusion) => {
-          setEditor({
-            ...editor,
-            content: { ...editor.content, imageOcclusion, removeImageOcclusion: !imageOcclusion },
-          });
-        }}
-      />
+      <NativeCardEditorSection
+        title="Explanation (optional)"
+        initiallyOpen={Boolean(editor.content.explanation)}
+      >
+        <NativeRichTextEditor
+          label="Explanation (optional)"
+          value={editor.content.explanation ?? ""}
+          media={editor.content.media}
+          disabled={locked}
+          maxLength={10000}
+          onChange={(explanation) => {
+            setEditor({ ...editor, content: { ...editor.content, explanation } });
+          }}
+        />
+        <Text className="text-sm text-recall-muted">
+          Keep the answer concise. Supporting material is available after revealing the answer.
+        </Text>
+      </NativeCardEditorSection>
+      <NativeCardEditorSection title="Images and audio">
+        <NativePronunciationRecorder
+          key={editor.id}
+          disabled={locked || editor.content.media.length >= 20}
+          onAttach={(asset) => {
+            if (editor.content.media.some((item) => item.id === asset.reference.id)) return;
+            setEditor({
+              ...editor,
+              content: { ...editor.content, media: [...editor.content.media, asset.reference] },
+              stagedAssets: [...editor.stagedAssets, asset],
+            });
+          }}
+        />
+        <NativeImageOcclusionEditor
+          value={editor.content.imageOcclusion}
+          media={editor.content.media}
+          field={field}
+          disabled={locked}
+          createId={createId}
+          {...(occlusionUri ? { uri: occlusionUri } : {})}
+          onChange={(imageOcclusion) => {
+            setEditor({
+              ...editor,
+              content: { ...editor.content, imageOcclusion, removeImageOcclusion: !imageOcclusion },
+            });
+          }}
+        />
+      </NativeCardEditorSection>
+      <NativeCardEditorSection title="Appearance, answer and pronunciation">
+        <NativeReviewPresentationSettings
+          value={editor.content.presentation}
+          disabled={locked}
+          onChange={(presentation) => {
+            setEditor({ ...editor, content: { ...editor.content, presentation } });
+          }}
+        />
+      </NativeCardEditorSection>
       {assistancePanel}
       {detailsPanel}
       {confirmationPanel}

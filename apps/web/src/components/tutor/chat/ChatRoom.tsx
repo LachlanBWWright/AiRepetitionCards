@@ -11,6 +11,7 @@ export type ChatMessage = {
   readonly content: string;
 };
 export type ChatRoomProps = {
+  readonly tools?: ReactNode;
   readonly label: string;
   readonly inputId: string;
   readonly greeting: string;
@@ -49,6 +50,7 @@ export function ChatRoom(props: ChatRoomProps) {
   }
   return (
     <section className="flex min-h-0 flex-1 flex-col" aria-label={props.label}>
+      {props.tools && <div className="flex justify-end px-5 py-2">{props.tools}</div>}
       <div
         ref={scroll}
         onScroll={() => {
@@ -120,11 +122,13 @@ export function ChatRoom(props: ChatRoomProps) {
           <div className="mt-1 flex items-center gap-1 px-1">
             <ChatModelPicker selection={props.modelSelection} busy={props.busy} />
             <div className="ml-auto flex items-center gap-2">
-              <ChatContextMeter usage={props.modelSelection?.usage} />
+              {props.modelSelection?.usage && (
+                <ChatContextMeter usage={props.modelSelection.usage} />
+              )}
               <Button
                 type="submit"
                 size="icon"
-                className="size-8 shrink-0 rounded-full"
+                className="shrink-0"
                 aria-label="Send message"
                 disabled={props.disabled || props.busy || !props.value.trim()}
               >

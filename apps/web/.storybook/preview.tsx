@@ -1,7 +1,23 @@
 import type { Preview } from "@storybook/nextjs-vite";
+import { AppUiProvider } from "../src/components/ui/AppUiProvider";
 import "../src/app/globals.css";
+import "./native-preview.css";
+import "./preview-fonts.css";
 
 const preview: Preview = {
+  decorators: [
+    (Story, context) => (
+      <AppUiProvider>
+        {context.parameters.nativePreview === true ? (
+          <div data-native-preview className="min-h-screen bg-background text-foreground">
+            <Story />
+          </div>
+        ) : (
+          <Story />
+        )}
+      </AppUiProvider>
+    ),
+  ],
   parameters: {
     layout: "fullscreen",
     viewport: {

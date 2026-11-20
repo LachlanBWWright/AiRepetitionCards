@@ -23,7 +23,7 @@ import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
 class RecallChatGPTModule : Module() {
-  private class Listener(val server: ServerSocket, val state: String) {
+  private class Listener(val server: ServerSocket, val state: String, val pages: ChatGPTCallbackPages) {
     @Volatile var connection: Socket? = null
     @Volatile var awaiting = false
     fun close() {
@@ -37,8 +37,8 @@ class RecallChatGPTModule : Module() {
 
   override fun definition() = ModuleDefinition {
     Name("RecallChatGPT")
-    AsyncFunction("start") Coroutine { state: String ->
-      withContext(Dispatchers.IO) { start(state) }
+    AsyncFunction("start") Coroutine { state: String, pages: String ->
+      withContext(Dispatchers.IO) { start(state, pages) }
     }
     AsyncFunction("callback") Coroutine { id: String ->
       withContext(Dispatchers.IO) { callback(id) }
@@ -56,13 +56,14 @@ class RecallChatGPTModule : Module() {
     }
   }
 
-  @Synchronized private fun start(state: String): Map<String, Any> {
+  @Synchronized private fun start(state: String, pagesJson: String): Map<String, Any> {
     if (!state.matches(Regex("[A-Za-z0-9_-]{43,128}"))) return failure("invalid-state")
+    val pages = ChatGPTCallbackPages.parse(pagesJson) ?: return failure("invalid-callback-pages")
     if (listeners.isNotEmpty()) return failure("sign-in-in-progress")
     return try {
       val socket = ServerSocket(0, 8, InetAddress.getByName("127.0.0.1"))
       val id = UUID.randomUUID().toString()
-      val listener = Listener(socket, state)
+      val listener = Listener(socket, state, pages)
       listeners[id] = listener
       timer.schedule({ listeners.remove(id)?.close() }, 180, TimeUnit.SECONDS)
       mapOf("ok" to true, "id" to id, "redirectUri" to "http://127.0.0.1:${socket.localPort}/auth/callback")
@@ -99,8 +100,11 @@ class RecallChatGPTModule : Module() {
           val valid = line.length < 8192 && parts.size == 3 && parts[0] == "GET" && parts[2] == "HTTP/1.1" &&
             target.startsWith("/") && !target.startsWith("//") && uri?.path == "/auth/callback" && uri.fragment == null &&
             states.size == 1 && MessageDigest.isEqual(states[0].toByteArray(), listener.state.toByteArray())
-          val body = if (valid) "Return to Recall to finish connecting ChatGPT." else "Invalid sign-in callback."
-          val response = "HTTP/1.1 ${if (valid) "200 OK" else "400 Bad Request"}\r\nContent-Type: text/plain; charset=utf-8\r\nCache-Control: no-store\r\nContent-Security-Policy: default-src 'none'\r\nConnection: close\r\nContent-Length: ${body.toByteArray().size}\r\n\r\n$body"
+          val errors = uri?.rawQuery?.split('&')?.mapNotNull { pair ->
+            val keyValue = pair.split('=', limit = 2)
+            if (keyValue[0] == "error") URLDecoder.decode(keyValue.getOrElse(1) { "" }, "UTF-8") else null
+          } ?: emptyList()
+          val response = listener.pages.response(valid, errors)
           socket.getOutputStream().write(response.toByteArray(StandardCharsets.UTF_8))
           if (valid) return mapOf("ok" to true, "url" to "http://127.0.0.1:$port$target")
         }

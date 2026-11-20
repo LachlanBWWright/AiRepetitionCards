@@ -125,7 +125,7 @@ export function useAppServices(
   const tutorScope =
     chatGPT.tutorMode === "chatgpt"
       ? `chatgpt:${chatGPTClientId ?? "disconnected"}`
-      : `hosted:${accountUserId ?? "disconnected"}`;
+      : `managed:${accountUserId ?? "disconnected"}`;
   const tutorLifetime = useMemo(
     () => ({
       scope: tutorScope,
@@ -138,7 +138,7 @@ export function useAppServices(
   const nativeTutorSessionId =
     chatGPT.tutorMode === "hosted"
       ? activeArea
-        ? (nativeTutorSessionIds[activeArea.id] ?? null)
+        ? (nativeTutorSessionIds[`${tutorScope}:${activeArea.id}`] ?? null)
         : null
       : chatGPTSession?.scope === tutorScope && chatGPTSession.areaId === activeTutorAreaId
         ? chatGPTSession.id
@@ -163,7 +163,12 @@ export function useAppServices(
     workspaceLifetime,
     tutorLifetime,
   ]);
-  const tutorApi = chatGPT.tutorMode === "chatgpt" ? localTutorApi : hostedTutorApi;
+  const tutorApi =
+    chatGPT.tutorMode === "chatgpt"
+      ? localTutorApi
+      : chatGPT.managedStatusMessage
+        ? null
+        : hostedTutorApi;
   const activeKnowledgeArea = activeArea
     ? Effect.runSync(Effect.either(toKnowledgeArea(activeArea, false, true)))
     : null;
@@ -184,7 +189,12 @@ export function useAppServices(
   const dueCards = useMemo(
     () =>
       activeArea && workspace
-        ? studyQueue(workspace, activeArea, now, localStudyDay(now)).cards
+        ? studyQueue(
+            workspace,
+            activeArea,
+            now,
+            localStudyDay(now, workspace.schedulerSettings?.studyDayStartHour),
+          ).cards
         : [],
     [activeArea, workspace, now],
   );

@@ -152,7 +152,7 @@ void test("ZIP expansion ratios and entry limits stop hostile input before Anki 
   assert.equal(rejected(importKnowledgeAreaPackage(bomb)).reason, "limits-exceeded");
   assert.equal(rejected(importAnkiApkg(bomb, ankiOptions, reader)).reason, "limits-exceeded");
   const files = Object.fromEntries(
-    Array.from({ length: 2001 }, (_, index) => [String(index), new Uint8Array()]),
+    Array.from({ length: 2011 }, (_, index) => [String(index), new Uint8Array()]),
   );
   const excessive = zipSync(files, { level: 0 });
   assert.equal(rejected(importAnkiApkg(excessive, ankiOptions, reader)).reason, "limits-exceeded");

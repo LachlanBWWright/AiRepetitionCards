@@ -1,6 +1,10 @@
 import { Text, View } from "react-native";
 import type { CardAppearance } from "@recall/domain";
-import { CARD_APPEARANCE_OPTIONS, DEFAULT_CARD_APPEARANCE } from "@recall/application";
+import {
+  CARD_APPEARANCE_OPTIONS,
+  CARD_LAYOUT_PRESETS,
+  DEFAULT_CARD_APPEARANCE,
+} from "@recall/application";
 import { NativeButton } from "../../ui/NativeButton";
 
 type Props = {
@@ -13,6 +17,8 @@ const fields = [
   ["size", "Text size"],
   ["align", "Alignment"],
   ["lineSpacing", "Line spacing"],
+  ["direction", "Reading direction"],
+  ["imageSize", "Image size"],
 ] as const;
 function AppearanceField({
   appearance,
@@ -35,7 +41,7 @@ function AppearanceField({
           <NativeButton
             key={option.value}
             label={option.label}
-            tone={appearance[field] === option.value ? "dark" : "soft"}
+            variant="default"
             selected={appearance[field] === option.value}
             disabled={disabled}
             onPress={() => {
@@ -53,12 +59,27 @@ export function NativeCardAppearanceSettings({ value, onChange, disabled }: Prop
     <View className="gap-3">
       <NativeButton
         label={`Custom card appearance: ${value ? "on" : "off"}`}
-        tone="soft"
+        variant="default"
         disabled={disabled}
         onPress={() => {
           onChange(value ? undefined : appearance);
         }}
       />
+      {value && (
+        <View className="flex-row flex-wrap gap-1">
+          {CARD_LAYOUT_PRESETS.map((preset) => (
+            <NativeButton
+              key={preset.id}
+              label={preset.label}
+              variant="default"
+              disabled={disabled}
+              onPress={() => {
+                onChange(preset.appearance);
+              }}
+            />
+          ))}
+        </View>
+      )}
       {value &&
         fields.map(([key, label]) => (
           <AppearanceField

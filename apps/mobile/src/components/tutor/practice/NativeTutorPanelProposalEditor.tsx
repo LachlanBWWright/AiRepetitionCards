@@ -1,3 +1,8 @@
+import {
+  NativeCollapsibleContent,
+  NativeCollapsibleTrigger,
+  NativeTextField,
+} from "@recall/ui-native";
 import { useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import { Text, TextInput, View } from "react-native";
@@ -43,10 +48,6 @@ function ProposalObjectiveOptions({
                 content: { ...proposalContent, objectiveId: objective.id },
               });
           }}
-          className={
-            "min-h-[38px] justify-center items-center px-[12px] rounded-[10px] bg-transparent"
-          }
-          labelClassName="text-recall-darkGreen text-[11px] font-bold"
         />
       ))}
     </>
@@ -96,14 +97,20 @@ export function NativeTutorPanelProposalEditor({
   return (
     <>
       {session?.proposal && proposalContent ? (
-        <View className={"gap-[7px] py-[11px]"}>
-          <Text className={"text-recall-ink font-bold text-[13px]"}>Suggested card</Text>
+        <View className="gap-4 rounded-xl border border-recall-line bg-recall-surface p-4">
+          <Text className="text-recall-ink font-semibold text-lg">Review suggested card</Text>
+          <Text accessibilityRole="text" className="text-recall-muted text-sm">
+            {approvalSaved
+              ? "Card saved; approval pending"
+              : "Not saved. Edit the card before approving it."}
+          </Text>
           {approvalSaved ? (
             <Text className={"text-recall-muted text-[11px] leading-[16px]"}>
               Saved. Retry approval to finish.
             </Text>
           ) : null}
-          <TextInput
+          <NativeTextField
+            label="Question"
             accessibilityLabel="Proposed card question"
             multiline
             editable={!busy && !approvalSaved}
@@ -111,11 +118,10 @@ export function NativeTutorPanelProposalEditor({
             onChangeText={(value) => {
               editProposal("front", value);
             }}
-            className={
-              "flex-1 min-h-[42px] px-[11px] rounded-[10px] bg-recall-paper text-recall-ink"
-            }
+            inputClassName="min-h-24"
           />
-          <TextInput
+          <NativeTextField
+            label="Answer"
             accessibilityLabel="Proposed card answer"
             multiline
             editable={!busy && !approvalSaved}
@@ -123,19 +129,16 @@ export function NativeTutorPanelProposalEditor({
             onChangeText={(value) => {
               editProposal("back", value);
             }}
-            className={
-              "flex-1 min-h-[42px] px-[11px] rounded-[10px] bg-recall-paper text-recall-ink"
-            }
+            inputClassName="min-h-28"
           />
-          <NativeButton
-            label={showProposalDetails ? "Hide details" : "Details"}
-            onPress={() => {
+          <NativeCollapsibleTrigger
+            open={showProposalDetails}
+            title="Details"
+            onToggle={() => {
               setShowProposalDetails((current) => !current);
             }}
-            className={"py-[9px] px-[4px]"}
-            labelClassName="text-recall-darkGreen text-[11px] font-bold"
           />
-          <View className={showProposalDetails ? "gap-[10px]" : "hidden"}>
+          <NativeCollapsibleContent open={showProposalDetails}>
             <ProposalObjectiveOptions
               area={area}
               busy={busy}
@@ -156,7 +159,7 @@ export function NativeTutorPanelProposalEditor({
                 "flex-1 min-h-[42px] px-[11px] rounded-[10px] bg-recall-paper text-recall-ink"
               }
             />
-          </View>
+          </NativeCollapsibleContent>
           <NativeCardAssistancePanel
             key={proposalKey}
             content={proposalContent}
@@ -181,17 +184,12 @@ export function NativeTutorPanelProposalEditor({
               disabled={busy || !api || !duplicatesAllowed}
               onPress={() => void resolveProposal("approved")}
               label={approvalSaved ? "Retry approval" : "Save & approve"}
-              className={"min-h-[40px] justify-center px-[13px] rounded-[10px] bg-recall-darkGreen"}
-              labelClassName="text-recall-surface text-[12px] font-bold"
             />
             <NativeButton
+              variant="secondary"
               disabled={busy || !api || approvalSaved === true}
               onPress={() => void resolveProposal("rejected")}
               label="Reject"
-              className={
-                "min-h-[38px] justify-center items-center px-[12px] rounded-[10px] bg-transparent"
-              }
-              labelClassName="text-recall-darkGreen text-[11px] font-bold"
             />
           </View>
         </View>

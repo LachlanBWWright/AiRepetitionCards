@@ -43,9 +43,9 @@ export function writeDesktopWorkspaceSnapshot(database: DatabaseSync, serialized
           database.exec("SAVEPOINT workspace_snapshot_write");
           savepoint.active = true;
           const chunks = splitWorkspacePayload(serialized);
-          database.exec("DELETE FROM local_workspace_chunks");
+          database.prepare("DELETE FROM local_workspace_chunks WHERE part >= ?").run(chunks.length);
           const insert = database.prepare(
-            "INSERT INTO local_workspace_chunks(part,payload) VALUES(?,?)",
+            "INSERT INTO local_workspace_chunks(part,payload) VALUES(?,?) ON CONFLICT(part) DO UPDATE SET payload=excluded.payload WHERE payload != excluded.payload",
           );
           for (const [index, chunk] of chunks.entries()) insert.run(index, chunk);
           database

@@ -1,4 +1,5 @@
 "use client";
+import { AccountSettingsDialog } from "@/components/auth/AccountSettingsDialog";
 import { Either } from "effect";
 import type { ComponentProps } from "react";
 import {
@@ -107,24 +108,19 @@ export default function Home(props: RecallDashboardProps) {
           </DialogContent>
         </Dialog>
         <RecallDashboardReviewRecovery model={model} />
-        <Dialog open={accountSettingsOpen} onOpenChange={setAccountSettingsOpen}>
-          <DialogContent
-            className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-lg"
-            onCloseAutoFocus={(event) => {
-              event.preventDefault();
-              const target = accountSettingsReturnFocusRef.current;
-              if (target?.isConnected) target.focus();
-              else accountMenuTrigger.current?.focus();
-              accountSettingsReturnFocusRef.current = null;
-            }}
-          >
-            <DialogHeader>
-              <DialogTitle>Account settings</DialogTitle>
-              <DialogDescription>Connect ChatGPT and manage your account.</DialogDescription>
-            </DialogHeader>
-            <AccountAction demo={Boolean(demo)} {...(workspaceUnlocked ? { workspace } : {})} />
-          </DialogContent>
-        </Dialog>
+        <AccountSettingsDialog
+          open={accountSettingsOpen}
+          onOpenChange={setAccountSettingsOpen}
+          onCloseAutoFocus={(event) => {
+            event.preventDefault();
+            const target = accountSettingsReturnFocusRef.current;
+            if (target?.isConnected) target.focus();
+            else accountMenuTrigger.current?.focus();
+            accountSettingsReturnFocusRef.current = null;
+          }}
+        >
+          <AccountAction demo={Boolean(demo)} {...(workspaceUnlocked ? { workspace } : {})} />
+        </AccountSettingsDialog>
         <RecallDashboardDeviceSettingsDialog model={model} />
         <RecallDashboardAreaEditor model={model} />
         <RecallDashboardCardEditor model={model} />

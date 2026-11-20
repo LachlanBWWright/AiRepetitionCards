@@ -1,3 +1,4 @@
+import { ApplyAgentChangesSchema } from "../interchange/agent/contracts";
 import {
   RestoreWorkspaceCheckpointSchema,
   RepairCollectionReferencesSchema,
@@ -15,6 +16,7 @@ import { AreaDetailsSchema } from "./area-management";
 import { AreaSettingsSchema } from "./area-settings";
 import { DeleteCardSchema, CardContentSchema, SaveCardSchema } from "./card-management";
 export const WorkspaceAuthoringCommandSchema = Schema.Union(
+  ApplyAgentChangesSchema,
   RestoreWorkspaceCheckpointSchema,
   RepairCollectionReferencesSchema,
   MediaMaintenanceCommandSchema,
@@ -37,6 +39,7 @@ export const WorkspaceAuthoringCommandSchema = Schema.Union(
   Schema.Struct({
     kind: Schema.Literal("create-cards"),
     areaId: AreaIdSchema,
+    sourceCardId: Schema.optional(AssessmentIdSchema),
     cards: Schema.Array(
       Schema.Struct({ cardId: AssessmentIdSchema, content: CardContentSchema }),
     ).pipe(Schema.minItems(1), Schema.maxItems(5)),

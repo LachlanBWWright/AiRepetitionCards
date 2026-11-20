@@ -1,5 +1,12 @@
 import type { Workspace } from "@recall/domain";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@recall/ui-web";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+  FieldLabel,
+} from "@recall/ui-web";
 
 type KnowledgeAreaCardLibraryBulkDestinationProps = {
   readonly workspace: Workspace | undefined;
@@ -17,7 +24,7 @@ export function KnowledgeAreaCardLibraryBulkDestination({
   onDestinationChange,
 }: KnowledgeAreaCardLibraryBulkDestinationProps) {
   return (
-    <label>
+    <FieldLabel>
       Destination deck
       <Select value={destination} onValueChange={onDestinationChange} disabled={disabled}>
         <SelectTrigger aria-label="Destination deck">
@@ -33,6 +40,6 @@ export function KnowledgeAreaCardLibraryBulkDestination({
             ))}
         </SelectContent>
       </Select>
-    </label>
+    </FieldLabel>
   );
 }

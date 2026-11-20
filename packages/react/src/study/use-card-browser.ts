@@ -5,7 +5,7 @@ import type { LearningArea, Workspace } from "@recall/domain";
 import {
   browseStudyCards,
   browserNoteRows,
-  createStudySearchIndex,
+  createStudySearchIndexer,
   defaultBrowserColumns,
   tagHierarchy,
   relatedStudyCards,
@@ -21,7 +21,8 @@ export function useCardBrowser(
   save: StudyCommandSave | undefined,
 ) {
   const [mode, setMode] = useState("cards");
-  const index = useMemo(() => createStudySearchIndex(workspace), [workspace]);
+  const indexWorkspace = useMemo(() => createStudySearchIndexer(), []);
+  const index = useMemo(() => indexWorkspace(workspace), [workspace, indexWorkspace]);
   const [query, setQuery] = useState("");
   const [scope, setScope] = useState("subject");
   const [sort, setSort] = useState<BrowserColumn>("front");
@@ -120,6 +121,7 @@ export function useCardBrowser(
     descending,
     setDescending,
     selectedId,
+    selected,
     setSelectedId,
     find,
     setFind,

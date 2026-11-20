@@ -39,8 +39,8 @@ export function DeleteConfirmation({
           </Text>
           {field("Deletion confirmation", confirmation, setConfirmation)}
           <NativeButton
-            label="Confirm deletion"
-            tone="soft"
+            label={editor.actionLabel ?? "Delete content"}
+            variant="destructive"
             disabled={locked || confirmation !== "DELETE"}
             onPress={() => {
               submit(editor.command, editor.baseline);
@@ -51,7 +51,7 @@ export function DeleteConfirmation({
       {editor && (
         <NativeButton
           label="Cancel editing"
-          tone="soft"
+          variant="secondary"
           disabled={disabled || pending}
           onPress={onCancel}
         />

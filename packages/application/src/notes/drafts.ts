@@ -16,6 +16,7 @@ const draftType = Schema.Struct({
       name: draftText,
       front: draftText,
       back: draftText,
+      explanation: Schema.optional(draftText),
       clozeField: Schema.optional(draftText),
       deckAreaId: Schema.optional(AreaIdSchema),
       presentation: Schema.optional(ReviewPresentationSchema),

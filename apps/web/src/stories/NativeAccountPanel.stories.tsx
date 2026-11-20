@@ -6,6 +6,7 @@ const meta = {
   title: "Screens/Native Account",
   component: NativeAccountPanel,
   parameters: {
+    nativePreview: true,
     layout: "fullscreen",
     docs: {
       description: {
@@ -20,8 +21,10 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 const renderAccount = (args: ComponentProps<typeof NativeAccountPanel>) => (
-  <main style={{ minHeight: "100vh", padding: 18, backgroundColor: "#faf9f6" }}>
-    <h1 style={{ margin: "0 0 16px", color: "#203c34", fontSize: 24 }}>Account settings</h1>
+  <main style={{ minHeight: "100vh", padding: 18, backgroundColor: "var(--recall-paper)" }}>
+    <h1 style={{ margin: "0 0 16px", color: "var(--recall-ink)", fontSize: 24 }}>
+      Account settings
+    </h1>
     <NativeAccountPanel {...args} />
   </main>
 );
@@ -41,7 +44,7 @@ export const DeleteConfirmation: Story = {
     account: "learner@example.com",
     onSignOut: () =>
       Promise.resolve("Signed out. This device’s local study data remains available."),
-    onRequestSignIn: () => Promise.resolve("Check your email for a sign-in link."),
+    onRequestSignIn: () => Promise.resolve("Complete Google sign-in in your browser."),
     initialDeleteConfirmationOpen: true,
   },
   globals: { viewport: { value: "recallMobile", isRotated: false } },

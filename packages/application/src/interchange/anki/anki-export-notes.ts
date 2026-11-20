@@ -44,7 +44,9 @@ function model(type: NoteType, id: number, deckId: number, seconds: number) {
       name: template.name,
       ord,
       qfmt: template.clozeField ? `{{cloze:${template.clozeField}}}` : ankiHtml(template.front),
-      afmt: template.clozeField ? `{{cloze:${template.clozeField}}}` : ankiHtml(template.back),
+      afmt:
+        (template.clozeField ? `{{cloze:${template.clozeField}}}` : ankiHtml(template.back)) +
+        (template.explanation ? `<hr>${ankiHtml(template.explanation)}` : ""),
       bqfmt: "",
       bafmt: "",
       did: null,
@@ -61,8 +63,16 @@ function model(type: NoteType, id: number, deckId: number, seconds: number) {
 const basic: NoteType = {
   id: "fallback",
   name: "Recall Basic",
-  fields: [{ name: "Front" }, { name: "Back" }],
-  templates: [{ id: "basic", name: "Card 1", front: "{{Front}}", back: "{{Back}}" }],
+  fields: [{ name: "Front" }, { name: "Back" }, { name: "Explanation" }],
+  templates: [
+    {
+      id: "basic",
+      name: "Card 1",
+      front: "{{Front}}",
+      back: "{{Back}}",
+      explanation: "{{#Explanation}}{{Explanation}}{{/Explanation}}",
+    },
+  ],
 };
 
 export function buildAnkiExportNotes(area: LearningArea, deckId: number, seconds: number) {
@@ -98,7 +108,9 @@ export function buildAnkiExportNotes(area: LearningArea, deckId: number, seconds
     if (!notes.has(key)) {
       const fields = linked
         ? type.fields.map((field) => ankiHtml(note.fields[field.name] ?? "")).join("\u001f")
-        : [ankiHtml(card.front), ankiHtml(card.back)].join("\u001f");
+        : [ankiHtml(card.front), ankiHtml(card.back), ankiHtml(card.explanation ?? "")].join(
+            "\u001f",
+          );
       notes.set(key, {
         id: noteId,
         guid: card.sourceId?.match(/^anki:(.*):\d+$/)?.[1] ?? `recall-${key}`,

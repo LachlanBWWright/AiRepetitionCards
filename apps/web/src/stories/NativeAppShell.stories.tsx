@@ -102,7 +102,7 @@ function ShellStory({
     : null;
   const area = exported && Either.isRight(exported) ? exported.right : null;
   return (
-    <div style={{ height: "100vh", display: "flex", background: "#faf9f6" }}>
+    <div style={{ height: "100vh", display: "flex", background: "var(--recall-paper)" }}>
       <NativeAppShell
         activeTab={activeTab}
         onTabChange={setActiveTab}
@@ -201,7 +201,7 @@ function ShellStory({
 const meta = {
   title: "Screens/Native App Shell",
   component: ShellStory,
-  parameters: { layout: "fullscreen" },
+  parameters: { nativePreview: true, layout: "fullscreen" },
   globals: { viewport: { value: "recallMobile", isRotated: false } },
 } satisfies Meta<typeof ShellStory>;
 export default meta;

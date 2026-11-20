@@ -100,5 +100,29 @@
     "contract": "workspace-snapshot",
     "schemaValid": true,
     "valid": true
+  },
+  {
+    "file": "managed-ai-status.json",
+    "contract": "managed-ai-status",
+    "schemaValid": true,
+    "valid": true
+  },
+  {
+    "file": "managed-ai-status-denied.json",
+    "contract": "managed-ai-status",
+    "schemaValid": true,
+    "valid": true
+  },
+  {
+    "file": "managed-ai-status-invalid.json",
+    "contract": "managed-ai-status",
+    "schemaValid": false,
+    "valid": false
+  },
+  {
+    "file": "managed-ai-status-owner-invalid.json",
+    "contract": "managed-ai-status",
+    "schemaValid": false,
+    "valid": false
   }
 ]

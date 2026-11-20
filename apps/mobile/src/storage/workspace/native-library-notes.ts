@@ -68,7 +68,11 @@ export const clearNativeLibraryNotes = withNativeOperationStoreLane(
     try: async () => {
       const database = await SQLite.openDatabaseAsync("recall.db");
       await database.execAsync(table);
-      await database.runAsync("DELETE FROM local_key_value WHERE key LIKE ?", `${prefix}%`);
+      await database.runAsync(
+        "DELETE FROM local_key_value WHERE key LIKE ? OR key LIKE ?",
+        `${prefix}%`,
+        "tutor-conversation:%",
+      );
     },
     catch: failure,
   }),

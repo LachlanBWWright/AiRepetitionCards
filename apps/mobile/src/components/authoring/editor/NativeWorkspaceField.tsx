@@ -21,7 +21,7 @@ export function NativeWorkspaceField({
   maxLength,
 }: NativeWorkspaceFieldProps) {
   return (
-    <View className="gap-[5px]">
+    <View className="gap-2">
       <Text className="text-recall-ink text-[13px] font-semibold">{label}</Text>
       <TextInput
         key={editor?.kind === "card" ? `${editor.id}:${label}` : label}
@@ -36,7 +36,7 @@ export function NativeWorkspaceField({
         onChangeText={onChangeText}
         multiline={multiline}
         {...(maxLength === undefined ? {} : { maxLength })}
-        className={`min-h-[44px] border border-recall-line rounded-[9px] p-[10px] text-recall-ink bg-recall-surface ${multiline ? "min-h-[90px]" : ""}`}
+        className={`border border-recall-line rounded-[9px] px-3 py-3 text-recall-ink bg-recall-surface ${multiline ? "min-h-[90px]" : "min-h-12"}`}
         style={multiline ? { textAlignVertical: "top" } : undefined}
       />
     </View>

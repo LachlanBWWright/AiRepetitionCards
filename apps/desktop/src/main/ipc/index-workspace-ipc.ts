@@ -1,3 +1,4 @@
+import { clearDesktopWorkspace } from "./workspace-clear";
 import {
   readDesktopWorkspaceSnapshot,
   writeDesktopWorkspaceSnapshot,
@@ -69,19 +70,6 @@ export function registerWorkspaceIpc(
   ipcMain.handle("workspace:clear", async (event): Promise<DesktopReply<void>> => {
     if (!trustedSender(event)) return failure();
     if (!(await clearReminders())) return failure();
-    const result = Effect.runSync(
-      Effect.either(
-        Effect.try({
-          try: () => {
-            database.prepare("DELETE FROM workspace_checkpoints").run();
-            database.prepare("DELETE FROM workspace_checkpoint_chunks").run();
-            database.prepare("DELETE FROM local_workspace WHERE id = 1").run();
-            database.prepare("DELETE FROM local_workspace_chunks").run();
-          },
-          catch: () => ({ _tag: "WorkspaceClearFailure" }) as const,
-        }),
-      ),
-    );
-    return Either.isRight(result) ? { _tag: "Success", value: undefined } : failure();
+    return clearDesktopWorkspace(database) ? { _tag: "Success", value: undefined } : failure();
   });
 }

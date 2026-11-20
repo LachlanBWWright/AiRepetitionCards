@@ -12,7 +12,7 @@ export function summarizeStudySubjects(
   suggestedAreaIds: readonly string[] = [],
   search = "",
 ) {
-  const day = localStudyDay(now);
+  const day = localStudyDay(now, workspace.schedulerSettings?.studyDayStartHour);
   const originals = new Map(workspace.areas.map((area) => [area.id, area]));
   const eligible = workspace.areas.map((area) => ({
     ...area,
@@ -41,12 +41,19 @@ export function studySessionArea(workspace: Workspace, selection: string, now: n
   if (!selection.startsWith("scope:")) return workspace.areas.find((area) => area.id === selection);
   const parentId = selection.slice(6);
   const members = new Set(studyScope(workspace, parentId));
-  const day = localStudyDay(now);
+  const day = localStudyDay(now, workspace.schedulerSettings?.studyDayStartHour);
   const candidates = workspace.areas.filter((area) => members.has(area.id));
   return (
     candidates.find((area) =>
       studyQueue(workspace, area, now, day).cards.some(
-        (card) => card.schedule.state === 1 || card.schedule.state === 3,
+        (card) =>
+          (card.schedule.state === 1 || card.schedule.state === 3) &&
+          Date.parse(card.schedule.due) <= now,
+      ),
+    ) ??
+    candidates.find((area) =>
+      studyQueue(workspace, area, now, day).cards.some(
+        (card) => Date.parse(card.schedule.due) <= now,
       ),
     ) ??
     candidates.find((area) => studyQueue(workspace, area, now, day).cards.length > 0) ??
@@ -93,7 +100,7 @@ export function studySessionQueue(
   area: Workspace["areas"][number],
   now: number,
 ) {
-  const day = localStudyDay(now);
+  const day = localStudyDay(now, workspace.schedulerSettings?.studyDayStartHour);
   const queue = studyQueue(workspace, area, now, day);
   if (!selection.startsWith("scope:")) return queue;
   const scope = new Set(studyScope(workspace, selection.slice(6)));

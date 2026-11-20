@@ -143,6 +143,29 @@ const code = async <A>(operation: Effect.Effect<A, ChatGPTAuthFailure>) => {
   return Either.isLeft(result) ? result.left.code : null;
 };
 
+await test("native restart restores the registration and persists rotating refresh tokens", async () => {
+  const f = fixture();
+  await run(f.auth.signIn());
+  const before = await run(f.auth.status);
+  const restarted = createChatGPTAuth(f.ports);
+  assert.deepEqual(await run(restarted.status), before);
+  f.age();
+  assert.equal(await run(restarted.accessToken("oaiapp_one")), "refreshed-access");
+  f.age();
+  const again = createChatGPTAuth(f.ports);
+  await run(again.accessToken("oaiapp_one"));
+  const refreshes = f.calls.filter((call) => call.form?.grant_type === "refresh_token");
+  assert.equal(refreshes[0]?.form?.refresh_token, "refresh");
+  assert.equal(refreshes[1]?.form?.refresh_token, "rotated-refresh");
+  await run(again.signIn("oaiapp_one"));
+  assert.equal(f.opened().searchParams.get("client_id"), "oaiapp_one");
+  assert.equal(
+    f.opened().searchParams.get("ext_agent_host_id"),
+    "urn:uuid:a8dcc8b0-1809-4a62-b377-31d269b852a4",
+  );
+  assert.equal((await run(createChatGPTAuth(f.ports).status)).activeClientId, "oaiapp_one");
+});
+
 await test("native ChatGPT registration works without any Recall account or backend", async () => {
   const f = fixture();
   await run(f.auth.signIn());

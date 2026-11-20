@@ -1,7 +1,8 @@
+import { StudySessionFields } from "./StudySessionFields";
 import { siblingBuryOptions } from "@recall/application";
 import { TodayStudyLimits } from "./TodayStudyLimits";
 import type { SchedulerSettings } from "@recall/domain";
-import { Input } from "@recall/ui-web";
+import { Input, FieldLabel, FieldDescription } from "@recall/ui-web";
 import { Checkbox } from "@/components/ui/Checkbox";
 import {
   Select,
@@ -23,8 +24,8 @@ export function StudyPolicyFields({
 }) {
   const id = useId();
   return (
-    <section className="grid gap-4 border-t pt-4" aria-label="Study queue settings">
-      <label htmlFor={`${id}-new`}>
+    <section className="flex flex-col gap-4" aria-label="Study queue settings">
+      <FieldLabel htmlFor={`${id}-new`} className="flex min-w-0 flex-col gap-2">
         New cards per day
         <Input
           id={`${id}-new`}
@@ -41,8 +42,8 @@ export function StudyPolicyFields({
             });
           }}
         />
-      </label>
-      <label htmlFor={`${id}-reviews`}>
+      </FieldLabel>
+      <FieldLabel htmlFor={`${id}-reviews`} className="flex min-w-0 flex-col gap-2">
         Returning cards per day (blank is unlimited)
         <Input
           id={`${id}-reviews`}
@@ -57,9 +58,10 @@ export function StudyPolicyFields({
             });
           }}
         />
-      </label>
+      </FieldLabel>
+      <StudySessionFields settings={settings} onChange={onChange} workspace={showTodayLimits} />
       {showTodayLimits && <TodayStudyLimits settings={settings} onChange={onChange} />}
-      <label className="flex items-center gap-2">
+      <FieldLabel className="flex items-center gap-2">
         <Checkbox
           checked={settings.pauseNewWhenOverdue ?? true}
           onCheckedChange={(checked) => {
@@ -67,11 +69,11 @@ export function StudyPolicyFields({
           }}
         />
         Pause new cards while previous days’ reviews are overdue
-      </label>
-      <fieldset className="grid gap-2">
-        <legend className="mb-2">Bury related cards until tomorrow</legend>
+      </FieldLabel>
+      <fieldset className="flex flex-col gap-2">
+        <legend className="m-0">Bury related cards until tomorrow</legend>
         {siblingBuryOptions.map(({ field, label }) => (
-          <label key={field} className="flex items-center gap-2">
+          <FieldLabel key={field} className="flex items-center gap-2">
             <Checkbox
               checked={settings[field] ?? settings.burySiblings ?? true}
               onCheckedChange={(checked) => {
@@ -79,33 +81,35 @@ export function StudyPolicyFields({
               }}
             />
             {label}
-          </label>
+          </FieldLabel>
         ))}
       </fieldset>
-      <label htmlFor={`${id}-order`}>Review order</label>
-      <Select
-        value={settings.reviewOrder ?? "due"}
-        onValueChange={(value) => {
-          if (
-            value === "due" ||
-            value === "retrievability" ||
-            value === "interval-ascending" ||
-            value === "interval-descending"
-          )
-            onChange({ ...settings, reviewOrder: value });
-        }}
-      >
-        <SelectTrigger id={`${id}-order`}>
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="due">Oldest due first</SelectItem>
-          <SelectItem value="retrievability">Lowest recall probability first</SelectItem>
-          <SelectItem value="interval-ascending">Shortest interval first</SelectItem>
-          <SelectItem value="interval-descending">Longest interval first</SelectItem>
-        </SelectContent>
-      </Select>
-      <label htmlFor={`${id}-leech`}>
+      <div className="flex flex-col gap-2">
+        <FieldLabel htmlFor={`${id}-order`}>Review order</FieldLabel>
+        <Select
+          value={settings.reviewOrder ?? "due"}
+          onValueChange={(value) => {
+            if (
+              value === "due" ||
+              value === "retrievability" ||
+              value === "interval-ascending" ||
+              value === "interval-descending"
+            )
+              onChange({ ...settings, reviewOrder: value });
+          }}
+        >
+          <SelectTrigger id={`${id}-order`} className="w-full">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="due">Oldest due first</SelectItem>
+            <SelectItem value="retrievability">Lowest recall probability first</SelectItem>
+            <SelectItem value="interval-ascending">Shortest interval first</SelectItem>
+            <SelectItem value="interval-descending">Longest interval first</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+      <FieldLabel htmlFor={`${id}-leech`} className="flex min-w-0 flex-col gap-2">
         Flag repeatedly failed cards after this many lapses
         <Input
           id={`${id}-leech`}
@@ -122,12 +126,12 @@ export function StudyPolicyFields({
             });
           }}
         />
-      </label>
-      <p className="text-sm text-muted-foreground">
+      </FieldLabel>
+      <FieldDescription>
         Due learning and relearning steps stay available. Returning-card limits count each reviewed
         card once per day; retries use no extra slots. Deferred reviews remain in backlog counts. A
-        study day follows this device’s local calendar.
-      </p>
+        study day follows the configured local start hour.
+      </FieldDescription>
     </section>
   );
 }

@@ -1,4 +1,5 @@
 import type { LearningArea, Workspace } from "@recall/domain";
+import { isManuallyBuried } from "../administration/manual-burial";
 import { Effect } from "effect";
 import { searchStudyCards } from "./card-search";
 import { recallProbability } from "@recall/scheduler";
@@ -17,7 +18,11 @@ export function filteredStudyArea(
       const settings = resolveStudySettings(workspace, area.id);
       const cards = matches
         .map((entry) => entry.card)
-        .filter((card) => !workspace.schedulerSettings?.suspendedCardIds?.includes(card.id));
+        .filter(
+          (card) =>
+            !workspace.schedulerSettings?.suspendedCardIds?.includes(card.id) &&
+            !isManuallyBuried(workspace, card.id, now),
+        );
       const probabilities = new Map(
         cards.map((card) => [
           card.id,

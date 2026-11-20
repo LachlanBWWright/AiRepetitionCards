@@ -1,3 +1,6 @@
+import { Field } from "@recall/ui-web/components/field";
+import { useId } from "react";
+import { Label } from "@recall/ui-web/components/label";
 import { NoteOwnershipImpact } from "./NoteOwnershipImpact";
 import { NoteLifecycleImpact } from "./NoteLifecycleEditor";
 import { NoteObjectives } from "./NoteObjectives";
@@ -37,7 +40,7 @@ function LoadedNoteLibraryEditor(props: Props) {
   const locked = Boolean(props.disabled) || model.busy;
   return (
     <fieldset disabled={locked} className="grid min-w-0 gap-6">
-      <legend className="mb-2 text-xl font-semibold tracking-tight">
+      <legend className="text-xl font-semibold tracking-tight">
         {props.initialNoteId ? "Edit shared note" : "Create from a note"}
       </legend>
       <NoteSourceControls
@@ -46,12 +49,12 @@ function LoadedNoteLibraryEditor(props: Props) {
         locked={locked}
         typeLocked={Boolean(props.initialNoteId)}
       />
-      <div className="grid min-w-0 gap-5">
-        <div className="grid min-w-0 content-start gap-5">
+      <div className="grid min-w-0 gap-4">
+        <div className="grid min-w-0 content-start gap-4">
           <NoteFields model={model} disabled={locked} />
           <NoteAttachments model={model} />
           <NoteObjectives area={model.area} model={model} />
-          <label className="grid gap-2 text-sm font-medium">
+          <Label className="grid gap-2 text-sm font-medium">
             Tags
             <Input
               value={model.tagsText}
@@ -60,7 +63,7 @@ function LoadedNoteLibraryEditor(props: Props) {
               }}
               placeholder="biology, exam"
             />
-          </label>
+          </Label>
         </div>
         <Accordion type="single" collapsible>
           <AccordionItem value="preview">
@@ -84,7 +87,7 @@ function LoadedNoteLibraryEditor(props: Props) {
       <div className="flex flex-wrap items-center gap-3 border-t border-border pt-5">
         <Button
           type="button"
-          size="small"
+          size="default"
           disabled={
             locked ||
             Either.isLeft(model.preview) ||
@@ -103,8 +106,8 @@ function LoadedNoteLibraryEditor(props: Props) {
         </Button>
         <Button
           type="button"
-          size="small"
-          variant="secondary"
+          size="default"
+          variant="default"
           disabled={
             locked ||
             Either.isLeft(model.preview) ||
@@ -150,16 +153,19 @@ function NoteSourceControls({
   readonly locked: boolean | undefined;
   readonly typeLocked: boolean;
 }) {
+  const typeId = useId();
   return (
     <div className="grid items-end gap-4 sm:grid-cols-2">
-      <div className="grid gap-2">
-        <label className="text-sm font-medium">Note type</label>
+      <Field>
+        <Label htmlFor={typeId} className="text-sm font-medium">
+          Note type
+        </Label>
         <Select
           value={model.type.id}
           disabled={locked || typeLocked}
           onValueChange={model.selectType}
         >
-          <SelectTrigger className="w-full" aria-label="Note type">
+          <SelectTrigger id={typeId} className="w-full" aria-label="Note type">
             <SelectValue placeholder={model.type.name} />
           </SelectTrigger>
           <SelectContent>
@@ -170,21 +176,19 @@ function NoteSourceControls({
             ))}
           </SelectContent>
         </Select>
-      </div>
+      </Field>
       {(area.noteLibrary?.notes.length ?? 0) > 0 && (
-        <>
-          <label className="grid gap-2 text-sm font-medium">
-            Open a saved note
-            <Select value={model.note.id} disabled={locked} onValueChange={model.selectNote}>
-              <SelectTrigger className="w-full" aria-label="Open existing note">
-                <SelectValue placeholder="Choose note" />
-              </SelectTrigger>
-              <SelectContent>
-                <ExistingNoteOptions area={area} />
-              </SelectContent>
-            </Select>
-          </label>
-        </>
+        <Label className="grid gap-2 text-sm font-medium">
+          Open a saved note
+          <Select value={model.note.id} disabled={locked} onValueChange={model.selectNote}>
+            <SelectTrigger className="w-full" aria-label="Open existing note">
+              <SelectValue placeholder="Choose note" />
+            </SelectTrigger>
+            <SelectContent>
+              <ExistingNoteOptions area={area} />
+            </SelectContent>
+          </Select>
+        </Label>
       )}
     </div>
   );

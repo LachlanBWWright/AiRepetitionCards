@@ -1,0 +1,67 @@
+[
+  {
+    "file": "system-design-primer/OO Design.apkg",
+    "source": "https://raw.githubusercontent.com/donnemartin/system-design-primer/ae9bbd7b02d90b9866215de185217d33f39ab733/resources/flash_cards/OO%20Design.apkg",
+    "repository": "https://github.com/donnemartin/system-design-primer",
+    "commit": "ae9bbd7b02d90b9866215de185217d33f39ab733",
+    "license": "CC-BY-4.0",
+    "sha256": "b3eefdd3169038660e07c2744b07d4690a0fcb8c21408d91bef447756f5c7cfc",
+    "notes": 6,
+    "cards": 6,
+    "database": "collection.anki2",
+    "expected": "imported",
+    "remoteMediaOmitted": 0
+  },
+  {
+    "file": "system-design-primer/System Design Exercises.apkg",
+    "source": "https://raw.githubusercontent.com/donnemartin/system-design-primer/ae9bbd7b02d90b9866215de185217d33f39ab733/resources/flash_cards/System%20Design%20Exercises.apkg",
+    "repository": "https://github.com/donnemartin/system-design-primer",
+    "commit": "ae9bbd7b02d90b9866215de185217d33f39ab733",
+    "license": "CC-BY-4.0",
+    "sha256": "1c5c1f34f2aa9d740d95499e18a323f7f918947120ac117c242c76f3b2364de0",
+    "notes": 8,
+    "cards": 8,
+    "database": "collection.anki2",
+    "expected": "imported",
+    "remoteMediaOmitted": 20
+  },
+  {
+    "file": "system-design-primer/System Design.apkg",
+    "source": "https://raw.githubusercontent.com/donnemartin/system-design-primer/ae9bbd7b02d90b9866215de185217d33f39ab733/resources/flash_cards/System%20Design.apkg",
+    "repository": "https://github.com/donnemartin/system-design-primer",
+    "commit": "ae9bbd7b02d90b9866215de185217d33f39ab733",
+    "license": "CC-BY-4.0",
+    "sha256": "bb98767862cbd92f62c4f60f42d49d17d82b84a5f74d4301a2ea8940dc9badf8",
+    "notes": 42,
+    "cards": 42,
+    "database": "collection.anki2",
+    "expected": "imported",
+    "remoteMediaOmitted": 25
+  },
+  {
+    "file": "tltaylor1/python.apkg",
+    "source": "https://raw.githubusercontent.com/tltaylor1/anki-decks/46c30a3c6ff5565edd7067bb344a0e8f50209f3d/python/python.apkg",
+    "repository": "https://github.com/tltaylor1/anki-decks",
+    "commit": "46c30a3c6ff5565edd7067bb344a0e8f50209f3d",
+    "license": "CC-BY-4.0",
+    "sha256": "7664df5a305a84224dcdcf8fb51da95815b0c1c0ff16ad3cd5b250bfa11efc54",
+    "notes": 127,
+    "cards": 127,
+    "database": "collection.anki21",
+    "expected": "imported",
+    "remoteMediaOmitted": 0
+  },
+  {
+    "file": "tltaylor1/bicep.apkg",
+    "source": "https://raw.githubusercontent.com/tltaylor1/anki-decks/46c30a3c6ff5565edd7067bb344a0e8f50209f3d/bicep/bicep.apkg",
+    "repository": "https://github.com/tltaylor1/anki-decks",
+    "commit": "46c30a3c6ff5565edd7067bb344a0e8f50209f3d",
+    "license": "CC-BY-4.0",
+    "sha256": "ede6bcd185e941bdc2dc374c425ff0724758d05858d8de388a1675ff323cd2bc",
+    "notes": 50,
+    "cards": 50,
+    "database": "collection.anki21",
+    "expected": "imported",
+    "remoteMediaOmitted": 0
+  }
+]

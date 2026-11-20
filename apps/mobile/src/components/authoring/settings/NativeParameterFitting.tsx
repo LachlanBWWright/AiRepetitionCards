@@ -58,12 +58,11 @@ export function NativeParameterFitting({
         {settings.weights ? "Personalized parameters selected" : "Default FSRS parameters selected"}
       </Text>
       <NativeButton
-        label={busy ? "Fitting parameters…" : "Fit parameters to my reviews"}
-        disabled={disabled || busy}
-        tone="soft"
+        label={busy ? "Fitting…" : "Fit parameters to my reviews"}
         onPress={fit}
+        disabled={disabled || busy}
       />
-      {busy && <NativeButton label="Cancel fitting" tone="soft" onPress={cancel} />}
+      {busy && <NativeButton label="Cancel fitting" variant="secondary" onPress={cancel} />}
       {message ? <Text accessibilityLiveRegion="polite">{message}</Text> : null}
       {proposal && (
         <Text>
@@ -82,7 +81,7 @@ export function NativeParameterFitting({
         <NativeButton
           label="Use proposed parameters on save"
           disabled={disabled}
-          tone="soft"
+          variant="default"
           onPress={() => {
             onChange({ ...settings, weights: proposal.weights });
             setProposal(null);
@@ -95,7 +94,7 @@ export function NativeParameterFitting({
         <NativeButton
           label="Use default parameters on save"
           disabled={disabled || busy}
-          tone="soft"
+          variant="default"
           onPress={() => {
             const defaults = { ...settings };
             delete defaults.weights;

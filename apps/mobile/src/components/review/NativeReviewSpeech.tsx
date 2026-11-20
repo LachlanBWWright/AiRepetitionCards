@@ -16,7 +16,7 @@ export function NativeReviewSpeech({
     <View className="my-2">
       <NativeButton
         label="Read aloud"
-        tone="soft"
+        variant="default"
         onPress={() => {
           void speech.speak();
         }}

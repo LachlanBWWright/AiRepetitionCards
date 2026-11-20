@@ -29,7 +29,7 @@ export function RecallDashboardDeviceSettingsDialog({
         <DailyReminderSettingsPanel desktop={isDesktopRuntime()} />
         <DialogFooter>
           <Button
-            variant="secondary"
+            variant="default"
             onClick={() => {
               setDeviceSettings(false);
             }}

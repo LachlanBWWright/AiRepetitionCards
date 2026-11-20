@@ -45,7 +45,7 @@ export function enforceChatGPTContextLimit(request: () => Promise<Response>) {
 export function readChatGPTTokenUsage(
   response: unknown,
   model: string,
-  countedInputTokens: number,
+  countedInputTokens: number | null = null,
 ) {
   const decoded = Schema.decodeUnknownEither(Usage)(response);
   const usage = Either.isRight(decoded) ? decoded.right.usage : undefined;

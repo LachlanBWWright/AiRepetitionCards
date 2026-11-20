@@ -1,3 +1,4 @@
+import { Alert, AlertDescription } from "@recall/ui-web/components/alert";
 import { useEffect, useRef, useState } from "react";
 import { Effect, Either } from "effect";
 import { Button } from "@recall/ui-web/components/button";
@@ -60,7 +61,7 @@ export function PronunciationRecorder({
     <div className="grid gap-2">
       <Button
         type="button"
-        variant="secondary"
+        variant="default"
         disabled={disabled || busy}
         onClick={() => {
           void toggle();
@@ -73,7 +74,7 @@ export function PronunciationRecorder({
           <audio controls src={url} aria-label="Pronunciation recording preview" />
           <Button
             type="button"
-            variant="secondary"
+            variant="default"
             disabled={disabled}
             onClick={() => {
               onAttach(draft);
@@ -95,7 +96,11 @@ export function PronunciationRecorder({
           </Button>
         </>
       )}
-      {error && <p role="status">{error}</p>}
+      {error && (
+        <Alert variant="destructive">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
       <p className="text-xs text-muted-foreground">
         Preview the recording, attach it, then save the card.
       </p>

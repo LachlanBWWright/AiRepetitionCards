@@ -34,18 +34,8 @@ export function NativeStudyMaterialsPanelPreview({
           </View>
         ))}
       </ScrollView>
-      <NativeButton
-        label="Keep material"
-        onPress={onImport}
-        className="py-[10px] px-[4px]"
-        labelClassName="text-recall-surface text-[12px] font-bold"
-      />
-      <NativeButton
-        label="Cancel"
-        onPress={onCancel}
-        className="py-[10px] px-[4px]"
-        labelClassName="text-recall-surface text-[12px] font-bold"
-      />
+      <NativeButton label="Keep material" onPress={onImport} />
+      <NativeButton variant="secondary" label="Cancel" onPress={onCancel} />
     </View>
   );
 }

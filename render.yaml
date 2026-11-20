@@ -1,0 +1,33 @@
+services:
+  - type: web
+    name: recall-api
+    runtime: docker
+    repo: https://github.com/LachlanBWWright/AiRepetitionCards
+    branch: main
+    rootDir: backend
+    dockerfilePath: ./Dockerfile
+    region: singapore
+    plan: free
+    autoDeployTrigger: off
+    healthCheckPath: /health
+    envVars:
+      - key: ASPNETCORE_ENVIRONMENT
+        value: Production
+      - key: RECALL_HTTP_LOGGING
+        value: "true"
+      - key: SUPABASE_URL
+        sync: false
+      - key: RECALL_WEB_ORIGIN
+        sync: false
+      - key: RECALL_PROXY_SECRET
+        sync: false
+      - key: SUPABASE_PUBLISHABLE_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: API_RATE_LIMIT_MODE
+        value: redis
+      - key: API_RATE_LIMIT_STORE_REST_URL
+        sync: false
+      - key: API_RATE_LIMIT_STORE_REST_TOKEN
+        sync: false

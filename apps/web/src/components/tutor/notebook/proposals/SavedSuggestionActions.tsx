@@ -33,7 +33,7 @@ export function SavedSuggestionActions({
               />
             ))}
           {onStartReview && (
-            <Button type="button" variant="primary" onClick={onStartReview}>
+            <Button type="button" variant="default" onClick={onStartReview}>
               Study saved cards
             </Button>
           )}
@@ -66,8 +66,8 @@ function RetryConfirmation({
 }) {
   return (
     <Button
-      variant="secondary"
-      size="small"
+      variant="default"
+      size="default"
       type="button"
       disabled={busy}
       onClick={() => {

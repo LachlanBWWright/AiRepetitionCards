@@ -76,7 +76,7 @@ export function NativeCramPractice({
       ) : (
         <Text>Practice complete.</Text>
       )}
-      <NativeButton tone="soft" label="Restart practice" onPress={restart} />
+      <NativeButton variant="default" label="Restart practice" onPress={restart} />
       <NativeButton label="Return to scheduled reviews" onPress={onExit} />
     </View>
   );

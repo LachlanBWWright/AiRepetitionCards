@@ -1,3 +1,4 @@
+import { TableCell } from "@recall/ui-web/components/table";
 import { Checkbox } from "@recall/ui-web/components/checkbox";
 
 type KnowledgeAreaCardLibrarySelectionCellProps = {
@@ -14,7 +15,7 @@ export function KnowledgeAreaCardLibrarySelectionCell({
   onChange,
 }: KnowledgeAreaCardLibrarySelectionCellProps) {
   return (
-    <td className="px-3 py-3">
+    <TableCell className="px-3 py-3">
       <Checkbox
         checked={selected}
         disabled={disabled}
@@ -23,6 +24,6 @@ export function KnowledgeAreaCardLibrarySelectionCell({
           onChange(checked === true);
         }}
       />
-    </td>
+    </TableCell>
   );
 }

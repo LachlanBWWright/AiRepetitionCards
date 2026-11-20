@@ -1,3 +1,4 @@
+import { searchCandidateRows } from "./search-candidates";
 import {
   createStudySearchIndex,
   normalizeSearchText,
@@ -144,8 +145,16 @@ export function searchStudyCards(
     const expression = field === "re" ? searchExpression(value) : undefined;
     if (expression) expressions.set(value, expression);
   }
+  const candidates = searchCandidateRows(parsed.right, index.postings);
+  const entries =
+    candidates === undefined
+      ? index.entries
+      : candidates.flatMap((row) => {
+          const entry = index.entries[row];
+          return entry ? [entry] : [];
+        });
   return Effect.succeed(
-    index.entries.filter(
+    entries.filter(
       (entry) =>
         (areaId === undefined || entry.area.id === areaId) &&
         matchesStudyQuery(parsed.right, (term) =>

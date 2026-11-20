@@ -8,7 +8,7 @@ export function NativeKnowledgeNotebookSettings({
 }: {
   readonly model: NativeNotebookModel;
 }) {
-  const { showSettings, busy, notebook, mounted, setNotice, clearNotebook } = model;
+  const { busy, notebook, mounted, setNotice, clearNotebook } = model;
   if (!notebook) return null;
   function exportNotebook() {
     if (!notebook) return;
@@ -22,25 +22,9 @@ export function NativeKnowledgeNotebookSettings({
     });
   }
   return (
-    <View className={showSettings ? "gap-[11px]" : "hidden"}>
-      <NativeButton
-        disabled={busy}
-        onPress={exportNotebook}
-        label="Export notebook"
-        className={
-          "min-h-[36px] justify-center items-center px-[10px] rounded-[10px] bg-transparent"
-        }
-        labelClassName="text-recall-darkGreen text-[11px] font-bold"
-      />
-      <NativeButton
-        disabled={busy}
-        onPress={clearNotebook}
-        label="Clear notebook"
-        className={
-          "min-h-[36px] justify-center items-center px-[10px] rounded-[10px] bg-transparent"
-        }
-        labelClassName="text-recall-darkGreen text-[11px] font-bold"
-      />
+    <View className="gap-4">
+      <NativeButton disabled={busy} onPress={exportNotebook} label="Export notebook" />
+      <NativeButton disabled={busy} onPress={clearNotebook} label="Clear notebook" />
     </View>
   );
 }

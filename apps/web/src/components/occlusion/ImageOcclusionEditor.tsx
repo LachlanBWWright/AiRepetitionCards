@@ -41,7 +41,7 @@ export function ImageOcclusionEditor({
         <Button
           key={shape}
           type="button"
-          variant="secondary"
+          variant="default"
           disabled={value.masks.length >= 100}
           onClick={() => {
             addMask(shape);
@@ -63,7 +63,7 @@ export function ImageOcclusionEditor({
       {!value ? (
         <Button
           type="button"
-          variant="secondary"
+          variant="default"
           onClick={() => {
             const image = images[0];
             if (!image) return;
@@ -138,7 +138,7 @@ export function ImageOcclusionEditor({
           <div className="flex flex-wrap gap-2">{addButtons}</div>
           <Button
             type="button"
-            variant="secondary"
+            variant="default"
             onClick={() => {
               onChange(undefined);
             }}

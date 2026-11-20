@@ -4,9 +4,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node scripts/run.mjs",
+    "test": "node --test scripts/build-tests.test.mjs && node scripts/run.mjs",
     "test:integration": "node scripts/run-integration.mjs",
     "test:local-integration": "node scripts/run-local-integration.mjs",
+    "benchmark:scheduler": "node scripts/run-scheduler-benchmark.mjs",
     "typecheck": "tsc --noEmit --project tsconfig.json",
     "test:code-runner": "node scripts/run-code-runner.mjs",
     "contracts:generate": "node scripts/run-contract-export.mjs",
@@ -28,6 +29,7 @@
     "fflate": "0.8.3",
     "@noble/hashes": "2.4.0",
     "@recall/local-store": "workspace:*",
-    "@recall/infra-rich-content": "workspace:*"
+    "@recall/infra-rich-content": "workspace:*",
+    "@recall/infra-supabase": "workspace:*"
   }
 }

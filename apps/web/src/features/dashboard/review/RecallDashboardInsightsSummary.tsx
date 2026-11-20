@@ -1,3 +1,9 @@
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@recall/ui-web/components/accordion";
 import { Button } from "@/components/ui/Button";
 import { Alert } from "@recall/ui-web/components/alert";
 import { RecallDashboardReviewHistory } from "@/features/dashboard/review/RecallDashboardReviewHistory";
@@ -46,7 +52,7 @@ function DeletedContentNotice({
     return null;
   return (
     <section
-      className="mt-6 grid gap-3 rounded-xl border border-[var(--line)] bg-[var(--surface)] p-6"
+      className="flex flex-col gap-4 rounded-xl border border-[var(--line)] bg-[var(--surface)] p-6"
       aria-labelledby="deleted-review-sync-title"
     >
       <h2 className="text-xl font-semibold" id="deleted-review-sync-title">
@@ -78,36 +84,20 @@ function DeletedContentNotice({
           cloud content to free capacity.
         </Alert>
       )}
-      <Button
-        variant="secondary"
-        className="inline-flex min-h-8 items-center rounded-md px-2 text-sm text-[var(--ink)] underline-offset-4 hover:bg-[var(--surface-hover)] hover:underline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
-        onClick={onExportSnapshot}
-      >
+      <Button variant="default" onClick={onExportSnapshot}>
         Export private recovery snapshot
       </Button>
       {missingDeletedReviewContent && (
-        <Button
-          variant="secondary"
-          className="inline-flex min-h-8 items-center rounded-md px-2 text-sm text-[var(--ink)] underline-offset-4 hover:bg-[var(--surface-hover)] hover:underline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
-          onClick={onOpenLibrary}
-        >
+        <Button variant="default" onClick={onOpenLibrary}>
           Open backup restore tools
         </Button>
       )}
       {deletedReviewProvisionCapacity && (
         <>
-          <Button
-            variant="secondary"
-            className="inline-flex min-h-8 items-center rounded-md px-2 text-sm text-[var(--ink)] underline-offset-4 hover:bg-[var(--surface-hover)] hover:underline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
-            onClick={onExportBackup}
-          >
+          <Button variant="default" onClick={onExportBackup}>
             Export private backup
           </Button>
-          <Button
-            variant="secondary"
-            className="inline-flex min-h-8 items-center rounded-md px-2 text-sm text-[var(--ink)] underline-offset-4 hover:bg-[var(--surface-hover)] hover:underline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
-            onClick={onOpenLibrary}
-          >
+          <Button variant="default" onClick={onOpenLibrary}>
             Open area library
           </Button>
         </>
@@ -150,23 +140,14 @@ export function RecallDashboardInsightsSummary({
   readonly totalReviewEvents: number;
 }) {
   return (
-    <>
-      <div className="mt-8 grid gap-3 rounded-xl border border-[var(--line)] bg-[var(--surface)] p-6 sm:grid-cols-2">
-        <div className="flex items-baseline gap-3 sm:col-span-2">
-          <strong className="text-3xl font-semibold">{totalReviews}</strong>
-          <span className="text-sm text-[var(--muted)]">reviews completed all time</span>
-        </div>
-        <p className="m-0 text-sm text-[var(--muted)]">
-          {dueCount} cards are ready across {areaCount} decks.
-        </p>
-        <p className="m-0 text-sm text-[var(--muted)]">
-          {studiedToday} today · {week.inWindow} in the last 7 calendar days
-        </p>
-        <p className="m-0 text-sm text-[var(--muted)] sm:col-span-2">
-          Last 7 days: {week.ratings.again} Again · {week.ratings.hard} Hard · {week.ratings.good}{" "}
-          Good · {week.ratings.easy} Easy
-        </p>
-      </div>
+    <section
+      className="flex w-full min-w-0 max-w-4xl flex-col gap-6"
+      aria-label="Workspace review summary"
+    >
+      <p className="text-sm text-[var(--muted)]">
+        Workspace totals: {totalReviews} reviews all time · {studiedToday} today · {week.inWindow}{" "}
+        in the last 7 days. {dueCount} cards ready across {areaCount} decks.
+      </p>
       <DeletedContentNotice
         retainedCards={retainedCards}
         deletedRetainedAreas={deletedRetainedAreas}
@@ -177,7 +158,18 @@ export function RecallDashboardInsightsSummary({
         onExportBackup={onExportBackup}
         onOpenLibrary={onOpenLibrary}
       />
-      <RecallDashboardReviewHistory events={reviewHistory} total={totalReviewEvents} />
-    </>
+      <Accordion type="single" collapsible>
+        <AccordionItem value="history">
+          <AccordionTrigger>Review history ({totalReviewEvents})</AccordionTrigger>
+          <AccordionContent>
+            <p className="text-sm text-[var(--muted)]">
+              Last 7 days: {week.ratings.again} Again · {week.ratings.hard} Hard ·{" "}
+              {week.ratings.good} Good · {week.ratings.easy} Easy
+            </p>
+            <RecallDashboardReviewHistory events={reviewHistory} total={totalReviewEvents} />
+          </AccordionContent>
+        </AccordionItem>
+      </Accordion>
+    </section>
   );
 }

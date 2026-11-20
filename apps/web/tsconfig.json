@@ -39,7 +39,8 @@
     "**/*.mts",
     "**/*.cts",
     ".storybook/**/*.ts",
-    ".storybook/**/*.tsx"
+    ".storybook/**/*.tsx",
+    "../../packages/ui-native/src/nativewind-env.d.ts"
   ],
   "exclude": ["node_modules", "public/app-shell"]
 }

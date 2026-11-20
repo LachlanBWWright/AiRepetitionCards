@@ -1,6 +1,9 @@
-import { Image, Platform, Text, View, type TextStyle } from "react-native";
+import { useFonts } from "expo-font";
+import geistFont from "../../../../assets/fonts/Geist-Regular.ttf";
+import { Image, Platform, ScrollView, Text, View, type TextStyle } from "react-native";
 import {
   cardAppearanceMetrics,
+  cardImageSize,
   parseRichContent,
   type RichInline,
   type RichBlock,
@@ -14,8 +17,9 @@ type InlineProps = {
   readonly mediaUrls: MediaUrls;
   readonly className: string;
   readonly style: TextStyle | undefined;
+  readonly imageSize: number;
 };
-function Inline({ item, mediaUrls, className, style }: InlineProps) {
+function Inline({ item, mediaUrls, className, style, imageSize }: InlineProps) {
   if (item.kind === "math")
     return <NativeCardEquation source={item.text} fontSize={style?.fontSize ?? 20} />;
   if (item.kind === "image") {
@@ -26,7 +30,8 @@ function Inline({ item, mediaUrls, className, style }: InlineProps) {
         accessibilityLabel={item.text || "Card image"}
         alt={item.text || "Card image"}
         resizeMode="contain"
-        className="w-full h-[220px] my-2"
+        className="w-full my-2"
+        style={{ height: imageSize }}
       />
     ) : (
       <Text className={className} style={style}>
@@ -52,11 +57,21 @@ function Block({
   block,
   mediaUrls,
   style,
+  imageSize,
 }: {
   readonly block: RichBlock;
   readonly mediaUrls: MediaUrls;
   readonly style: TextStyle | undefined;
+  readonly imageSize: number;
 }) {
+  if (block.kind === "code")
+    return (
+      <ScrollView horizontal className="my-3 rounded-lg bg-recall-surface p-3">
+        <Text className="font-mono text-recall-ink" selectable>
+          {block.content[0]?.text}
+        </Text>
+      </ScrollView>
+    );
   if (block.kind === "math")
     return (
       <NativeCardEquation
@@ -65,20 +80,36 @@ function Block({
         fontSize={style?.fontSize ?? 20}
       />
     );
-  const className = `text-recall-ink text-[20px] leading-[29px] ${block.kind === "heading" ? "font-bold" : block.kind === "quote" ? "italic" : ""}`;
-  return (
-    <View
-      className="flex-row flex-wrap items-center"
-      style={{ justifyContent: style?.textAlign === "center" ? "center" : "flex-start" }}
-    >
+  const className = `text-recall-ink ${style ? "" : "text-[20px] leading-[29px]"} ${block.kind === "heading" ? "font-bold" : block.kind === "quote" ? "italic" : ""}`;
+  const content = (
+    <>
       {(block.kind === "bullet" || block.kind === "number") && (
         <Text className={className} style={style}>
           {block.kind === "bullet" ? "• " : `${String(block.number)}. `}
         </Text>
       )}
       {block.content.map((item, index) => (
-        <Inline key={index} item={item} mediaUrls={mediaUrls} className={className} style={style} />
+        <Inline
+          key={index}
+          item={item}
+          mediaUrls={mediaUrls}
+          className={className}
+          style={style}
+          imageSize={imageSize}
+        />
       ))}
+    </>
+  );
+  return block.content.every((item) => item.kind !== "image" && item.kind !== "math") ? (
+    <Text className={className} style={style} selectable>
+      {content}
+    </Text>
+  ) : (
+    <View
+      className="flex-row flex-wrap items-center"
+      style={{ justifyContent: style?.textAlign === "center" ? "center" : "flex-start" }}
+    >
+      {content}
     </View>
   );
 }
@@ -86,25 +117,38 @@ export function NativeCardRichText({
   text,
   mediaUrls,
   appearance,
+  variant = "card",
 }: {
   readonly text: string;
+  readonly variant?: "card" | "body";
   readonly mediaUrls?: Readonly<Record<string, string>>;
   readonly appearance?: CardAppearance | undefined;
 }) {
+  const [fontsLoaded] = useFonts({ RecallGeist: geistFont });
   const style: TextStyle | undefined = appearance
     ? {
         ...cardAppearanceMetrics(appearance),
+        writingDirection:
+          appearance.direction === "rtl" ? "rtl" : appearance.direction === "ltr" ? "ltr" : "auto",
         fontFamily: {
-          sans: Platform.OS === "ios" ? "System" : "sans-serif",
+          sans: fontsLoaded ? "RecallGeist" : Platform.OS === "ios" ? "System" : "sans-serif",
           serif: Platform.OS === "ios" ? "Georgia" : "serif",
           mono: Platform.OS === "ios" ? "Menlo" : "monospace",
         }[appearance.font],
       }
-    : undefined;
+    : variant === "body"
+      ? { fontSize: 15, lineHeight: 24, textAlign: "left" }
+      : undefined;
   return (
     <View className="gap-1 my-3">
       {parseRichContent(text).map((block, index) => (
-        <Block key={index} block={block} mediaUrls={mediaUrls} style={style} />
+        <Block
+          key={index}
+          block={block}
+          mediaUrls={mediaUrls}
+          style={style}
+          imageSize={cardImageSize(appearance)}
+        />
       ))}
     </View>
   );

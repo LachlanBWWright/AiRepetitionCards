@@ -34,7 +34,7 @@ export function NativeDeepPracticeRecommendations({
           </Text>
           <NativeButton
             label="Start activity"
-            tone="soft"
+            variant="default"
             disabled={disabled}
             onPress={() => {
               onStart(recommendation.activity.areaId, recommendation.activity.id);

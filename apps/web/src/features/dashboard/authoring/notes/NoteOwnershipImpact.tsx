@@ -1,3 +1,4 @@
+import { Label } from "@recall/ui-web/components/label";
 import type { NoteAuthoringModel } from "@recall/react";
 import { Checkbox } from "@recall/ui-web/components/checkbox";
 export function NoteOwnershipImpact({ model }: { readonly model: NoteAuthoringModel }) {
@@ -15,7 +16,7 @@ export function NoteOwnershipImpact({ model }: { readonly model: NoteAuthoringMo
           ))}
         </div>
       ))}
-      <label className="flex items-center gap-2">
+      <Label className="flex items-center gap-2">
         <Checkbox
           checked={model.migration?.confirmLinkedSnapshots ?? false}
           onCheckedChange={(value) => {
@@ -23,7 +24,7 @@ export function NoteOwnershipImpact({ model }: { readonly model: NoteAuthoringMo
           }}
         />
         Replace these snapshots with this source note when saving
-      </label>
+      </Label>
     </div>
   );
 }

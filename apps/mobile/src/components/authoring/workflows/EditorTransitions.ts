@@ -100,6 +100,7 @@ export function createEditorTransitions(dependencies: Dependencies) {
         kind: card.cloze ? "cloze" : "basic",
         front: card.front,
         back: card.back,
+        explanation: card.explanation ?? "",
         ...(card.cloze ? { cloze: card.cloze } : {}),
         objectiveIds: card.objectiveIds ?? [],
         tags: card.tags ?? [],

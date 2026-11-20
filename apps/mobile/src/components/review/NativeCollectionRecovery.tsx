@@ -48,7 +48,7 @@ export function NativeCollectionRecovery({
       {recovery.canCheckStorage && (
         <NativeButton
           label="Check storage integrity"
-          tone="soft"
+          variant="default"
           disabled={recovery.busy}
           onPress={recovery.checkStorage}
         />
@@ -72,14 +72,14 @@ export function NativeCollectionRecovery({
       />
       <NativeButton
         label="Repair missing objective links"
-        tone="soft"
+        variant="default"
         disabled={!save || recovery.busy}
         onPress={recovery.repair}
       />
       {recovery.canPurge && (
         <NativeButton
           label="Empty file trash"
-          tone="soft"
+          variant="default"
           disabled={!workspace.mediaTrash?.length || recovery.busy}
           onPress={() => {
             Alert.alert(

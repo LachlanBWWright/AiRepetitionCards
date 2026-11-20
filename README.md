@@ -1,10 +1,17 @@
 # Recall
 
+For Vercel, Render, Supabase and Redis setup, see [free hosting](docs/free-hosting.md).
+
 Recall is a spaced-repetition learning app with web, Expo mobile and Electron desktop clients. All three share learning areas, card authoring, FSRS reviews, sync, AI tutoring with approved proposals, interchange and publishing; mobile and Electron also support local-only offline study.
 
 The [source layout guide](docs/source-layout.md) maps the feature folders, package entry points, and nested test suites.
 
 Web, Electron, and mobile share study-tool, activity, deck-update, and library-note workflows through `@recall/react`. Pure scheduling, settings drafts, search commands, and queue-aware subject selection live in `@recall/application`. Review-all navigation skips subjects with no eligible cards; presets copy the values currently shown in the settings draft.
+
+The workspace sync indicator distinguishes local saves, pending uploads, account confirmation,
+and conflicts or failures. Local-only devices remain usable without account services. See
+[daily-use acceptance](docs/daily-use-acceptance.md) for automated coverage and the signed-device
+release checks that remain separate.
 
 ## Run locally
 
@@ -45,6 +52,42 @@ local hash routes (`#/subjects?...`). Browser back/forward navigation preserves 
 selected subject and activity. Existing `/today`, `/library`, `/tutor` and practice
 links remain supported.
 
+## Conservative development tooling
+
+Root build, lint, typecheck and test commands share one heavy-tooling slot per checkout. Starting
+another root command waits for the current one; Turbo also runs one task at a time. Keep long-lived
+dev servers limited to the client you are using, and stop Storybook when finished. Direct package
+commands and manually launched tools bypass the shared slot, so avoid running full checks in
+parallel with them. These defaults trade throughput for lower peak RAM without skipping validation.
+
+Metro uses two workers for development and exports. Next uses two build workers and fully evicts
+persisted Turbopack development caches to disk. Storybook disables automatic prop extraction instead of loading another full TypeScript program
+or parsing React Native internals; explicit story controls remain and `pnpm typecheck` still checks
+all story types.
+Regression tests build batches of four files and run one test worker. Heavy commands may take longer.
+
+On Linux, run `pnpm tooling:memory` to list this checkout's Node processes with resident memory and
+swap. This excludes browsers and native compilers; RSS includes shared pages. Use `pnpm test:tooling`
+to verify independent root jobs serialize and nested commands reuse the existing slot. To deliberately
+use more Turbo concurrency, run a direct command such as `pnpm exec turbo run typecheck --concurrency=2`
+when enough memory is available. No global Node heap cap is imposed: lowering V8's heap alone would
+not bound Metro/Turbopack/native allocations and could make valid checks fail out of memory.
+
+## Study workflow improvements
+
+Subject pages offer **Browse cards** directly; web/Electron also support **B** to open
+Browse and **A** to add a card while not typing or using an overlay. Native card editing
+hides workspace creation and the card list while retaining the draft safeguards.
+Native review keeps management behind **Study tools**. Revealed answers retain their
+question context on every client. Space/Enter reveal first and select Good after reveal
+on web/Electron; 1–4 remain explicit ratings.
+
+**Study tools → Bury until tomorrow** defers one card or its shared-note siblings until
+the next configured study-day boundary. It does not grade the card or change its
+schedule. **Unbury cards** reverses manual burial early. These private preferences
+travel with backups and sync; update the backend and all clients together. Native
+hardware-keyboard review controls are not implemented; signed-device acceptance remains outstanding.
+
 ## Offline use and optional services
 
 Home combines the daily review queue and complete subject collection. **New subject**,
@@ -52,10 +95,14 @@ Home combines the daily review queue and complete subject collection. **New subj
 works across subjects. The list can be filtered by name and sorted by daily priority,
 name, recently studied, or due count. Daily priority puts scheduled reviews first,
 ordered by overdue urgency, followed by suggested follow-up work and caught-up subjects.
+Subject names in the home list appear as blue text controls across web, Electron, and mobile.
+Forms align their fields to a shared column. Modal actions fill the column on phones
+and fit their labels on desktop; library filters and publishing fields follow the
+same width conventions. See [UI controls](docs/ui-controls.md).
 The sidebar contains Home, subject shortcuts, and Account. Its logo opens Home, and
-sidebar collapse has its own control.
+sidebar collapse has its own control. Subject pages use a **Subjects** text link to return to the subject list. The collapsed sidebar uses a 64px icon rail with subject initials, tooltips, and accessible navigation labels. Full labels and sync details stay in the expanded sidebar; sync recovery continues running while collapsed.
 
-Each subject row offers **Review**, **Tutor**, and **Improve** directly. The subject name
+Each subject row offers **Review** when cards are due. The subject name
 opens **Overview**, with cards, materials, and subject-specific progress. A top-right
 activity selector switches between Overview, Review, Tutor, and Improve. Tutor provides
 an open conversation. Tutor and Improve use a full-height chat room with a scrolling transcript
@@ -65,8 +112,8 @@ to get an explanation and a card proposal. The agent probes practical experience
 uncertainty or gaps emerge. Proposed cards appear as compact previews with Add card, Edit,
 and Discard actions. Quiz answers and assessments are optional;
 chat requests are never graded automatically. Approve card proposals inline. Materials stay in Overview. Existing investigations resume in the
-conversation while that visit is open. Tutor and Improve start fresh each visit; chat
-transcripts and unapproved chat proposals stay in memory and are not restored. Approved
+conversation while that visit is open. Tutor conversations automatically save the latest 50 exchanges and draft on this device for the same subject and account/provider. There is no save toggle or research panel in the conversation. Saved tutor messages are private device data, excluded from sync, shared decks and workspace backups. Improve
+chat and unapproved proposals still stay in memory and start fresh each visit. Approved
 cards remain in the deck. Materials and saved notebook investigations retain their storage behavior.
 
 Create an empty subject with just a name, then add cards or materials, or start with AI.
@@ -79,9 +126,17 @@ the same subject-first activity structure using native controls.
 Review screens show session counts, remaining new/learning/review cards, rating guidance,
 and deterministic next-review previews using the current retention setting. Session
 counts are temporary; returning to the same subject retains the current session. Review history remains
-append-only. Empty decks, decks already caught up, and completed sessions have separate
+append-only. Review settings can change the local study-day start hour (0–23), learning
+look-ahead (0–60 minutes, only when no other cards are available), and whether future leeches
+stay flagged or are automatically suspended. Defaults preserve midnight rollover, no look-ahead
+and manual suspension. Undo reverses an automatic suspension unless a later manual decision
+has replaced it. Empty decks, decks already caught up, and completed sessions have separate
 messages. Completion shows this session’s recall results and the next scheduled review,
-with a shortcut to another due deck. Cards can become due again during a session.
+with a shortcut to another due deck. Cards can become due again during a session. **Help with this card** pauses review and
+opens explanation, ambiguity inspection, smaller-card suggestions and prerequisite suggestions.
+Suggestions are compared with the original and require approval. Splits retire the original to
+recoverable deleted cards and create fresh schedules; prerequisites leave the original unchanged.
+Failed saves retain suggestions, and intervening source edits reject stale approvals.
 
 Library shows a deck overview with due counts and next review dates. Card and deck
 editors retain incomplete drafts and confirm before discarding edits. Web drafts and
@@ -114,17 +169,28 @@ activity payloads, and rubrics are untrusted content. Provider results are valid
 remain proposals until accepted. Revising after feedback or revealing a reference records
 assistance. Uncertain or unavailable assessment preserves work without recording a failure.
 
-Coding exercises accept a synchronous JavaScript `solve` function and declarative JSON
-tests (`input` argument arrays and `expected` JSON values). **Run tests** executes only on
-the server, inside a read-only Docker container with no network, reduced privileges, memory,
-CPU, process, execution-time, and output limits. The trusted test harness remains outside
-the learner VM. Tests provide evidence for those cases, not a complexity proof. Build the
-runner image with `docker build -t recall-code-runner:1 apps/web/code-runner`; deployments
-need Docker and that image (override with `RECALL_CODE_IMAGE`). This runner supports only
-synchronous JavaScript and JSON inputs/outputs; it does not install dependencies, support
-other languages, or prove complexity. Hosted AI uses the API server's existing
-`OPENAI_API_KEY` and tutor model configuration. Runner and AI failures leave the response
-available for retry or self-assessment.
+Ordering, matching and code-tracing activities run locally, including offline. Linked
+activities can be launched inline during review; the card waits while you practice,
+and you explicitly choose its review rating afterward. Activity drafts and accepted
+attempts remain separate from review history.
+
+Custom Lua games render validated text and buttons through shared host controls.
+Scripts execute in isolated containers with bounded memory, instructions and time.
+Build `docker build -t recall-lua-runner:1 packages/infra-lua` on the API host
+(`RECALL_LUA_IMAGE` overrides the image). Execution requires authentication and
+connectivity; unavailable runtimes preserve drafts and show the authored fallback.
+See [interactive assessments](docs/interactive-assessments.md) for contracts and limits.
+
+Coding exercises accept synchronous JavaScript, Python and Rust `solve` functions and
+public declarative JSON tests. **Run** uses example tests when supplied; **Submit**
+uses the downloaded activity tests. Execution uses a shared server-side Docker runner
+with no network and bounded compilation, execution, memory, processes and output.
+Build `docker build -t recall-code-runner:2 apps/web/code-runner`; the execution host
+needs Docker and that local image (`RECALL_CODE_IMAGE` overrides it). See
+[code runner setup and limits](docs/code-runner.md) for language signatures and
+availability. Neither action changes scheduling or saves an accepted attempt.
+Hosted AI uses the API server's existing `OPENAI_API_KEY` and tutor model configuration.
+Runner and AI failures leave the response available for retry or self-assessment.
 
 Signed-in web activities persist in owner-scoped cloud storage. Native activities persist
 locally and **Synchronize activities** merges them with the account copy; hosted operations
@@ -223,17 +289,17 @@ areas. Restoring an active card preserves its schedule and reviews. Recovering a
 connected deletion creates a fresh copy to preserve sync deletion records. History and its
 attachments are included in private workspace backups, and are excluded from shared area files.
 
-Mobile and Electron support local authoring, study, attachments, imports, exports, backups and insights with device storage. The web app shell is available without authentication; card and study features require a reachable signed-in account and sync changes to the account service. It keeps a tab-memory working copy. Cloud publishing and hosted AI also require server configuration.
+Mobile and Electron support local authoring, study, attachments, imports, exports, backups and insights with device storage. Signed-in clients sync changes automatically in the background after edits, on return to the app, and during periodic refreshes. Normal sync has no button or success banner; account ownership and content conflicts still require review. The web app shell is available without authentication; card and study features require a reachable signed-in account and sync changes to the account service. It keeps a tab-memory working copy. Cloud publishing and hosted AI also require server configuration.
 
 The normal web build (`pnpm build`) includes its install manifest and cached application shell. The shell contains build-owned static assets only; reading or changing cards requires a reachable account server and workspace data is not cached for offline use. The same build also produces a static entry at `apps/web/public/index.html`; serving it requires an API proxy for account and study features. Hosted API and auth requests are served by the .NET 10 backend and can be routed through the Next.js same-origin proxy with `RECALL_API_URL`; see the [backend setup](backend/README.md).
 
 Desktop and mobile package their application code and SQLite storage, so local startup and learning operations need neither a Recall server nor a development server. Optional authentication and sync run independently from local startup. Being signed in does not make local study depend on the network.
 
-Electron and React Native keep Recall account sign-in optional and separate from AI provider access. On Electron, open **Account settings → AI connection** to connect ChatGPT without creating or signing in to a Recall account, even with an empty library. Recall sign-out leaves that connection intact; use the ChatGPT controls to disconnect AI access. Web study still requires a Recall account. React Native also exposes a separate ChatGPT connection in Account on native builds, using a device-local callback listener and protected credentials. Expo Go does not include this module.
+Electron and React Native keep Recall account sign-in optional and separate from AI provider access. On Electron, open **Account settings → AI connection** to connect ChatGPT without creating or signing in to a Recall account, even with an empty library. The desktop tutor shows a **Sign in with ChatGPT** button with the ChatGPT logo when disconnected or after a session expires; it reuses the saved account registration and opens browser sign-in directly. Recall sign-out leaves that connection intact; use the ChatGPT controls to disconnect AI access. Web study still requires a Recall account. React Native also exposes a separate ChatGPT connection in Account on native builds, using a device-local callback listener and protected credentials. Expo Go does not include this module.
 
 AI inference requires a network connection. Direct ChatGPT plan tutoring is enabled in desktop builds by default; no build flag or Recall account is required. OpenAI's documented local authorization flow requires a loopback HTTP listener; native mobile sign-in implements that callback directly rather than using a custom app redirect. Mobile tutoring also supports direct ChatGPT plan requests with on-device credentials and SQLite sessions. Choose ChatGPT plan or Recall hosted in Account → ChatGPT connection; hosted tutoring remains a separate Recall service and is never selected automatically after a ChatGPT failure. See [OpenAI's local sign-in flow](https://developers.openai.com/siwc/token-sharing-open-source/sign-in).
 
-With a ChatGPT account and model selected and plan tutoring enabled, the desktop Tutor also offers **Research a topic**. Enter a question to request OpenAI web search using that account's ChatGPT plan, without a Recall server or API key. Completed answers include clickable provider citations. Search availability depends on the selected model and account/workspace policy; unsupported requests show an explanation instead of switching to hosted billing. Research results are separate from the deck and quiz context and do not automatically create cards or change your learning material. See [documented plan capabilities](https://developers.openai.com/siwc/token-sharing-open-source/preview-limitations).
+Tutor opens directly into a conversation. Research controls and a separate search form are not shown in the chat.
 
 Desktop ChatGPT calls have no local daily, weekly, research or session request caps. Provider token counts are recorded when available without storing prompts or answers. ChatGPT's usage settings show the provider's usage and limits. See [local usage details](apps/desktop/README.md#local-budgets-and-usage-framework).
 
@@ -255,9 +321,9 @@ Browser study requires this account setup. Mobile and Electron can remain local-
 pnpm supabase:start
 ```
 
-Web account sign-in supports Apple and Google through Supabase OAuth, plus direct ChatGPT sign-in when its SIWC configuration is enabled. Configure Apple and Google OAuth credentials in Supabase and register Supabase Auth's callback URL with each provider. ChatGPT sign-in needs the SIWC client and durable identity store described in [ChatGPT sign-in setup](docs/sign-in-with-chatgpt.md). Password sign-in is not offered. See the [Google provider setup](https://supabase.com/docs/guides/auth/social-login/auth-google) and [Apple provider setup](https://supabase.com/docs/guides/auth/social-login/auth-apple).
+Recall account sign-in uses Google through Supabase OAuth on web, Electron and mobile. Enable Google in Supabase and register `https://<project-ref>.supabase.co/auth/v1/callback` on a Google OAuth **Web application** client. Allow the website's exact `/auth/confirm` callback and `recall://auth/confirm` in Supabase's redirect URLs. Native apps open the system browser and exchange the returned authorization code using PKCE; credentials stay in their existing secure stores. Email links, Apple and ChatGPT are not offered as Recall account sign-in methods. The separate native ChatGPT tutor connection remains available. See [Google sign-in setup](docs/google-sign-in.md).
 
-For local development, `pnpm dev:api:next` starts local Supabase automatically when no Supabase credentials are configured and Docker is available. Google OAuth is configured locally in `supabase/config.toml`; keep its client secret in the ignored root `.env` as `SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_SECRET`. Register `http://127.0.0.1:54321/auth/v1/callback` as an authorized redirect URI for the Google OAuth client, and `http://localhost:3000` as an authorized JavaScript origin. To manage Supabase separately, run `pnpm supabase:start`, copy its API URL and publishable key into `apps/web/.env.local` using [`apps/web/.env.example`](apps/web/.env.example) as a template, and then start the API with `dotnet run --project backend/Recall.Api --urls http://localhost:5000`. The ASP.NET process needs `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` in its own environment; `.env.backend.local` is the optional server-only configuration file.
+For local development, `pnpm dev:api:next` starts local Supabase automatically when no Supabase credentials are configured and Docker is available. Google OAuth is configured locally in `supabase/config.toml`; keep its client ID and secret in the ignored root `.env` as `SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID` and `SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_SECRET`. Register `http://127.0.0.1:54321/auth/v1/callback` as an authorized redirect URI for the Google OAuth client, and `http://localhost:3000` as an authorized JavaScript origin. To manage Supabase separately, run `pnpm supabase:start`, copy its API URL and publishable key into `apps/web/.env.local` using [`apps/web/.env.example`](apps/web/.env.example) as a template, and then start the API with `dotnet run --project backend/Recall.Api --urls http://localhost:5000`. The ASP.NET process needs `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` in its own environment; `.env.backend.local` is the optional server-only configuration file.
 
 For account deletion, also set `SUPABASE_SERVICE_ROLE_KEY` to the project's server-only service-role key. Never use this key in a `NEXT_PUBLIC_` variable or expose it to browser code. Deletion is disabled when this key is missing; the owner-scoped erasure function removes account records before the Supabase Auth Admin API removes the identity. Users must type `DELETE` to confirm. Web and Electron account controls support export and deletion. Device cleanup drains active storage writes, blocks further writes and stale workspace updates, and clears the local workspace, attachments, and tutor-session links. If cloud deletion succeeds but device cleanup fails, the device stays read-only and offers a cleanup retry. Clearing saved data reloads a fresh workspace only after all local cleanup succeeds.
 
@@ -299,7 +365,7 @@ Web and desktop JSON/CSV/TSV imports retain the parsed content for retry when sa
 
 Hosted AI can enforce optional daily admission budgets through durable Redis, with atomic in-flight reservations and verified usage settlement. See [daily budget configuration](docs/task-model-routing.md#daily-hosted-budgets). These conservative admission units do not promise an exact provider billing cap.
 
-Website sign-in keeps first-party session credentials in HttpOnly, SameSite=Lax cookies, with Secure cookies in production. The web and desktop Account menu opens separate Account settings and Device settings dialogs. Account settings contains data export, deletion, sign-out, and AI budget controls. Account controls read verified status from the server; signing out closes web study access, while mobile and Electron preserve offline study data. [Sign in with ChatGPT setup](docs/sign-in-with-chatgpt.md) includes the OpenAI client request and activation steps; eligible desktop distributions also support local ChatGPT plan tutoring.
+Website sign-in keeps first-party session credentials in HttpOnly, SameSite=Lax cookies, with Secure cookies in production. Web and Electron share shadcn controls for transfer options, expandable settings and history, activity selection, review tables, form labels and feedback, tooltips, and publishing dialogs. During review, **Help with this card** sits inside the card beside **Improve later**. The web and desktop Account menu includes Workspace insights for workspace data and review settings, Workspace backup, and separate Account settings and Device settings dialogs. Account settings contains data export, deletion, sign-out, and AI budget controls. Account controls read verified status from the server; signing out closes web study access, while mobile and Electron preserve offline study data. [Sign in with ChatGPT setup](docs/sign-in-with-chatgpt.md) includes the OpenAI client request and activation steps; eligible desktop distributions also support local ChatGPT plan tutoring.
 
 Set the issued token-endpoint authentication method explicitly; temporary sign-in outages offer retry or email recovery. Desktop ChatGPT credentials remain in the main process, and plan tutoring requires explicit consent.
 
@@ -466,14 +532,53 @@ No push server, Expo account or service credentials are needed.
 
 ## Storybook and screen captures
 
+The [frontend design review](docs/frontend-design-review.md) records the design
+direction, findings, changes across web/Electron and React Native, and preview
+limitations. Storybook loads the real local web fonts; native screen stories opt
+into NativeWind styling with `parameters.nativePreview`. Native notebook stories
+use a schema-validating in-memory storage adapter instead of device SQLite.
+The screenshot runner accepts `RECALL_STORYBOOK_URL` to reuse a built preview,
+`RECALL_SCREENSHOT_STORIES` for a comma-separated list of story IDs, and
+`RECALL_SCREENSHOT_GROUP` for a relative artifact folder.
+
 ```bash
 pnpm storybook
 pnpm screenshots
 ```
 
-Storybook contains full-screen dashboard stories for desktop and mobile, native mobile client stories rendered through React Native Web, a revealed answer, card media preview and attachment editor, caught-up state, Explore, area editing, Insights, a review-sync conflict, an empty library, AI tutor states, native account deletion confirmation, and publish/review-attribution flows. The component catalog includes package-owned buttons, dialogs, empty states, and status badges with disabled, pending, keyboard focus, error, and recovery mock states, plus study-card states. Stories use deterministic mock data. `pnpm screenshots` opens Storybook headlessly and writes full-page PNGs to [`artifacts/storybook-screenshots/`](artifacts/storybook-screenshots/).
+Storybook contains full-screen dashboard stories for desktop and mobile, native mobile client stories rendered through React Native Web, a revealed answer, card media preview and attachment editor, caught-up state, Explore, area editing, Insights, a review-sync conflict, an empty library, AI tutor states, native account deletion confirmation, and publish/review-attribution flows. The component catalog includes package-owned buttons, dialogs, empty states, and status badges with disabled, pending, keyboard focus, error, and recovery mock states, plus study-card states. Stories use deterministic mock data. `pnpm screenshots` opens Storybook headlessly and writes full-page PNGs at desktop and phone widths for every indexed story to [`artifacts/storybook-screenshots/`](artifacts/storybook-screenshots/). The accompanying `manifest.json` records viewport dimensions, horizontal overflow, and render errors. Native stories use React Native Web and do not replace device checks.
 
-`pnpm test` runs unit regression and seeded property checks. `pnpm test:local-integration`
+The card-help comparison uses `Knowledge/Review assistance` → `Dialog Preview`
+(Next.js/Electron shared UI) and `Native Preview` (the actual React Native component
+through React Native Web). Both use the same mocked tutor, deck, and append-only
+review history. Duplicate, failure, slow-response, and native read-only stories
+exercise approval and recovery. NativeWind JSX interop and scoped native utility
+styles are enabled for previews marked `data-native-preview`; this keeps the
+native reset overrides out of web stories.
+
+The manual add/edit card dialog uses up to 1120px on desktop, with question and
+answer editors side by side. Phones use one column with a fixed header and save
+actions while fields scroll. “Save card” is the primary create action; “Save & add another”
+keeps the editor open for batch entry, and Cancel is separated from the save actions
+on desktop. Optional explanations, tags/media, and presentation
+settings are expandable; collapsing a section retains its draft values. React
+Native keeps its inline editor and groups explanation, images/audio, and
+presentation settings into optional sections. `Library · add card on phone` and
+`Library · add card with media` preview the web layouts; `Screens/Native Workspace
+Authoring` → `New Card Draft` previews the native form.
+
+Card-help parity covers expandable current answers, rich explanations and proposed
+cards, duplicate consent, explicit approval/discard, pending-state guards, and
+success/error announcements. Opening help pauses reviews on both clients. The
+intentional presentation difference is a web/Electron dialog versus an inline
+native collapsible. Native device layout, screen-reader announcements, and keyboard
+behaviour still require iOS/Android verification; browser screenshots cannot prove
+those. Run `tests/e2e/review-help-parity.test.mjs` against Storybook to exercise both
+renderers with the same phone viewport and save separate screenshots.
+
+`pnpm test` runs unit regression and seeded property checks. Verification uses eight-file
+compilation batches, shared dependency chunks and at most two test workers to bound memory;
+esbuild exits before each batch executes. `pnpm test:local-integration`
 exercises persisted application journeys and real storage adapters with controlled local ports;
 neither starts a browser, app server or database service. `pnpm check:pure` includes both and
 the static gates. `pnpm test:e2e` builds and serves the offline web application and mock
@@ -486,6 +591,37 @@ requiring explicit disposable local credentials. See [verification setup and sco
 `pnpm check:static` composes source limits and their checker tests, source policy, types, zero-warning lint, formatting, all application builds and the Storybook build. CI also enforces the 400-line and eight-level indentation limits. It does not run browsers, database commands or application runtime tests. Full release acceptance still requires the report’s test and deployment gates.
 
 See the [implementation completion audit](docs/implementation-audit.md) for source evidence and the remaining verification, activation and release gates.
+
+## Anki migration and daily-use improvements
+
+Anki imports accept up to 2,000 media assets within the archive/expanded-byte budgets. Web and
+Electron show compatibility changes and bounded source/rendered-text comparisons before approval,
+with progress, pause, resume and cancellation. Keeping a private source package across restarts is
+explicitly opt-in; resuming after restart revalidates the source. Portable Recall decks now support
+100 MB archives/expanded content and up to 2,010 entries, so a media-heavy import can be exported
+again without the former 128-file bottleneck. [Migration details](docs/anki-interchange.md).
+
+Desktop/mobile SQLite saves update changed chunks atomically, while indexed card search narrows
+text candidates and reuses normalized content after review-only changes. Run the reproducible
+50,000-card benchmark in [collection storage](docs/collection-browser.md). Full snapshot reads and
+serialization remain proportional to collection size; these changes do not provide constant-memory
+opening or entity-level storage.
+
+The workload simulator follows configured study-day boundaries, sibling burying and reduced-load
+weekdays, with retention comparisons. An independently trained synthetic FSRS reference corpus checks
+holdout scoring; it does not establish population-wide optimizer equivalence. See
+[scheduler optimization](docs/scheduler-optimization.md).
+
+Authoring supports independent question/answer/explanation appearance, RTL/LTR direction, reusable
+layout presets, image sizing and bundled offline fonts. Web/Electron attachments can be cropped,
+resized or PCM-WAV-trimmed before explicitly attaching an edited copy; native clients render the
+resulting portable images/audio, while native crop/trim controls are not yet provided. See
+[note authoring](docs/note-authoring.md).
+
+Crash, upgrade and recovery acceptance exercise real SQLite adapters. Signed desktop builds can
+opt into guarded updates; signing, update hosting and physical-device release acceptance still
+require configured external environments. See [daily-use acceptance](docs/daily-use-acceptance.md)
+and [desktop releases](docs/desktop-release.md).
 
 ## Current scope
 
@@ -514,7 +650,7 @@ See the [implementation completion audit](docs/implementation-audit.md) for sour
 - Explicit learner approval durably saves the card locally before acknowledging the proposal. Retries reuse its identity and preserve existing edits, schedules and tutor provenance; save failures leave the proposal available.
 - Initial Supabase schema with private review history and owner-scoped row-level security
 - Responsive Today, Explore, and Insights views
-- Today counts reviews from the current local calendar day. Insights separates lifetime practice from the last seven calendar days and shows Again/Hard/Good/Easy counts from review history.
+- Today counts reviews from the current local study day, using the configured rollover hour. Insights separates lifetime practice from the last seven calendar days and shows Again/Hard/Good/Easy counts from review history.
 - Expo mobile client with SQLite workspace persistence, SecureStore email sessions, shared FSRS scheduling, offline review flow, and authenticated sync
 - Electron desktop client with shared study UI, sandboxed renderer, sender-validated IPC, main-process SQLite workspace persistence, OS encrypted email-link sessions, and a main-process bearer-token API proxy
 - Create, rename, recolor, and delete learning areas; deleted areas retain their append-only review history
@@ -523,7 +659,7 @@ See the [implementation completion audit](docs/implementation-audit.md) for sour
 - Study with Space/Enter to reveal and 1–4 for Again/Hard/Good/Easy; shortcuts pause in forms and dialogs
 - Set target retention between 70% and 97% in Insights. It applies to future reviews; each event records its pinned FSRS parameter set so sync can replay historical settings. Preferences stay private and are included in workspace backups.
 - Clock rollback and clock-skewed synced reviews preserve their recorded timestamps. FSRS uses a nondecreasing derived review time so live reviews, previews, and causal history replay cannot produce negative elapsed time.
-- Review settings now include a workspace-wide daily new-card budget (20 by default), backlog pauses, sibling burying, recall-based review ordering, and a configurable repeated-failure threshold (8 lapses by default). Due learning steps come first; established reviews remain visible when the new-card budget is exhausted. Study days use this device's local calendar.
+- Review settings now include a workspace-wide daily new-card budget (20 by default), backlog pauses, sibling burying, recall-based review ordering, and a configurable repeated-failure threshold (8 lapses by default). Due learning steps come first; established reviews remain visible when the new-card budget is exhausted. Study days use this device's local calendar and the configured start hour.
 - Study tools let you suspend/resume cards without deleting history and identify repeatedly failed cards for editing. **Extra practice** revisits a subject without changing due dates, consuming the daily new-card budget, or adding scheduler evidence. Forgotten practice cards return at the end.
 - **Personalized scheduling** offers experimental local parameter fitting after at least 100 interday review observations, using all available histories, with a configurable UTC cutoff and cancellable fitting. Earlier answers still establish memory state. Optional due-date recalculation appends scheduling adjustments when parameters change. Independent official FSRS fixtures validate replay and scoring; optimizer convergence equivalence is not established. See [scheduler optimization](docs/scheduler-optimization.md). A proposal must improve validation predictions and be selected and saved before it applies. This conservative fitter is distinct from Anki's optimizer. Historical fitted parameters travel with synced reviews so other clients can replay them; private study preferences, suspensions, collections, corrections and administrative changes synchronize through the authenticated backend with revision checks and explicit conflict resolution. See [the scheduling decision](docs/adr/0003-fsrs-retention-and-replay.md).
 - **Subject presets and groups** support inherited settings and parent introduction budgets. **Scheduling adjustments** configure learning/relearning steps, maximum intervals, new/review mixing, interval ordering, and reduced-load weekdays.
@@ -532,6 +668,7 @@ See the [implementation completion audit](docs/implementation-audit.md) for sour
 - **Workload simulator** estimates repeated reviews, failures, study time and backlog across retention targets and introduction/review limits. Experimental parameter fitting uses a temporal holdout, log loss, RMSE and calibration checks. See [study customization](docs/study-customization.md) for bounds and assumptions.
 - **Larger collections** support up to 50,000 cards and notes per subject within explicit byte budgets, paged browser rows, chunked local SQLite storage and batched sync. Study metadata transfers only new append-only entries through revision-fenced pages. See [collections and browser](docs/collection-browser.md).
 - **Detailed study statistics** show daily activity, measured review time, first-answer retention, due forecasts, memory distributions, and chart values, scoped to all subjects or a subject group. See [study customization](docs/study-customization.md) for usage, search syntax, and sync limitations.
+- **Card content** separates concise answers from optional explanations, worked examples and sources, expandable after revealing the answer. The equation composer offers inline/display TeX, examples, live preview and syntax feedback on web and mobile. Code blocks preserve literal math syntax, and nested TeX groups work inside cloze deletions. See [card content](docs/card-content.md).
 - **Shared notes and templates** provide on-demand card previews and generate related cards from custom fields, including reversed cards and nested cloze deletions. Editing a source regenerates siblings while preserving surviving identities and schedules. Templates can place new siblings in other subjects through canonical source notes and validated destination snapshots; moving cards preserves their identities, schedules and append-only review history. Ordinary cloze cards adopt this model automatically. Field migrations and note-type conversions preview removed data before confirmation. Sticky fields, selection-aware formatting, inline images, conditional templates, safe reusable appearance settings and offline TeX math rendering work across clients. See [note authoring](docs/note-authoring.md) and [rich content](docs/rich-content.md).
 - **Image occlusion** creates cards from rectangles, ellipses or polygons, with grouped masks and hide-one/hide-all review modes. Edit geometry against the source image; surviving questions retain review history.
 - **Subject hierarchy** supports parent study sessions and intersecting daily review caps, plus today-only overrides. Learning and relearning steps remain available when the established-card budget is exhausted.
@@ -593,8 +730,9 @@ Web and native synchronization now use a shared Effect coordinator and reconcili
 Cloud synchronization saves the verified canonical account identity before uploading content, media or reviews. Native workspaces bound to a different account stay available for offline study and export; starting a separate workspace requires explicitly clearing local data. Web workspaces require an account and start from the server snapshot. Sync requests carry the expected account identity so a sign-in change cannot redirect an upload to another account.
 
 Tutor and Improve use a compact chat composer with an in-chat desktop model selector
-and a context-window pie. Desktop chat checks the exact request input-token count
-before generation and rejects requests above 100,000 tokens. The pie shows measured
+and a context-window pie. ChatGPT chat sends directly to the supported generation endpoint;
+its credential cannot use the separate input-token counting endpoint. The pie uses
+100,000 tokens as a visual reference, not an enforced limit, and shows reported
 input usage for the latest request; its details include response tokens and reported
 cache reads/writes. Stable deck data and individual conversation messages retain
 separate boundaries for provider prompt caching. No saved chat transcript or local
@@ -606,3 +744,47 @@ shortcuts and custom instructions in one collapsible section, with suggested cha
 shown before they are applied.
 
 Local migration reconciliation, backup restore and authenticated study API acceptance are documented in [study release validation](docs/study-release-readiness.md).
+
+Workspace insights opens with review activity, recall success with its attempt count, and the next seven days of scheduled reviews. Subject and history filters apply to study statistics; forecasts use their own future window. Memory details, workload simulation, and web/Electron review history expand on demand. Simulator fields use stacked labels and consistent sizing. Electron shares the web view; mobile keeps its native chart selector and vertically stacked fields.
+
+Workspace backup has dedicated save and restore sections, separate from deck import/export. Backup and account settings dialogs share a consistent width and spacing; their primary fields and actions use aligned, full-width controls. Native keeps its shared 48px touch targets and stacked backup actions. Forms now use an 8/16/24px field, group, and section spacing rhythm, with capped widths and stacked mobile search results. Optional scan-import help uses the shared disclosure controls. Mobile subject filters fill the available width and subject actions align in equal columns. Browser geometry regressions for section gaps, form labels and action alignment run with `pnpm --filter web test:e2e spacing.test.mjs`.
+
+Button sizing and disclosure styling are owned by the shared UI packages. See
+[UI controls](docs/ui-controls.md) for sizes, variants, platform differences, and
+`pnpm check:ui-controls`, which inventories button purposes and rejects legacy variants, handrolled controls, and local styling drift. Ordinary buttons use solid primary (`default`) and red destructive (`destructive`) styles. Ghost buttons are limited to compact close icons and the AI usage indicator. Navigation uses ordinary text links. Short card-change explanations stay visible; duplicate finder opens a shared dialog.
+
+UI workflows keep daily review and subject navigation prominent. Secondary actions use quieter shared controls. Materials and review settings are split into task sections that retain unsaved drafts; publishing separates Publish and Receive. Card editor actions stay visible while the fields scroll.
+
+The web/Electron sidebar places the signed-out sync hint beneath Account. Storage and synchronization warnings remain separate and actionable. Native retains its dedicated Account screen.
+
+Review-card tools use aligned 40px web controls, 12px gaps and 16px separation from the card content. On phones, Help spans the first toolbar row; Improve later and the menu share the next row. Native keeps 48px touch targets and matching section spacing.
+
+Saved ChatGPT connections restore silently in the background when the web/Electron app shell starts. AI panels share account/model readiness; opening a panel does not reconnect or display a connection confirmation. Explicit sign-in still confirms success, and account changes invalidate cached readiness. Mobile already initializes saved ChatGPT accounts and models from its app base state.
+
+Card help preserves actionable provider and validation errors across web, Electron, and mobile. Failed requests leave the original card and review history unchanged; the error message identifies the recovery step instead of treating every failure as a connection problem.
+
+Managed AI is an explicit alternative to a user’s ChatGPT connection on web, Electron and native. The ASP.NET and Next.js API implementations support OpenAI and Anthropic deployments, account grants, atomic daily allowances, concurrency limits and provider-aware settlement. It is disabled by default and requires server credentials, the managed AI migration, deployment tariffs and operator grants. See [managed AI setup and accounting](docs/managed-ai-foundation.md). Research and tool-using agents remain on their existing paths; paid checkout is not included.
+
+New workspaces include licensed Python, Bicep and OO Design starter decks (183 cards total), with fresh schedules and attribution. Existing saved decks are preserved. See [starter deck sources](packages/application/src/workspace/starters/README.md). Anki imports retain text from decks with remote images/audio using visible placeholders and approval warnings; external media is never fetched automatically.
+
+Workspace insights groups memory summaries, card distributions and workload planning into separate disclosures. Secondary charts use compact, labelled data tables; desktop pairs related charts while mobile stacks them. Native retains its chart selector and uses the same contained disclosure styling.
+
+External AI handovers are available through **Use external AI** in a deck's library,
+Tutor, and Improve views on web, Electron, and mobile. Choose a task prompt, select
+cards and optional recent history, then copy or save context for any external agent.
+Paste its JSON proposal back to validate, inspect before/after changes, and approve
+an atomic deck/card update. No AI connection is required. See
+[external AI handovers](docs/external-agent-handover.md) for the format, safeguards,
+current card-type limits, and mobile rebuild requirement.
+
+Scheduled review keeps Undo visible and groups practice, scheduling and suspension
+under **Study tools** on web/Electron. The card header groups progress and help;
+long answers use a wider, left-aligned reading area, while authored appearance
+settings still take precedence. Recall ratings have equal visual weight and a
+separate footer. Native ratings use the same quieter hierarchy and retain their
+shared touch targets. Scheduling, interval previews and keyboard shortcuts are unchanged.
+
+Card help shows the current question, an expandable answer, four described help
+options, and a separate tutor-response section. Web/Electron use a responsive
+two-column dialog; native uses stacked options. The review pause and explicit
+approval of suggested card changes remain in place.

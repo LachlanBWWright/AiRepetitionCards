@@ -1,3 +1,4 @@
+import { Label } from "@recall/ui-web/components/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@recall/ui-web";
 import { Checkbox } from "@recall/ui-web/components/checkbox";
 
@@ -15,7 +16,7 @@ type Props = {
 export function KnowledgeAreaPublishingLicenseFields(props: Props) {
   return (
     <>
-      <label>
+      <Label>
         Difficulty (optional)
         <Select
           value={props.difficulty || "unspecified"}
@@ -35,8 +36,8 @@ export function KnowledgeAreaPublishingLicenseFields(props: Props) {
             <SelectItem value="advanced">Advanced</SelectItem>
           </SelectContent>
         </Select>
-      </label>
-      <label>
+      </Label>
+      <Label>
         License
         <Select value={props.license || "none"} onValueChange={props.onLicenseChange}>
           <SelectTrigger aria-label="License">
@@ -54,18 +55,20 @@ export function KnowledgeAreaPublishingLicenseFields(props: Props) {
             <SelectItem value="All rights reserved">All rights reserved</SelectItem>
           </SelectContent>
         </Select>
-      </label>
+      </Label>
       {props.needsReuseConfirmation && (
-        <label htmlFor="publication-reuse-confirmed">
+        <div className="flex items-start gap-3">
           <Checkbox
             id="publication-reuse-confirmed"
             checked={props.reuseConfirmed}
             onCheckedChange={(checked) => {
               props.onReuseConfirmedChange(checked === true);
             }}
-          />{" "}
-          I own this content or have permission to share it under the selected license.
-        </label>
+          />
+          <Label htmlFor="publication-reuse-confirmed" className="min-w-0 leading-relaxed">
+            I own this content or have permission to share it under the selected license.
+          </Label>
+        </div>
       )}
     </>
   );

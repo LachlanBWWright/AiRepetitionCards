@@ -73,7 +73,9 @@ export function RecallDashboardContentLayout({ model }: { readonly model: Recall
               <Button onClick={() => void retryDeletion()}>
                 {deletionButtonLabel(deletionRequest)}
               </Button>
-              <Button onClick={cancelDeletionRequest}>Cancel deletion request</Button>
+              <Button variant="secondary" onClick={cancelDeletionRequest}>
+                Cancel deletion request
+              </Button>
             </Alert>
           )}
 

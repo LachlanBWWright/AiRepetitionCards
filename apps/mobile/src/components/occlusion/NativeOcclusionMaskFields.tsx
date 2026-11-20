@@ -45,7 +45,7 @@ export function NativeOcclusionMaskFields({
         onChange({ ...mask, groupId: groupId || undefined });
       })}
       {mask.points.map((point, pointIndex) => (
-        <View key={pointIndex}>
+        <View key={pointIndex} className="gap-2">
           {(["x", "y"] as const).map((axis) => (
             <View key={axis}>
               {field(
@@ -60,7 +60,7 @@ export function NativeOcclusionMaskFields({
       {mask.shape === "polygon" && mask.points.length < 32 && (
         <NativeButton
           label="Add polygon vertex"
-          tone="soft"
+          variant="default"
           disabled={disabled}
           onPress={() => {
             onChange({ ...mask, points: [...mask.points, { x: 0.1, y: 0.5 }] });
@@ -70,7 +70,7 @@ export function NativeOcclusionMaskFields({
       {mask.shape === "polygon" && mask.points.length > 3 && (
         <NativeButton
           label="Remove last vertex"
-          tone="soft"
+          variant="default"
           disabled={disabled}
           onPress={() => {
             onChange({ ...mask, points: mask.points.slice(0, -1) });
@@ -79,7 +79,7 @@ export function NativeOcclusionMaskFields({
       )}
       <NativeButton
         label="Remove mask"
-        tone="soft"
+        variant="default"
         disabled={disabled || !canRemove}
         onPress={onRemove}
       />

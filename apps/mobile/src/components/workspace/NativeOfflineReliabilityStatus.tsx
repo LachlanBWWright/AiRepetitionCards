@@ -31,7 +31,7 @@ export function NativeOfflineReliabilityStatus({
         {label}
       </Text>
       {status !== "saved-locally" && status !== "synchronized" && onRetry && (
-        <NativeButton label="Retry sync" tone="soft" onPress={onRetry} />
+        <NativeButton label="Retry sync" variant="default" onPress={onRetry} />
       )}
     </View>
   );

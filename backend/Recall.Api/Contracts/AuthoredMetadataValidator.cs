@@ -13,7 +13,7 @@ public static partial class AuthoredMetadataValidator
         if (!document.TryGetProperty("cards", out var cards) || cards.ValueKind != JsonValueKind.Array) return false;
         foreach (var card in cards.EnumerateArray())
         {
-            if (card.ValueKind != JsonValueKind.Object || !OptionalText(card, "noteId") || !OptionalText(card, "templateId") ||
+            if (card.ValueKind != JsonValueKind.Object || !OptionalText(card, "noteId") || !OptionalText(card, "templateId") || !OptionalText(card, "explanation", 0, 10_000) ||
                 (card.TryGetProperty("presentation", out var presentation) && !ValidPresentation(presentation)) ||
                 (card.TryGetProperty("imageOcclusion", out var occlusion) && !ValidOcclusion(occlusion))) return false;
         }
@@ -31,6 +31,7 @@ public static partial class AuthoredMetadataValidator
     {
         if (presentation.ValueKind != JsonValueKind.Object) return false;
         if (presentation.TryGetProperty("appearance", out var appearance) && !ValidAppearance(appearance)) return false;
+        if (presentation.TryGetProperty("fieldAppearance", out var fields) && (fields.ValueKind != JsonValueKind.Object || new[] { "front", "back", "explanation" }.Any(field => fields.TryGetProperty(field, out var style) && !ValidAppearance(style)))) return false;
         if (presentation.TryGetProperty("typedAnswer", out var answer) && (answer.ValueKind != JsonValueKind.Object || !Boolean(answer, "enabled") || !Boolean(answer, "ignoreCase") || !Boolean(answer, "ignoreAccents"))) return false;
         if (!presentation.TryGetProperty("speech", out var speech)) return true;
         if (speech.ValueKind != JsonValueKind.Object) return false;
@@ -39,7 +40,7 @@ public static partial class AuthoredMetadataValidator
         return true;
     }
     private static bool Choice(JsonElement parent, string key, params string[] values) => parent.TryGetProperty(key, out var value) && value.ValueKind == JsonValueKind.String && values.Contains(value.GetString(), StringComparer.Ordinal);
-    private static bool ValidAppearance(JsonElement value) => value.ValueKind == JsonValueKind.Object && Choice(value, "font", "sans", "serif", "mono") && Choice(value, "size", "small", "medium", "large") && Choice(value, "align", "left", "center") && Choice(value, "lineSpacing", "compact", "comfortable");
+    private static bool ValidAppearance(JsonElement value) => value.ValueKind == JsonValueKind.Object && Choice(value, "font", "sans", "serif", "mono") && Choice(value, "size", "small", "medium", "large") && Choice(value, "align", "left", "center", "right") && Choice(value, "lineSpacing", "compact", "comfortable") && (!value.TryGetProperty("direction", out _) || Choice(value, "direction", "auto", "ltr", "rtl")) && (!value.TryGetProperty("imageSize", out _) || Choice(value, "imageSize", "small", "medium", "large"));
 
     public static void Normalize(JsonObject document, bool preservePrivate = false)
     {
@@ -77,21 +78,28 @@ public static partial class AuthoredMetadataValidator
         if (type["templates"] is JsonArray templates)
             foreach (var template in templates.OfType<JsonObject>())
             {
-                if (preservePrivate) Keep(template, "id", "name", "front", "back", "clozeField", "presentation", "deckAreaId");
-                else Keep(template, "id", "name", "front", "back", "clozeField", "presentation");
+                if (preservePrivate) Keep(template, "id", "name", "front", "back", "explanation", "clozeField", "presentation", "deckAreaId");
+                else Keep(template, "id", "name", "front", "back", "explanation", "clozeField", "presentation");
                 if (template["presentation"] is JsonObject presentation) NormalizePresentation(presentation);
             }
     }
     private static void NormalizePresentation(JsonObject presentation)
     {
-        Keep(presentation, "typedAnswer", "speech", "appearance");
-        if (presentation["appearance"] is JsonObject appearance) Keep(appearance, "font", "size", "align", "lineSpacing");
+        Keep(presentation, "typedAnswer", "speech", "appearance", "fieldAppearance");
+        if (presentation["appearance"] is JsonObject appearance) NormalizeAppearance(appearance);
+        if (presentation["fieldAppearance"] is JsonObject fields)
+        {
+            Keep(fields, "front", "back", "explanation");
+            foreach (var field in new[] { "front", "back", "explanation" })
+                if (fields[field] is JsonObject style) NormalizeAppearance(style);
+        }
         if (presentation["typedAnswer"] is JsonObject answer) Keep(answer, "enabled", "ignoreCase", "ignoreAccents");
         if (presentation["speech"] is not JsonObject speech) return;
         Keep(speech, "front", "back");
         foreach (var field in new[] { "front", "back" })
             if (speech[field] is JsonObject settings) Keep(settings, "language", "voice", "rate", "autoplay");
     }
+    private static void NormalizeAppearance(JsonObject appearance) => Keep(appearance, "font", "size", "align", "lineSpacing", "direction", "imageSize");
     private static void NormalizeMask(JsonObject mask)
     {
         Keep(mask, "id", "label", "groupId", "shape", "points");

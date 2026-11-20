@@ -1,3 +1,4 @@
+import { NativeCollapsible } from "@recall/ui-native";
 import { NativeButton } from "../ui/NativeButton";
 import { useState } from "react";
 import { Text, View } from "react-native";
@@ -69,22 +70,23 @@ function HistoryVersionRow({
         {version.area.title} · {new Date(version.recordedAt).toLocaleString()} · {version.reason}
         {exists ? "" : " · Deleted"}
       </Text>
-      <NativeButton
-        label={selected?.id === version.id ? "Hide version" : "Preview version"}
-        tone="soft"
+      <NativeCollapsible
+        open={selected?.id === version.id}
+        title="Preview version"
+        onToggle={toggleSelection}
         disabled={disabled}
-        onPress={toggleSelection}
-      />
-      {selected?.id === version.id && (
-        <HistoryVersionPreview
-          version={version}
-          current={current}
-          exists={exists}
-          restoresAsCopy={restoresAsCopy}
-          disabled={disabled}
-          onRestore={restore}
-        />
-      )}
+      >
+        {
+          <HistoryVersionPreview
+            version={version}
+            current={current}
+            exists={exists}
+            restoresAsCopy={restoresAsCopy}
+            disabled={disabled}
+            onRestore={restore}
+          />
+        }
+      </NativeCollapsible>
     </View>
   );
 }
@@ -127,7 +129,7 @@ function HistoryVersionPreview({
           stays saved.
         </Text>
       )}
-      <NativeButton label={label} tone="soft" disabled={disabled} onPress={onRestore} />
+      <NativeButton label={label} variant="default" disabled={disabled} onPress={onRestore} />
     </View>
   );
 }
@@ -189,7 +191,7 @@ export function NativeCardHistoryPanel({
       {versions.length > limit && (
         <NativeButton
           label="Show more versions"
-          tone="soft"
+          variant="default"
           onPress={() => {
             setLimit(limit + 20);
           }}

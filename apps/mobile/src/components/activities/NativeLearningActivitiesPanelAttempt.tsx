@@ -1,3 +1,10 @@
+import {
+  NativeInteractiveActivityWorkspace,
+  nativeInteractiveResponseReady,
+} from "./interactive/NativeInteractiveActivityWorkspace";
+import { NativeCodingActivityWorkspace } from "./coding/NativeCodingActivityWorkspace";
+import { LuaActivityWorkspace } from "./lua/LuaActivityWorkspace";
+import type { LuaRuntime } from "@recall/application";
 import type { ReactNode } from "react";
 import { Alert, Text, View } from "react-native";
 import { NativeTextField } from "@recall/ui-native";
@@ -13,6 +20,7 @@ export type NativeLearningActivityAttemptPanelProps = {
   readonly canAssessHosted: boolean;
   readonly locked: boolean;
   readonly customInteraction: ReactNode;
+  readonly luaRuntime?: LuaRuntime;
 };
 
 function SelfScoreButtons({
@@ -33,7 +41,7 @@ function SelfScoreButtons({
         <NativeButton
           key={score.value}
           label={`${model.response.selfScore === score.value ? "✓ " : ""}${score.label}`}
-          tone="soft"
+          variant="default"
           disabled={locked}
           onPress={() => {
             model.setResponse((current) => ({ ...current, selfScore: score.value }));
@@ -106,7 +114,23 @@ function FinalAssessmentControls({
   readonly locked: boolean;
 }) {
   const presentation = model.presentation;
-  if (!presentation || model.result) return null;
+  if (!presentation || model.result || model.activity?.pluginId === "recall.coding") return null;
+  if (model.activity?.pluginId === "recall.lua")
+    return (
+      <NativeButton
+        label="Request script assessment"
+        disabled={locked || !model.response.answers[0]}
+        onPress={model.assess}
+      />
+    );
+  if (presentation.interactive)
+    return (
+      <NativeButton
+        label="Check activity"
+        disabled={locked || !nativeInteractiveResponseReady(presentation, model.response)}
+        onPress={model.assess}
+      />
+    );
   const hasOptions = presentation.options.length > 0;
   return (
     <>
@@ -119,7 +143,7 @@ function FinalAssessmentControls({
           {presentation.reference && (
             <NativeButton
               label="Reveal reference (marks assistance)"
-              tone="soft"
+              variant="default"
               disabled={locked}
               onPress={model.reveal}
             />
@@ -151,7 +175,15 @@ function HostedAssessmentControls({
   readonly locked: boolean;
 }) {
   const presentation = model.presentation;
-  if (!presentation || !canAssessHosted || model.result) return null;
+  if (
+    !presentation ||
+    presentation.interactive ||
+    model.activity?.pluginId === "recall.coding" ||
+    model.activity?.pluginId === "recall.lua" ||
+    !canAssessHosted ||
+    model.result
+  )
+    return null;
   const ready =
     presentation.options.length === 0 && model.stage === presentation.prompts.length - 1;
   if (!ready) return null;
@@ -168,7 +200,7 @@ function HostedAssessmentControls({
       {canSuggestFollowUp && (
         <NativeButton
           label="Suggest AI follow-up"
-          tone="soft"
+          variant="default"
           disabled={locked || !answerReady}
           onPress={model.followUp}
         />
@@ -185,6 +217,7 @@ export function NativeLearningActivityAttemptPanel({
   canAssessHosted,
   locked,
   customInteraction,
+  luaRuntime,
 }: NativeLearningActivityAttemptPanelProps) {
   const promptRows =
     model.presentation?.prompts
@@ -197,7 +230,7 @@ export function NativeLearningActivityAttemptPanel({
       <NativeButton
         key={option.id}
         label={`${model.response.selectedOptionIds.includes(option.id) ? "✓ " : ""}${option.text}`}
-        tone="soft"
+        variant="default"
         disabled={locked || !!model.result}
         onPress={() => {
           model.choose(option.id);
@@ -221,7 +254,7 @@ export function NativeLearningActivityAttemptPanel({
       {model.activity && model.presentation && (
         <View className="gap-3 rounded-xl border border-recall-line p-3">
           <Text className="text-base font-bold">{model.activity.title}</Text>
-          {model.presentation.code && (
+          {model.presentation.code && model.activity.pluginId !== "recall.coding" && (
             <Text className="text-sm text-recall-muted">
               Write a JavaScript solve function and put any explanation in code comments.{" "}
               {hasServices
@@ -237,9 +270,43 @@ export function NativeLearningActivityAttemptPanel({
                 : "AI follow-ups and assessment require learning services."}
             </Text>
           )}
-          {customInteraction}
-          {!customInteraction && promptRows}
-          {!customInteraction && optionRows}
+          {model.activity.pluginId === "recall.coding" ? (
+            <NativeCodingActivityWorkspace model={model} disabled={locked} />
+          ) : model.activity.pluginId === "recall.lua" ? (
+            luaRuntime ? (
+              <LuaActivityWorkspace
+                activity={model.activity}
+                response={model.response}
+                runtime={luaRuntime}
+                disabled={locked || !!model.result}
+                onResponse={model.setResponse}
+              />
+            ) : (
+              <Text>
+                Script execution is unavailable. {model.activity.fallback} Your draft is preserved.
+              </Text>
+            )
+          ) : (
+            customInteraction
+          )}
+          {!customInteraction && model.presentation.interactive && (
+            <NativeInteractiveActivityWorkspace
+              presentation={model.presentation}
+              response={model.response}
+              disabled={locked || !!model.result}
+              onChange={model.setResponse}
+            />
+          )}
+          {!customInteraction &&
+            !model.presentation.interactive &&
+            model.activity.pluginId !== "recall.coding" &&
+            model.activity.pluginId !== "recall.lua" &&
+            promptRows}
+          {!customInteraction &&
+            !model.presentation.interactive &&
+            model.activity.pluginId !== "recall.coding" &&
+            model.activity.pluginId !== "recall.lua" &&
+            optionRows}
           <Text className="text-sm">Rubric: {model.presentation.rubric}</Text>
           {!model.result && model.stage < model.presentation.prompts.length - 1 ? (
             <NativeButton
@@ -267,7 +334,7 @@ export function NativeLearningActivityAttemptPanel({
               />
               <NativeButton
                 label="Dismiss follow-up"
-                tone="soft"
+                variant="default"
                 disabled={locked}
                 onPress={model.dismissQuestion}
               />
@@ -288,7 +355,7 @@ export function NativeLearningActivityAttemptPanel({
               />
               <NativeButton
                 label="Revise response"
-                tone="soft"
+                variant="default"
                 disabled={locked}
                 onPress={model.revise}
               />
@@ -296,7 +363,7 @@ export function NativeLearningActivityAttemptPanel({
           )}
           <NativeButton
             label="Save progress and close"
-            tone="soft"
+            variant="default"
             disabled={locked || !!model.result}
             onPress={model.keep}
           />
@@ -307,7 +374,7 @@ export function NativeLearningActivityAttemptPanel({
           )}
           <NativeButton
             label="Leave attempt"
-            tone="soft"
+            variant="default"
             disabled={locked}
             onPress={() => {
               Alert.alert("Leave this attempt?", leaveMessage, [

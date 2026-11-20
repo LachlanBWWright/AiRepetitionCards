@@ -1,3 +1,4 @@
+import { NativeCollapsible } from "@recall/ui-native";
 import { Pressable, Text, View } from "react-native";
 import { NativeButton } from "../../ui/NativeButton";
 import type { LearningArea } from "@recall/domain";
@@ -55,14 +56,13 @@ export function CardEditorDetails({
   }
   return (
     <>
-      <NativeButton
-        label={showCardDetails ? "Hide card details" : "Card details"}
-        tone="soft"
-        onPress={() => {
+      <NativeCollapsible
+        open={showCardDetails}
+        title="Card details"
+        onToggle={() => {
           setShowCardDetails((value) => !value);
         }}
-      />
-      {showCardDetails && (
+      >
         <View className="gap-[12px]">
           {field(
             "Card tags (comma separated)",
@@ -107,7 +107,7 @@ export function CardEditorDetails({
           {onPickAttachment && (
             <NativeButton
               label={picking ? "Choosing attachment…" : "Add image or audio"}
-              tone="soft"
+              variant="default"
               disabled={locked || editor.content.media.length >= 20}
               onPress={() => {
                 void pickAttachment();
@@ -115,7 +115,7 @@ export function CardEditorDetails({
             />
           )}
         </View>
-      )}
+      </NativeCollapsible>
     </>
   );
 }
@@ -136,7 +136,7 @@ function AttachmentRow({
       </Text>
       <NativeButton
         label="Remove attachment"
-        tone="soft"
+        variant="default"
         disabled={locked}
         onPress={() => {
           onRemove(attachment.id);

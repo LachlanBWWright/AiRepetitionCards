@@ -1,3 +1,4 @@
+import { Tooltip, TooltipContent, TooltipTrigger } from "@recall/ui-web/components/tooltip";
 import { useMemo } from "react";
 import { Either } from "effect";
 import { renderCardMath } from "@recall/infra-rich-content";
@@ -36,6 +37,13 @@ export function CardEquation({
       </svg>
     </span>
   ) : (
-    <code title={result.left.message}>{source}</code>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <code tabIndex={0} aria-label={`Invalid equation: ${source}`}>
+          {source}
+        </code>
+      </TooltipTrigger>
+      <TooltipContent>{result.left.message}</TooltipContent>
+    </Tooltip>
   );
 }

@@ -1,7 +1,7 @@
 import { Effect, Either } from "effect";
 import type { SchedulerPolicy, SchedulerSettings, Workspace } from "@recall/domain";
 import { presetReviewWorkspace, renameStudyPreset, removeStudyPreset } from "@recall/application";
-import { Input } from "@recall/ui-web";
+import { Input, FieldLabel } from "@recall/ui-web";
 import { Button } from "@/components/ui/Button";
 import { StudyPolicyFields } from "./StudyPolicyFields";
 import { AdvancedSchedulingFields } from "./AdvancedSchedulingFields";
@@ -27,8 +27,8 @@ export function StudyPresetPolicyEditor({
     selected.id,
   );
   return (
-    <div className="grid gap-3 border-l-2 pl-4">
-      <label>
+    <div className="flex flex-col gap-4 border-l-2 pl-4">
+      <FieldLabel className="flex min-w-0 flex-col gap-2">
         Preset name
         <Input
           value={selected.name}
@@ -36,8 +36,8 @@ export function StudyPresetPolicyEditor({
             onChange(renameStudyPreset(settings, selected.id, event.target.value));
           }}
         />
-      </label>
-      <label>
+      </FieldLabel>
+      <FieldLabel className="flex min-w-0 flex-col gap-2">
         Target retention (%)
         <Input
           type="number"
@@ -53,7 +53,7 @@ export function StudyPresetPolicyEditor({
             });
           }}
         />
-      </label>
+      </FieldLabel>
       <StudyPolicyFields
         showTodayLimits={false}
         settings={selected.settings}
@@ -72,7 +72,7 @@ export function StudyPresetPolicyEditor({
       />
       <Button
         type="button"
-        variant="secondary"
+        variant="default"
         disabled={Object.values(settings.areaPresets ?? {}).includes(selected.id)}
         onClick={() => {
           const next = Effect.runSync(Effect.either(removeStudyPreset(settings, selected.id)));

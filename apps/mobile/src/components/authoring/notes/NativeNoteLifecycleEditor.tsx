@@ -29,7 +29,7 @@ export function NativeNoteLifecycleEditor({
           <View className="flex-row flex-wrap gap-2">
             <NativeButton
               label="Rename"
-              tone="soft"
+              variant="default"
               disabled={
                 disabled ||
                 !names[field.name] ||
@@ -44,7 +44,7 @@ export function NativeNoteLifecycleEditor({
             />
             <NativeButton
               label="Move up"
-              tone="soft"
+              variant="default"
               disabled={disabled || index === 0}
               onPress={() => {
                 model.moveField(field.name, -1);
@@ -52,7 +52,7 @@ export function NativeNoteLifecycleEditor({
             />
             <NativeButton
               label="Move down"
-              tone="soft"
+              variant="default"
               disabled={disabled || index === model.type.fields.length - 1}
               onPress={() => {
                 model.moveField(field.name, 1);
@@ -60,7 +60,7 @@ export function NativeNoteLifecycleEditor({
             />
             <NativeButton
               label={`Remove ${field.name}`}
-              tone="soft"
+              variant="default"
               disabled={disabled || model.type.fields.length === 1}
               onPress={() => {
                 model.removeField(field.name);
@@ -76,7 +76,7 @@ export function NativeNoteLifecycleEditor({
             <NativeButton
               key={type.id}
               label={type.name}
-              tone="soft"
+              variant="default"
               selected={model.type.id === type.id}
               disabled={disabled}
               onPress={() => {
@@ -129,7 +129,7 @@ export function NativeNoteLifecycleImpact({
       ))}
       <NativeButton
         label={`${model.migration?.confirmRemoval ? "✓ " : ""}Apply these removals when saving`}
-        tone="soft"
+        variant="default"
         disabled={disabled}
         onPress={() => {
           model.confirmRemoval(!model.migration?.confirmRemoval);
@@ -159,7 +159,7 @@ function NativeSourceChoice({
         <NativeButton
           key={source.id}
           label={source.name}
-          tone="soft"
+          variant="default"
           selected={value === source.id}
           disabled={disabled}
           onPress={() => {

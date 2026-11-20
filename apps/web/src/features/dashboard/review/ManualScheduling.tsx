@@ -1,5 +1,7 @@
+import { FieldDescription, FieldError } from "@recall/ui-web/components/field";
+import { Label } from "@recall/ui-web/components/label";
 import { useManualScheduling } from "@recall/react";
-import { useState } from "react";
+import { useId, useState } from "react";
 import { Effect, Either } from "effect";
 import type { LearningArea, Workspace } from "@recall/domain";
 import { CARD_SEARCH_HELP } from "@recall/application";
@@ -28,6 +30,7 @@ export function ManualScheduling({
   readonly save: SaveStudyCommand;
   readonly now: number;
 }) {
+  const queryErrorId = useId();
   const [confirm, setConfirm] = useState(false);
   const {
     query,
@@ -59,9 +62,11 @@ export function ManualScheduling({
         Adjust matching cards in {area.title}. These actions are administrative changes and never
         count as answers.
       </p>
-      <label>
+      <Label className="grid gap-2">
         Find cards to change
         <Input
+          aria-invalid={Either.isLeft(matches)}
+          aria-describedby={Either.isLeft(matches) ? queryErrorId : undefined}
           value={query}
           maxLength={500}
           onChange={(event) => {
@@ -69,10 +74,10 @@ export function ManualScheduling({
           }}
           placeholder="is:new or tag:exam"
         />
-      </label>
-      <p className="text-sm text-muted-foreground">{CARD_SEARCH_HELP}</p>
+      </Label>
+      <FieldDescription>{CARD_SEARCH_HELP}</FieldDescription>
       {Either.isLeft(matches) ? (
-        <p role="alert">{matches.left.message}</p>
+        <FieldError id={queryErrorId}>{matches.left.message}</FieldError>
       ) : (
         <p role="status">
           {cards.length} cards will be affected:{" "}
@@ -83,7 +88,7 @@ export function ManualScheduling({
           {cards.length > 3 ? "; …" : ""}
         </p>
       )}
-      <label>
+      <Label className="grid gap-2">
         New due date (this device’s local time)
         <Input
           type="datetime-local"
@@ -92,9 +97,9 @@ export function ManualScheduling({
             setDue(event.target.value);
           }}
         />
-      </label>
+      </Label>
       <Button
-        variant="secondary"
+        variant="default"
         disabled={controls.busy || !cards.length || !due}
         onClick={() => {
           apply("due");
@@ -102,7 +107,7 @@ export function ManualScheduling({
       >
         Set due date for {cards.length} cards
       </Button>
-      <label>
+      <Label className="grid gap-2">
         Starting new-card position
         <Input
           type="number"
@@ -113,9 +118,9 @@ export function ManualScheduling({
             setPosition(event.target.value);
           }}
         />
-      </label>
+      </Label>
       <Button
-        variant="secondary"
+        variant="default"
         disabled={controls.busy || !cards.length || cards.some((card) => card.schedule.state !== 0)}
         onClick={() => {
           apply("reposition");
@@ -124,7 +129,7 @@ export function ManualScheduling({
         Reposition matching new cards
       </Button>
       <Button
-        variant="secondary"
+        variant="default"
         disabled={controls.busy || !cards.length}
         onClick={() => {
           setConfirm(true);
@@ -144,6 +149,7 @@ export function ManualScheduling({
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
+              variant="destructive"
               onClick={() => {
                 apply("reset");
               }}

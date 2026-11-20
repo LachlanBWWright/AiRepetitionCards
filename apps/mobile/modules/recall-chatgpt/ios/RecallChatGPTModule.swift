@@ -23,6 +23,7 @@ public class RecallChatGPTModule: Module {
     let id: String
     let state: String
     let listener: NWListener
+    let pages: ChatGPTCallbackPages
     var port: UInt16?
     var start: Promise?
     var awaiting = false
@@ -56,7 +57,7 @@ public class RecallChatGPTModule: Module {
         presenter.present(browser, animated: true) { promise.resolve(["ok": true]) }
       }
     }.runOnQueue(queue)
-    AsyncFunction("start") { (state: String, promise: Promise) in self.start(state, promise) }.runOnQueue(queue)
+    AsyncFunction("start") { (state: String, pages: String, promise: Promise) in self.start(state, pages, promise) }.runOnQueue(queue)
     AsyncFunction("callback") { (id: String, promise: Promise) in
       guard self.active?.id == id, self.active?.awaiting == false else { promise.resolve(self.failure("cancelled")); return }
       self.active?.awaiting = true
@@ -89,14 +90,15 @@ public class RecallChatGPTModule: Module {
     session.start?.resolve(failure("cancelled"))
     session.callback?.resolve(failure("cancelled"))
   }
-  private func start(_ state: String, _ promise: Promise) {
+  private func start(_ state: String, _ pagesJson: String, _ promise: Promise) {
     guard state.range(of: "^[A-Za-z0-9_-]{43,128}$", options: .regularExpression) != nil else { promise.resolve(failure("invalid-state")); return }
+    guard let pages = ChatGPTCallbackPages(pagesJson) else { promise.resolve(failure("invalid-callback-pages")); return }
     guard active == nil else { promise.resolve(failure("sign-in-in-progress")); return }
     let parameters = NWParameters.tcp
     parameters.requiredLocalEndpoint = .hostPort(host: "127.0.0.1", port: .any)
     guard let listener = try? NWListener(using: parameters) else { promise.resolve(failure("callback-listener-unavailable")); return }
     let id = UUID().uuidString
-    active = Session(id: id, state: state, listener: listener, start: promise)
+    active = Session(id: id, state: state, listener: listener, pages: pages, start: promise)
     // If the user leaves Recall during sign-in, use only the OS's bounded grace
     // period. Normal sign-in stays foregrounded in a system Safari sheet.
     DispatchQueue.main.async { [weak self] in
@@ -151,8 +153,8 @@ public class RecallChatGPTModule: Module {
       let states = url?.queryItems?.filter { $0.name == "state" } ?? []
       let valid = parts.count == 3 && parts[0] == "GET" && parts[2] == "HTTP/1.1" && target.hasPrefix("/") && !target.hasPrefix("//") &&
         url?.host == "127.0.0.1" && url?.path == "/auth/callback" && url?.fragment == nil && states.count == 1 && states.first?.value == self.active?.state && self.active?.result == nil
-      let body = valid ? "Return to Recall to finish connecting ChatGPT." : "Invalid sign-in callback."
-      let response = "HTTP/1.1 \(valid ? "200 OK" : "400 Bad Request")\r\nContent-Type: text/plain; charset=utf-8\r\nCache-Control: no-store\r\nContent-Security-Policy: default-src 'none'\r\nConnection: close\r\nContent-Length: \(body.utf8.count)\r\n\r\n\(body)"
+      let errors = url?.queryItems?.filter { $0.name == "error" }.map { $0.value ?? "" } ?? []
+      guard let response = self.active?.pages.response(valid: valid, errors: errors) else { self.release(connection); return }
       if valid, let port = self.active?.port {
         let result: [String: Any] = ["ok": true, "url": "http://127.0.0.1:\(port)\(target)"]
         self.active?.result = result

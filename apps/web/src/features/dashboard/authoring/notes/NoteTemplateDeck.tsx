@@ -1,3 +1,4 @@
+import { Label } from "@recall/ui-web/components/label";
 import type { NoteAuthoringModel } from "@recall/react";
 import {
   Select,
@@ -15,7 +16,7 @@ export function NoteTemplateDeck({
 }) {
   const template = model.type.templates.find((item) => item.id === templateId);
   return (
-    <label className="grid gap-1 text-sm">
+    <Label className="grid gap-2 text-sm">
       Card subject
       <Select
         value={template?.deckAreaId ?? model.area.id}
@@ -27,7 +28,7 @@ export function NoteTemplateDeck({
             });
         }}
       >
-        <SelectTrigger aria-label="Card subject">
+        <SelectTrigger className="w-full" aria-label="Card subject">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
@@ -38,6 +39,6 @@ export function NoteTemplateDeck({
           ))}
         </SelectContent>
       </Select>
-    </label>
+    </Label>
   );
 }

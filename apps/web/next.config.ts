@@ -54,6 +54,11 @@ function shellPolicy() {
 
 const nextConfig: NextConfig = {
   typedRoutes: true,
+  experimental: {
+    cpus: 2,
+    turbopackFileSystemCacheForDev: true,
+    turbopackMemoryEviction: "full",
+  },
   output: "standalone",
   outputFileTracingRoot: fileURLToPath(new URL("../../", import.meta.url)),
   transpilePackages: ["@recall/ui-web", "@recall/react"],

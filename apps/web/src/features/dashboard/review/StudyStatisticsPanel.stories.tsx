@@ -45,3 +45,19 @@ type Story = StoryObj<typeof meta>;
 export const Default: Story = {};
 
 export const NewCollection: Story = { args: { workspace: mockWorkspace } };
+
+export const EmptyHistory: Story = {
+  args: { workspace: { ...mockWorkspace, reviewEvents: [] } },
+};
+
+export const LongSubjectNames: Story = {
+  args: {
+    workspace: {
+      ...mockWorkspace,
+      areas: mockWorkspace.areas.map((area) => ({
+        ...area,
+        title: `${area.title}: foundational concepts and extended practice`,
+      })),
+    },
+  },
+};

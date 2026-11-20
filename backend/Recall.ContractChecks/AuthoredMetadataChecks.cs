@@ -19,6 +19,20 @@ internal static class AuthoredMetadataChecks
         void Check(bool valid, string message) { if (!valid) failures.Add(message); }
         bool Valid(JsonObject value) => AuthoredMetadataValidator.Validate(JsonSerializer.SerializeToElement(value));
         Check(Valid(document), "Authored note/presentation/occlusion metadata should be accepted.");
+        document["cards"]![0]!["explanation"] = "A separate worked example.";
+        document["noteLibrary"]!["types"]![0]!["templates"]![0]!["explanation"] = "Why this is correct.";
+        Check(Valid(document), "Optional card and template explanations should validate.");
+        var longExplanation = (JsonObject)document.DeepClone();
+        longExplanation["cards"]![0]!["explanation"] = new string('x', 10_001);
+        Check(!Valid(longExplanation), "Oversized supporting content must be rejected.");
+        Check(AuthoredMetadataValidator.ValidCloze(@"Compute {{c1::\(\frac{a}{\frac{b}{c}}\)::fraction}}.", 1), "TeX groups must not terminate cloze deletions.");
+        var styled = (JsonObject)document.DeepClone();
+        styled["cards"]![0]!["presentation"]!["fieldAppearance"] = JsonNode.Parse("""{"back":{"font":"sans","size":"large","align":"right","lineSpacing":"comfortable","direction":"rtl","imageSize":"large","css":"unsafe"}}""");
+        Check(Valid(styled), "Per-field RTL appearance should validate.");
+        AuthoredMetadataValidator.Normalize(styled);
+        Check(styled["cards"]![0]!["presentation"]!["fieldAppearance"]!["back"]!["direction"]!.GetValue<string>() == "rtl" && styled["cards"]![0]!["presentation"]!["fieldAppearance"]!["back"]!["css"] is null, "Field styles must survive normalization without arbitrary CSS.");
+        styled["cards"]![0]!["presentation"]!["fieldAppearance"]!["back"]!["direction"] = "evil";
+        Check(!Valid(styled), "Invalid field direction must be rejected.");
         var invalid = (JsonObject)document.DeepClone();
         invalid["cards"]![0]!["presentation"]!["appearance"]!["font"] = "url(evil)";
         Check(!Valid(invalid), "Appearance values must use the safe declarative vocabulary.");
@@ -63,7 +77,7 @@ internal static class AuthoredMetadataChecks
         var syncType = typeof(PublishingEndpoints).Assembly.GetType("Recall.Api.Features.Sync.SyncHandlers");
         var normalizeSync = syncType?.GetMethod("NormalizeWorkspaceDocument", BindingFlags.NonPublic | BindingFlags.Static);
         var syncDocument = normalizeSync?.Invoke(null, [document]) as JsonObject;
-        Check(syncDocument is not null && syncDocument["noteLibrary"] is JsonObject && syncDocument["cards"]![0]!["presentation"] is JsonObject && syncDocument["cards"]![0]!["imageOcclusion"] is JsonObject && Valid(syncDocument), "Private workspace normalization must retain and validate all authored metadata.");
+        Check(syncDocument is not null && syncDocument["cards"]![0]!["explanation"]?.GetValue<string>() == "A separate worked example." && syncDocument["noteLibrary"] is JsonObject && syncDocument["cards"]![0]!["presentation"] is JsonObject && syncDocument["cards"]![0]!["imageOcclusion"] is JsonObject && Valid(syncDocument), "Private workspace normalization must retain and validate all authored metadata.");
         var linked = (JsonObject)document.DeepClone();
         linked["noteLibrary"]!["notes"]![0]!["source"] = new JsonObject { ["areaId"] = "private-owner", ["noteId"] = "original-note", ["revision"] = new string('a', 64) };
         linked["noteLibrary"]!["types"]![0]!["templates"]![0]!["deckAreaId"] = "private-destination";

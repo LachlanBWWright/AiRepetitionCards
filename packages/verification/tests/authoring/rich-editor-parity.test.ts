@@ -3,6 +3,9 @@ import test from "node:test";
 import { Effect, Either } from "effect";
 import {
   BASIC_NOTE_TYPE,
+  cardFieldAppearance,
+  cardImageSize,
+  CARD_LAYOUT_PRESETS,
   formatRichSelection,
   insertRichText,
   parseRichContent,
@@ -140,4 +143,45 @@ void test("untrusted TeX cannot load extensions or create links and parser state
     assert.ok(Either.isLeft(renderCardMath(source)));
   assert.ok(Either.isRight(renderCardMath("\\def\\custom{x}\\custom")));
   assert.ok(Either.isLeft(renderCardMath("\\custom")));
+});
+
+void test("field appearance overrides inherit safely and survive template generation", () => {
+  const appearance = CARD_LAYOUT_PRESETS[0]?.appearance;
+  const rtl = CARD_LAYOUT_PRESETS.find((preset) => preset.id === "rtl")?.appearance;
+  assert.ok(appearance && rtl);
+  const presentation = {
+    appearance,
+    fieldAppearance: { back: { ...rtl, imageSize: "large" as const } },
+  };
+  assert.equal(cardFieldAppearance(presentation, "front"), appearance);
+  assert.equal(cardFieldAppearance(presentation, "back")?.direction, "rtl");
+  assert.equal(cardFieldAppearance(presentation, "explanation"), appearance);
+  assert.equal(cardImageSize(cardFieldAppearance(presentation, "back")), 480);
+  const decoded = Schema.decodeUnknownSync(ReviewPresentationSchema)(presentation);
+  assert.deepEqual(decoded, presentation);
+  const note = {
+    id: "styled",
+    typeId: "basic",
+    fields: { Front: "Question", Back: "Answer" },
+    tags: [],
+    objectiveIds: [],
+  };
+  const type = {
+    ...BASIC_NOTE_TYPE,
+    templates: BASIC_NOTE_TYPE.templates.map((template) => ({ ...template, presentation })),
+  };
+  assert.deepEqual(Effect.runSync(previewStudyNote(type, note))[0]?.presentation, presentation);
+  for (const invalid of [
+    { direction: "javascript" },
+    { imageSize: "99999" },
+    { align: "position:fixed" },
+  ]) {
+    assert.ok(
+      Either.isLeft(
+        Schema.decodeUnknownEither(ReviewPresentationSchema)({
+          fieldAppearance: { front: { ...appearance, ...invalid } },
+        }),
+      ),
+    );
+  }
 });

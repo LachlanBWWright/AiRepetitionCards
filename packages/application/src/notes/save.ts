@@ -159,6 +159,7 @@ export function saveStudyNote(
           presentation: preview.presentation,
           front: preview.front,
           back: preview.back,
+          explanation: preview.explanation,
           cloze: preview.cloze,
           tags: note.tags,
           media: note.media ?? [],

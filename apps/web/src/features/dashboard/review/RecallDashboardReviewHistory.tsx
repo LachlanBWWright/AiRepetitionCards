@@ -1,3 +1,4 @@
+import { StatusBadge } from "@recall/ui-web";
 import type { ReviewRating } from "@recall/scheduler";
 import { EmptyState } from "@/components/ui/EmptyState";
 
@@ -14,7 +15,7 @@ export type DashboardReviewHistoryEntry = {
 
 function syncStatusLabel(event: DashboardReviewHistoryEntry): string | null {
   if (event.retainedForSync) return "Deleted · pending sync";
-  if (event.needsSyncRetry) return "Sync again";
+  if (event.needsSyncRetry) return "Waiting to sync";
   if (event.hasConcurrentBranch) return "Pending sync";
   return null;
 }
@@ -59,11 +60,11 @@ export function RecallDashboardReviewHistory({
               key={event.id}
               className="grid gap-x-4 gap-y-1.5 px-6 py-4 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-center"
             >
-              <span
-                className={`w-fit rounded-full px-2.5 py-1 text-xs font-semibold capitalize ${event.rating === "again" ? "bg-[var(--surface-raised)] text-[var(--status-warning-fg)]" : "bg-[var(--surface-raised)] text-[var(--status-success-fg)]"}`}
+              <StatusBadge
+                tone={event.rating === "again" || event.rating === "hard" ? "warning" : "success"}
               >
-                {event.rating}
-              </span>
+                <span className="capitalize">{event.rating}</span>
+              </StatusBadge>
               <span className="min-w-0 truncate font-medium text-[var(--ink)]">
                 {event.question}
               </span>

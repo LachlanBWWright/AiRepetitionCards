@@ -1,8 +1,10 @@
+import { NativeButton } from "@recall/ui-native";
+
 import { NativeAnkiExportAction } from "./NativeAnkiExportAction";
 import { reviewEventsInArea } from "@recall/domain";
 import { privateDeckHistory } from "@recall/application";
 import { useEffect, useRef, useState } from "react";
-import { Pressable, Switch, Text, View } from "react-native";
+import { Switch, Text, View } from "react-native";
 import { Effect, Either, Schema } from "effect";
 import { KnowledgeAreaSchema, type LearningArea, type Workspace } from "@recall/domain";
 import type { MediaStore } from "@recall/local-store";
@@ -12,7 +14,7 @@ import {
   toKnowledgeArea,
   type ImportedPortableDeckPackage,
 } from "@recall/application";
-import { NativeButton } from "@recall/ui-native";
+
 import {
   pickPortableDeckPackage,
   sharePortableDeckPackage,
@@ -175,7 +177,7 @@ export function NativePortableDeckTransfer({
       />
       <NativeButton
         label="Choose deck ZIP"
-        tone="soft"
+        variant="default"
         onPress={() => void chooseFile()}
         disabled={busy || disabled}
       />
@@ -221,14 +223,14 @@ export function NativePortableDeckTransfer({
             onPress={() => void approve()}
             disabled={busy || disabled}
           />
-          <Pressable
+          <NativeButton
+            label="Cancel"
+            variant="secondary"
             onPress={() => {
               setPreview(null);
             }}
             disabled={busy || disabled}
-          >
-            <Text className="text-recall-muted text-[13px]">Cancel</Text>
-          </Pressable>
+          />
         </View>
       ) : null}
       {status ? (

@@ -24,6 +24,24 @@ export function NativeReviewPresentationSettings({
           onChange({ ...value, appearance });
         }}
       />
+      {(["front", "back", "explanation"] as const).map((field) => (
+        <View key={field}>
+          <Text>
+            {field === "front" ? "Question" : field === "back" ? "Answer" : "Explanation"}{" "}
+            appearance override
+          </Text>
+          <NativeCardAppearanceSettings
+            disabled={disabled}
+            value={value?.fieldAppearance?.[field]}
+            onChange={(appearance) => {
+              onChange({
+                ...value,
+                fieldAppearance: { ...value?.fieldAppearance, [field]: appearance },
+              });
+            }}
+          />
+        </View>
+      ))}
       {(
         [
           ["enabled", "Type answer"],
@@ -34,7 +52,7 @@ export function NativeReviewPresentationSettings({
         <NativeButton
           key={key}
           disabled={disabled}
-          tone="soft"
+          variant="default"
           label={`${label}: ${typed[key] ? "on" : "off"}`}
           onPress={() => {
             onChange({ ...value, typedAnswer: { ...typed, [key]: !typed[key] } });

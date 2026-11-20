@@ -12,7 +12,7 @@ export function NativeDeckSharingPanelBrowse({ account, discovery, error }: Prop
     <>
       {account}
       {error ? (
-        <Text accessibilityRole="alert" className="text-sm text-destructive">
+        <Text accessibilityRole="alert" className="text-sm text-recall-dangerForeground">
           {error}
         </Text>
       ) : null}

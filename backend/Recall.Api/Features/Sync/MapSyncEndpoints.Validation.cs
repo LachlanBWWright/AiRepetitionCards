@@ -63,8 +63,8 @@ internal static partial class SyncHandlers
         {
             foreach (var card in cards.OfType<JsonObject>())
             {
-                if (StringNode(card["kind"]) == "basic") KeepOnly(card, "kind", "id", "front", "back", "objectiveIds", "media", "tags", "origin", "sourceId", "noteId", "templateId", "presentation", "imageOcclusion");
-                else KeepOnly(card, "kind", "id", "text", "deletionIndex", "objectiveIds", "media", "tags", "origin", "sourceId", "noteId", "templateId", "presentation", "imageOcclusion");
+                if (StringNode(card["kind"]) == "basic") KeepOnly(card, "kind", "id", "front", "back", "objectiveIds", "media", "tags", "origin", "sourceId", "noteId", "templateId", "presentation", "imageOcclusion", "explanation");
+                else KeepOnly(card, "kind", "id", "text", "deletionIndex", "objectiveIds", "media", "tags", "origin", "sourceId", "noteId", "templateId", "presentation", "imageOcclusion", "explanation");
                 if (card["media"] is JsonArray media)
                     foreach (var reference in media.OfType<JsonObject>()) KeepOnly(reference, "id", "mimeType", "byteLength");
             }

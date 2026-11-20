@@ -4,12 +4,17 @@ import * as Crypto from "expo-crypto";
 import * as SecureStore from "expo-secure-store";
 import * as Linking from "expo-linking";
 import { Platform } from "react-native";
+import {
+  chatGptCallbackPages,
+  chatGptCallbackScript,
+  chatGptCallbackStyle,
+} from "@recall/infra-openai/chatgpt-callback-page";
 import { createChatGPTAuth, type ChatGPTAuthFailure } from "./chatgpt-auth";
 import { withNativeRequest } from "../native-http";
 
 type NativeChatGPTModule = {
   readonly open: (url: string) => Promise<unknown>;
-  readonly start: (state: string) => Promise<unknown>;
+  readonly start: (state: string, pages: string) => Promise<unknown>;
   readonly callback: (id: string) => Promise<unknown>;
   readonly stop: (id: string) => Promise<unknown>;
   readonly verify: (
@@ -169,7 +174,15 @@ export const nativeChatGPTAuth = createChatGPTAuth({
     }),
   now: Date.now,
   start: (state) =>
-    invoke((module) => module.start(state)).pipe(
+    invoke(async (module) => {
+      const digest = (value: string) =>
+        Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, value, {
+          encoding: Crypto.CryptoEncoding.BASE64,
+        });
+      const scriptHash = await digest(chatGptCallbackScript);
+      const styleHash = await digest(chatGptCallbackStyle);
+      return module.start(state, JSON.stringify(chatGptCallbackPages(scriptHash, styleHash)));
+    }).pipe(
       Effect.flatMap((raw) =>
         reply(Schema.Struct({ id: Schema.String, redirectUri: Schema.String }), raw),
       ),

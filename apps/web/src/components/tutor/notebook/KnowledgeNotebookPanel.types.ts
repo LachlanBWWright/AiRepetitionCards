@@ -1,3 +1,4 @@
+import type { AgentDialogue } from "@recall/application";
 import type { ChatModelSelection } from "../chat/chat-model-selection";
 import type { ReactNode } from "react";
 import type {
@@ -10,6 +11,7 @@ import type { KnowledgeArea, ReviewEvent } from "@recall/domain";
 import type { tutorApi } from "@/lib/tutor-api";
 
 export type KnowledgeNotebookPanelProps = {
+  readonly renderHandover?: ((history: AgentDialogue) => ReactNode) | undefined;
   readonly experience?: "chat";
   readonly modelSelection?: ChatModelSelection | undefined;
   readonly sessionOnly?: boolean;
@@ -25,7 +27,6 @@ export type KnowledgeNotebookPanelProps = {
   readonly activityOverride?: "materials" | undefined;
   readonly initialActivity?: "practice" | "quick" | "materials" | "suggestions";
   readonly quickQuestions?: ReactNode;
-  readonly research?: ReactNode;
   readonly additionalSuggestions?: ReactNode;
   readonly practiceTopics?: readonly KnowledgeGap[];
   readonly onPracticeTopic?: (topic: KnowledgeGap) => void;

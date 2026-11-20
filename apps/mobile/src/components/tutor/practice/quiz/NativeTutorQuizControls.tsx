@@ -1,3 +1,4 @@
+import { NativeCollapsibleTrigger } from "@recall/ui-native";
 import { useState } from "react";
 import { Text, View } from "react-native";
 import type { KnowledgeGap, TutorSessionState } from "@recall/ai-core";
@@ -26,8 +27,6 @@ function PracticeGapButtons({
             onSelect(gap.objectiveId);
           }}
           label={`Practice ${gap.objectiveTitle}`}
-          className="min-h-[38px] justify-center items-center px-[12px] rounded-[10px] bg-transparent"
-          labelClassName="text-recall-darkGreen text-[11px] font-bold"
         />
       ))}
     </>
@@ -70,13 +69,12 @@ export function NativeTutorQuizControls({
 
   return (
     <>
-      <NativeButton
-        label={showTargets ? "Hide practice targets" : "Practice targets"}
-        onPress={() => {
+      <NativeCollapsibleTrigger
+        open={showTargets}
+        title="Practice targets"
+        onToggle={() => {
           setShowTargets((current) => !current);
         }}
-        className="py-[9px] px-[4px]"
-        labelClassName="text-recall-darkGreen text-[11px] font-bold"
       />
       {showTargets && Either.isRight(quizSelection) && quizSelection.right.objective ? (
         <View className="gap-[8px] py-[11px] border-b border-b-recall-line">
@@ -97,20 +95,13 @@ export function NativeTutorQuizControls({
       ) : null}
       <View className="flex-row gap-[8px] items-center">
         <NativeButton
+          variant="secondary"
           disabled={busy || !hasApi}
           onPress={onStartQuiz}
           label="Targeted quiz"
-          className="min-h-[38px] justify-center items-center px-[12px] rounded-[10px] bg-transparent"
-          labelClassName="text-recall-darkGreen text-[11px] font-bold"
         />
         {sessionId && canProposeCard ? (
-          <NativeButton
-            disabled={busy || !hasApi}
-            onPress={onProposeCard}
-            label="Propose card"
-            className="min-h-[38px] justify-center items-center px-[12px] rounded-[10px] bg-transparent"
-            labelClassName="text-recall-darkGreen text-[11px] font-bold"
-          />
+          <NativeButton disabled={busy || !hasApi} onPress={onProposeCard} label="Propose card" />
         ) : null}
       </View>
     </>

@@ -27,7 +27,7 @@ export function NativeWorkspaceCreation({
       {
         <NativeButton
           label="New subject"
-          tone="soft"
+          variant={area ? "secondary" : "default"}
           disabled={locked}
           onPress={() => {
             onCreateArea();
@@ -35,7 +35,12 @@ export function NativeWorkspaceCreation({
         />
       }
       {onImportCards && (
-        <NativeButton label="Import cards" tone="soft" disabled={locked} onPress={onImportCards} />
+        <NativeButton
+          label="Import cards"
+          variant="secondary"
+          disabled={locked}
+          onPress={onImportCards}
+        />
       )}
       {creationChoices && area && (
         <View className="gap-3 rounded-xl border border-recall-line p-4">
@@ -55,7 +60,7 @@ export function NativeWorkspaceCreation({
           {onGenerateCards && (
             <NativeButton
               label="Generate from materials"
-              tone="soft"
+              variant="secondary"
               disabled={locked}
               onPress={() => {
                 setCreationChoices(false);
@@ -66,7 +71,7 @@ export function NativeWorkspaceCreation({
           {onImportCards && (
             <NativeButton
               label="Import existing cards"
-              tone="soft"
+              variant="secondary"
               disabled={locked}
               onPress={() => {
                 setCreationChoices(false);
@@ -76,7 +81,7 @@ export function NativeWorkspaceCreation({
           )}
           <NativeButton
             label="Finish later"
-            tone="soft"
+            variant="secondary"
             disabled={locked}
             onPress={() => {
               setCreationChoices(false);

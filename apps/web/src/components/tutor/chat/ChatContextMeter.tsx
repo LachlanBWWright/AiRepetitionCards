@@ -7,9 +7,10 @@ export function ChatContextMeter({
 }: {
   readonly usage?: TutorTokenUsage | null | undefined;
 }) {
-  const percent = usage
-    ? Math.min(100, (usage.inputTokens / TUTOR_CONTEXT_TOKEN_LIMIT) * 100)
-    : null;
+  const percent =
+    usage?.inputTokens != null
+      ? Math.min(100, (usage.inputTokens / TUTOR_CONTEXT_TOKEN_LIMIT) * 100)
+      : null;
   const label =
     percent === null ? "—" : `${percent < 1 ? percent.toFixed(1) : String(Math.round(percent))}%`;
   const count = (value: number | null) =>
@@ -20,17 +21,17 @@ export function ChatContextMeter({
         <Button
           type="button"
           variant="ghost"
-          size="small"
-          className="h-8 gap-1.5 px-2 text-xs text-muted-foreground"
+          size="sm"
+          className="gap-1.5"
           aria-label={
-            usage
-              ? `Context: ${usage.inputTokens.toLocaleString()} of 100,000 tokens in the last request`
-              : "Context: 100,000-token limit; no request yet"
+            usage?.inputTokens != null
+              ? `Last request: ${usage.inputTokens.toLocaleString()} input tokens`
+              : "Input token usage not reported"
           }
         >
           <span
             aria-hidden="true"
-            className={`size-3.5 rounded-full border border-current ${percent !== null && percent >= 90 ? "text-amber-400" : ""}`}
+            className="size-3.5 rounded-full border border-current"
             style={{
               background: `conic-gradient(currentColor ${String((percent ?? 0) * 3.6)}deg, transparent 0)`,
             }}
@@ -41,7 +42,7 @@ export function ChatContextMeter({
       <PopoverContent align="end" side="top" className="space-y-3 text-sm">
         <div className="flex items-center justify-between gap-3">
           <p className="font-medium">Context window</p>
-          <span className="text-xs text-muted-foreground">100k tokens</span>
+          <span className="text-xs text-muted-foreground">100k reference</span>
         </div>
         {usage ? (
           <>
@@ -57,13 +58,13 @@ export function ChatContextMeter({
             </dl>
             <p className="text-xs leading-5 text-muted-foreground">
               Measured usage for the last request, including instructions, deck and conversation.
-              Cached tokens still occupy context. New messages are counted before sending.
+              Cached tokens still occupy context. The chart uses 100,000 tokens as a reference; the
+              selected model determines the context limit.
             </p>
           </>
         ) : (
           <p className="text-xs leading-5 text-muted-foreground">
-            Token usage appears after your first reply. Each request is checked against the
-            100,000-token limit before generation.
+            Token usage appears after your first reply when reported by the provider.
           </p>
         )}
       </PopoverContent>

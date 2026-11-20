@@ -124,7 +124,7 @@ function ChangeSection({
   if (count === 0) return null;
   return (
     <Collapsible className="my-3">
-      <CollapsibleTrigger className="cursor-pointer font-semibold underline underline-offset-4 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
+      <CollapsibleTrigger>
         {title} ({count})
       </CollapsibleTrigger>
       <CollapsibleContent>{children}</CollapsibleContent>

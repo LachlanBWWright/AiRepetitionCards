@@ -37,7 +37,7 @@ export function NativePronunciationRecorder({
   return (
     <View className="gap-2">
       <NativeButton
-        tone="soft"
+        variant="default"
         disabled={disabled || recording.busy || attaching}
         label={recording.recording ? "Stop recording" : "Record pronunciation"}
         onPress={() => {
@@ -48,7 +48,7 @@ export function NativePronunciationRecorder({
         <>
           <NativeAudioAttachment uri={recording.uri} />
           <NativeButton
-            tone="soft"
+            variant="default"
             disabled={disabled || attaching}
             label="Use recording as attachment"
             onPress={() => {
@@ -56,7 +56,7 @@ export function NativePronunciationRecorder({
             }}
           />
           <NativeButton
-            tone="soft"
+            variant="secondary"
             disabled={attaching}
             label="Discard recording"
             onPress={recording.discard}

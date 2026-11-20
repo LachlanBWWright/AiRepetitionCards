@@ -20,6 +20,20 @@ import {
 } from "@recall/application";
 import { newSchedule } from "@recall/scheduler";
 
+await test("default Space and Enter reveal first and rate Good only after reveal", () => {
+  for (const key of [" ", "Enter"]) {
+    assert.equal(reviewerKeyAction(key, false, defaultReviewerSettings), "reveal");
+    assert.equal(reviewerKeyAction(key, true, defaultReviewerSettings), "good");
+  }
+  assert.equal(reviewerKeyAction("1", false, defaultReviewerSettings), undefined);
+  assert.equal(reviewerKeyAction("1", true, defaultReviewerSettings), "again");
+  const custom = {
+    ...defaultReviewerSettings,
+    shortcuts: { ...defaultReviewerSettings.shortcuts, reveal: "r" },
+  };
+  assert.equal(reviewerKeyAction(" ", true, custom), undefined);
+});
+
 await test("custom shortcuts are phase-aware and duplicate keys fail validation", () => {
   const settings = {
     ...defaultReviewerSettings,

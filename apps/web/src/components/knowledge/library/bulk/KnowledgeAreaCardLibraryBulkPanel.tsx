@@ -1,5 +1,5 @@
 import type { LearningArea, Workspace } from "@recall/domain";
-import { Button, Input } from "@recall/ui-web";
+import { Button, Input, FieldLabel, FieldError } from "@recall/ui-web";
 import {
   Dialog,
   DialogContent,
@@ -70,7 +70,7 @@ export function KnowledgeAreaCardLibraryBulkPanel({
     <>
       {selectedIds.length > 0 && (
         <div
-          className="my-3 flex flex-wrap items-center gap-2 rounded-lg bg-muted/40 px-3 py-2"
+          className="flex flex-wrap items-center gap-2 rounded-lg bg-muted/40 px-3 py-2"
           aria-label="Bulk card actions"
         >
           <span className="text-sm" role="status">
@@ -78,7 +78,7 @@ export function KnowledgeAreaCardLibraryBulkPanel({
           </span>
           <>
             <Button
-              variant="secondary"
+              variant="default"
               disabled={restoring || bulkPending}
               onClick={() => {
                 beginBulk("tags");
@@ -87,7 +87,7 @@ export function KnowledgeAreaCardLibraryBulkPanel({
               Add tags
             </Button>
             <Button
-              variant="secondary"
+              variant="default"
               disabled={restoring || bulkPending || (workspace?.areas.length ?? 0) < 2}
               onClick={() => {
                 beginBulk("move");
@@ -96,7 +96,7 @@ export function KnowledgeAreaCardLibraryBulkPanel({
               Move cards
             </Button>
             <Button
-              variant="secondary"
+              variant="default"
               disabled={restoring || bulkPending}
               onClick={() => {
                 beginBulk("delete");
@@ -105,7 +105,7 @@ export function KnowledgeAreaCardLibraryBulkPanel({
               Delete selected
             </Button>
             <Button
-              variant="secondary"
+              variant="default"
               disabled={bulkPending}
               onClick={() => {
                 setSelected([]);
@@ -133,14 +133,14 @@ export function KnowledgeAreaCardLibraryBulkPanel({
             </DialogDescription>
           </DialogHeader>
           {bulkAction === "tags" && (
-            <label>
+            <FieldLabel>
               Tags (comma separated)
               <Input
                 value={bulkTags}
                 disabled={bulkPending || Boolean(bulkRequest)}
                 onChange={handleTagsChange}
               />
-            </label>
+            </FieldLabel>
           )}
           {bulkAction === "move" && (
             <KnowledgeAreaCardLibraryBulkDestination
@@ -151,11 +151,7 @@ export function KnowledgeAreaCardLibraryBulkPanel({
               onDestinationChange={setDestination}
             />
           )}
-          {bulkError && (
-            <p role="alert" className="text-sm text-destructive">
-              {bulkError}
-            </p>
-          )}
+          {bulkError && <FieldError>{bulkError}</FieldError>}
           <DialogFooter>
             <Button
               variant="secondary"

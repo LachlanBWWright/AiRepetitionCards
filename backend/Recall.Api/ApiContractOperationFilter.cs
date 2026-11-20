@@ -106,6 +106,12 @@ public sealed class ApiContractOperationFilter : IOperationFilter
 
     private static void AddRelevantParameters(OpenApiOperation operation, string path, string method)
     {
+        if (method == "POST" && path is "/api/v1/tutor" or "/api/v1/activities/question" or "/api/v1/activities/assess")
+        {
+            AddHeader(operation, "x-recall-ai-funding", "Explicit `managed` selection is required when managed AI is enabled.");
+            AddHeader(operation, "x-recall-ai-request-id", "Generation UUID; an admitted UUID cannot generate twice.");
+            AddHeader(operation, "x-recall-workspace-owner", "Expected authenticated account; mismatches are rejected before AI use.");
+        }
         if (path == "/api/v1/sync" && method == "GET")
         {
             AddQuery(operation, "cursor", "Opaque review-sync cursor; omit to start from the current client position.");
@@ -308,7 +314,7 @@ public sealed class ApiContractOperationFilter : IOperationFilter
         "/api/v1/workspace" when method == "POST" => ["400", "401", "409", "413", "502", "503"],
         "/api/v1/account/export" => ["401", "502"],
         "/api/v1/account/delete" => ["400", "401", "403", "409", "413", "502", "503"],
-        "/api/v1/tutor" => ["400", "401", "404", "409", "413", "429", "502", "503"],
+        "/api/v1/tutor" => ["400", "401", "403", "404", "409", "413", "429", "502", "503"],
         "/api/v1/tutor/privacy" => ["400", "401", "403", "413", "502", "503"],
         "/api/internal/tutor-retention" when method == "HEAD" => [],
         "/api/internal/tutor-retention" => ["401", "502", "503"],
@@ -323,7 +329,7 @@ public sealed class ApiContractOperationFilter : IOperationFilter
         "/api/v1/decks/{deckId}/block" => ["400", "401", "404", "413", "429", "502", "503"],
         "/api/v1/moderation/reports" or "/api/v1/moderation/decks/{deckId}" or "/api/v1/moderation/reports/{reportId}" => ["400", "401", "403", "404", "409", "413", "429", "502", "503"],
         "/api/v1/activities" => ["400", "401", "409", "413", "502", "503"],
-        "/api/v1/activities/assess" or "/api/v1/activities/question" => ["400", "401", "409", "413", "429", "502", "503"],
+        "/api/v1/activities/assess" or "/api/v1/activities/question" => ["400", "401", "403", "409", "413", "429", "502", "503"],
         "/api/v1/workspace/review-identities" or "/api/v1/workspace/area-tombstones" => ["400", "401", "409", "413", "502", "503"],
         _ => ["400", "401", "403", "404", "409", "413", "429", "502", "503"]
     };
@@ -359,7 +365,7 @@ public sealed class ApiContractOperationFilter : IOperationFilter
     private static bool RequiresBearer(string path, string method) =>
         path.StartsWith("/api/v1/account/", StringComparison.Ordinal) ||
         path.StartsWith("/api/v1/workspace", StringComparison.Ordinal) ||
-        path == "/api/v1/sync" || path == "/api/v1/tutor" || path == "/api/v1/tutor/privacy" ||
+        path == "/api/v1/ai/capabilities" || path == "/api/v1/sync" || path == "/api/v1/tutor" || path == "/api/v1/tutor/privacy" ||
         path == "/api/v1/knowledge-areas" || path == "/api/v1/published/{versionId}/fork" ||
         path == "/api/v1/published/{versionId}/token" || path == "/api/v1/publishing/media/{mediaId}" ||
         path == "/api/v1/decks/mine" ||
@@ -373,5 +379,5 @@ public sealed class ApiContractOperationFilter : IOperationFilter
     private static bool AcceptsSsrCookie(string path) =>
         path.StartsWith("/api/v1/account/", StringComparison.Ordinal) ||
         path.StartsWith("/api/v1/workspace", StringComparison.Ordinal) ||
-        path == "/api/v1/sync" || path == "/api/v1/tutor" || path == "/api/v1/tutor/privacy";
+        path == "/api/v1/ai/capabilities" || path == "/api/v1/sync" || path == "/api/v1/tutor" || path == "/api/v1/tutor/privacy";
 }

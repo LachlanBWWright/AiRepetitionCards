@@ -15,7 +15,13 @@ import type { RecallDashboardModel } from "../state/useRecallDashboardController
 
 type SyncHandler = NonNullable<ComponentProps<typeof WorkspaceSyncAction>["onSynced"]>;
 
-export function RecallDashboardSyncRecovery({ model }: { readonly model: RecallDashboardModel }) {
+export function RecallDashboardSyncRecovery({
+  model,
+  onSignInHintChange,
+}: {
+  readonly model: RecallDashboardModel;
+  readonly onSignInHintChange?: ((visible: boolean) => void) | undefined;
+}) {
   const {
     workspaceUnlocked,
     demo,
@@ -126,6 +132,8 @@ export function RecallDashboardSyncRecovery({ model }: { readonly model: RecallD
   return (
     <div hidden={!workspaceUnlocked}>
       <WorkspaceSyncAction
+        onSignInHintChange={onSignInHintChange}
+        writable={Boolean(demo) || (ready && cacheWritable)}
         autoSync={!demo}
         demo={Boolean(demo)}
         demoMissingReviewContent={demo?.missingReviewContent ?? false}

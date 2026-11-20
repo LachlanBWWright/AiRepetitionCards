@@ -1,7 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 import { createServer } from "node:http";
 import { shell } from "electron";
-import { Effect, Either } from "effect";
 import { jwtVerify } from "jose";
 import {
   fail,
@@ -10,10 +9,10 @@ import {
   issuer,
   jwks,
   resource,
-  sameSecret,
   Token,
 } from "../transport/chatgpt-local-protocol";
 import type { LocalAccount, LocalStore, Reply } from "../transport/chatgpt-local-protocol";
+import { createChatGptCallbackHandler } from "./chatgpt-callback-handler";
 
 type SignInDependencies = {
   readonly load: () => Promise<Reply<LocalStore>>;
@@ -54,34 +53,7 @@ export async function performChatGptLocalSignIn(
   const callback = new Promise<URL | null>((resolve) => {
     resolveCallback = resolve;
   });
-  const server = createServer((request, response) => {
-    const parsed = Effect.runSync(
-      Effect.either(
-        Effect.try({
-          try: () => new URL(request.url ?? "", "http://127.0.0.1"),
-          catch: () => fail("invalid-callback"),
-        }),
-      ),
-    );
-    if (
-      Either.isLeft(parsed) ||
-      request.method !== "GET" ||
-      parsed.right.pathname !== "/auth/callback" ||
-      parsed.right.searchParams.getAll("state").length !== 1 ||
-      !sameSecret(parsed.right.searchParams.get("state") ?? "", state)
-    ) {
-      response.writeHead(400);
-      response.end("Invalid sign-in callback.");
-      return;
-    }
-    response.writeHead(200, {
-      "content-type": "text/plain",
-      "cache-control": "no-store",
-      "content-security-policy": "default-src 'none'",
-    });
-    response.end("Return to Recall to finish signing in.");
-    resolveCallback(parsed.right);
-  });
+  const server = createServer(createChatGptCallbackHandler(state, resolveCallback));
   const listening = await new Promise<boolean>((resolve) => {
     server.once("error", () => {
       resolve(false);

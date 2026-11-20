@@ -12,9 +12,9 @@ test("native card draft survives bottom navigation", async (t) => {
       const question = page.getByRole("textbox", { name: "Question", exact: true });
       await expectVisible(question);
       await question.fill("Which molecule supplies usable energy to cells?");
-      await page.getByRole("tab", { name: /Today/ }).click();
+      await page.getByRole("tab", { name: /Home/ }).click();
       await expectVisible(page.getByRole("button", { name: "Show answer", exact: true }));
-      await page.getByRole("tab", { name: /Library/ }).click();
+      await page.getByRole("tab", { name: /Subject/ }).click();
       assert.equal(await question.inputValue(), "Which molecule supplies usable energy to cells?");
     },
     mobileViewport,
@@ -32,7 +32,7 @@ test("native duplicate consent resets when the draft changes or is cancelled", a
       await question.fill(questionText);
       await answer.fill("ATP.");
       await expectVisible(page.getByRole("button", { name: "Keep both", exact: true }));
-      await page.getByRole("button", { name: "Save and finish", exact: true }).click();
+      await page.getByRole("button", { name: "Save card", exact: true }).click();
       await expectVisible(page.getByRole("alert"));
       assert.match(await page.getByRole("alert").innerText(), /choose Keep both/);
       await page.getByRole("button", { name: "Keep both", exact: true }).click();
@@ -41,6 +41,7 @@ test("native duplicate consent resets when the draft changes or is cancelled", a
       await expectVisible(page.getByRole("button", { name: "Keep both", exact: true }));
       await page.getByRole("button", { name: "Keep both", exact: true }).click();
       await page.getByRole("button", { name: "Cancel editing", exact: true }).click();
+      await page.getByRole("button", { name: "Discard draft", exact: true }).click();
       await page.getByRole("button", { name: "Add card", exact: true }).click();
       await question.fill(questionText);
       await answer.fill("ATP.");
@@ -65,7 +66,7 @@ test("native pending saves prevent draft edits and cancellation", async (t) => {
         true,
       );
       assert.equal(
-        await page.getByRole("button", { name: "Saving…", exact: true }).isDisabled(),
+        await page.getByRole("button", { name: "Saving card…", exact: true }).isDisabled(),
         true,
       );
       await page.getByRole("button", { name: "Complete mock save", exact: true }).click();
@@ -162,7 +163,7 @@ test("native history cannot restore while workspace changes are pending", async 
       await expectVisible(restore);
       assert.equal(await restore.isDisabled(), true);
       assert.equal(
-        await page.getByRole("button", { name: "Hide version", exact: true }).isDisabled(),
+        await page.getByRole("button", { name: "Preview version", exact: true }).isDisabled(),
         true,
       );
     },

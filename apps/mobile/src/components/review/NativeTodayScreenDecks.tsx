@@ -1,4 +1,5 @@
-import { Pressable, Text, View } from "react-native";
+import { NativeButtonPrimitive, NativeButtonText } from "@recall/ui-native";
+import { Text, View } from "react-native";
 import type { Workspace } from "@recall/domain";
 import { NativeButton } from "../ui/NativeButton";
 
@@ -22,23 +23,27 @@ export function DeckListRow({
     onHideAnswer();
   };
   return (
-    <Pressable
+    <NativeButtonPrimitive
+      variant="secondary"
       disabled={reviewPending}
       accessibilityState={{ disabled: reviewPending }}
       onPress={selectArea}
-      className="flex-row items-center border-t-recall-line border-t py-[12px] justify-between"
     >
       <View
         className="h-[35px] w-[5px] rounded-[4px] mr-[12px]"
         style={[{ backgroundColor: area.color }]}
       />
       <View className="flex-1">
-        <Text className="text-recall-ink text-[13px] font-semibold">{area.title}</Text>
-        <Text className="text-recall-muted text-[10px] mt-[3px]">{area.cards.length} cards</Text>
+        <NativeButtonText variant="secondary">{area.title}</NativeButtonText>
+        <NativeButtonText variant="secondary" detail>
+          {area.cards.length} cards
+        </NativeButtonText>
       </View>
-      <Text className="text-recall-muted text-[10px] mr-[12px]">{areaDue} due</Text>
-      <Text className="text-recall-muted text-[24px] mt-[-3px]">›</Text>
-    </Pressable>
+      <NativeButtonText variant="secondary" detail>
+        {areaDue} due
+      </NativeButtonText>
+      <NativeButtonText variant="secondary">›</NativeButtonText>
+    </NativeButtonPrimitive>
   );
 }
 
@@ -56,18 +61,20 @@ export function DeckChoiceButton({
   readonly onSelect: (areaId: string) => void;
 }) {
   return (
-    <Pressable
+    <NativeButtonPrimitive
+      variant="secondary"
       accessibilityRole="button"
       accessibilityState={{ selected, disabled: reviewPending }}
       disabled={reviewPending}
       onPress={() => {
         onSelect(area.id);
       }}
-      className="flex-row items-center border-t-recall-line border-t py-[12px] justify-between"
     >
-      <Text className="text-recall-ink text-[13px] font-semibold">{area.title}</Text>
-      <Text className="text-recall-muted text-[10px] mr-[12px]">{dueCount} due</Text>
-    </Pressable>
+      <NativeButtonText variant={selected ? "default" : "secondary"}>{area.title}</NativeButtonText>
+      <NativeButtonText variant={selected ? "default" : "secondary"} detail>
+        {dueCount} due
+      </NativeButtonText>
+    </NativeButtonPrimitive>
   );
 }
 
@@ -83,7 +90,11 @@ export function FlaggedCardsAction({
   const count = area.cards.filter((entry) => flaggedCardIds.includes(entry.id)).length;
   if (count === 0) return null;
   return (
-    <NativeButton label={`Edit flagged cards (${String(count)})`} tone="soft" onPress={onEdit} />
+    <NativeButton
+      label={`Edit flagged cards (${String(count)})`}
+      variant="secondary"
+      onPress={onEdit}
+    />
   );
 }
 
@@ -127,13 +138,13 @@ export function DecksSection({
       <NativeButton
         label="Import Anki deck"
         onPress={onImportAnki}
-        tone="soft"
+        variant="secondary"
         disabled={reviewPending}
       />
       <NativeButton
         label="Reset local study data"
         onPress={onReset}
-        tone="soft"
+        variant="secondary"
         disabled={!canReset || reviewPending}
       />
     </View>

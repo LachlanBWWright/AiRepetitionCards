@@ -15,6 +15,7 @@ export type LibraryDraftSnapshotInput = {
   readonly editingCardId: string | null;
   readonly front: string;
   readonly back: string;
+  readonly explanation?: string;
   readonly clozeText: string;
   readonly cardPresentation?: ReviewPresentation | undefined;
   readonly cardTags: string;
@@ -55,6 +56,7 @@ export function snapshotLibraryDraft(input: LibraryDraftSnapshotInput): LibraryD
       !(
         input.front.trim() ||
         input.back.trim() ||
+        input.explanation?.trim() ||
         input.clozeText.trim() ||
         input.cardTags.trim() ||
         input.mediaFilePresent ||
@@ -69,6 +71,7 @@ export function snapshotLibraryDraft(input: LibraryDraftSnapshotInput): LibraryD
     JSON.stringify(source.presentation) === JSON.stringify(input.cardPresentation) &&
     source.front === input.front &&
     source.back === input.back &&
+    (source.explanation ?? "") === (input.explanation ?? "") &&
     (source.cloze?.text ?? "") === input.clozeText &&
     String(source.cloze?.deletionIndex ?? 1) === input.clozeIndex &&
     formatTagInput(source.tags ?? []) === input.cardTags &&
@@ -88,6 +91,7 @@ export function snapshotLibraryDraft(input: LibraryDraftSnapshotInput): LibraryD
     cardKind: input.cardKind,
     front: input.front,
     back: input.back,
+    explanation: input.explanation ?? "",
     clozeText: input.clozeText,
     clozeIndex: input.clozeIndex,
     presentation: input.cardPresentation,

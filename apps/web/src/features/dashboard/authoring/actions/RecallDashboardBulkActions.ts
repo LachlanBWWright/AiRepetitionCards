@@ -57,6 +57,8 @@ export function createRecallDashboardBulkActions(
     | "cardKind"
     | "setFront"
     | "setBack"
+    | "setExplanation"
+    | "explanation"
     | "setCardKind"
     | "setClozeText"
     | "setClozeIndex"
@@ -94,6 +96,8 @@ export function createRecallDashboardBulkActions(
     cardKind,
     setFront,
     setBack,
+    setExplanation,
+    explanation,
     setCardKind,
     setClozeText,
     setClozeIndex,
@@ -241,6 +245,7 @@ export function createRecallDashboardBulkActions(
       return false;
     }
     const metadata = {
+      explanation,
       tags: tags.right,
       objectiveIds: cardObjectiveIds.map(createObjectiveId),
       media: (cardEditor.current.sourceCard?.media ?? []).filter(
@@ -265,6 +270,7 @@ export function createRecallDashboardBulkActions(
         return false;
       setFront(first.front);
       setBack(first.back);
+      setExplanation(first.explanation ?? "");
       setCardKind(first.kind);
       setClozeText(first.cloze?.text ?? "");
       setClozeIndex(String(first.cloze?.deletionIndex ?? 1));

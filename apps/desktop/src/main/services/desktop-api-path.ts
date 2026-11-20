@@ -9,6 +9,7 @@ const routes: Readonly<Record<DesktopApiMethod, readonly RegExp[]>> = {
     /^\/api\/v1\/workspace\/study$/,
     /^\/api\/v1\/sync$/,
     /^\/api\/v1\/tutor$/,
+    /^\/api\/v1\/ai\/capabilities$/,
     /^\/api\/v1\/tutor\/privacy$/,
     /^\/api\/v1\/account\/export$/,
     /^\/api\/v1\/activities$/,

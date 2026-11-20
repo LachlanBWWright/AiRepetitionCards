@@ -1,3 +1,5 @@
+import { prepareDesktopUpdates } from "./services/desktop-updates";
+import { prepareUpgradeBackup } from "./security/upgrade-backup";
 import { mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -122,7 +124,9 @@ function openDatabase(): Effect.Effect<DatabaseSync, { readonly _tag: "DatabaseO
       const databasePath = join(app.getPath("userData"), "recall.sqlite");
       mkdirSync(dirname(databasePath), { recursive: true });
       const database = new DatabaseSync(databasePath);
-      database.exec("PRAGMA journal_mode = WAL");
+      database.exec(
+        "PRAGMA journal_mode = WAL; PRAGMA synchronous = FULL; PRAGMA busy_timeout = 5000",
+      );
       database.exec(`
         CREATE TABLE IF NOT EXISTS local_workspace (
           id INTEGER PRIMARY KEY CHECK (id = 1),
@@ -295,13 +299,24 @@ const ready = Effect.tryPromise({
   catch: () => ({ _tag: "ApplicationStartFailure" }) as const,
 }).pipe(
   Effect.flatMap(() => openDatabase()),
+  Effect.tap((database) =>
+    prepareUpgradeBackup(
+      database,
+      join(app.getPath("userData"), "upgrade-backups"),
+      app.getVersion(),
+    ),
+  ),
+  Effect.flatMap((database) =>
+    prepareDesktopUpdates(database).pipe(Effect.map((installing) => ({ database, installing }))),
+  ),
   Effect.matchEffect({
     onFailure: () =>
       Effect.sync(() => {
         app.quit();
       }),
-    onSuccess: (database) =>
+    onSuccess: ({ database, installing }) =>
       Effect.sync(() => {
+        if (installing) return;
         registerChatGptLocal(trustedSender);
         registerDesktopMediaIpc(database, trustedSender);
         registerDesktopAnkiIpc(trustedSender);

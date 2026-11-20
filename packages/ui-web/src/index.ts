@@ -1,6 +1,7 @@
 export { Button, buttonVariants } from "./Button";
 export type { ButtonProps, ButtonSize, ButtonVariant } from "./Button";
 export { Dialog } from "./Dialog";
+export { NavigationLink } from "./NavigationLink";
 export { Input } from "./components/input";
 export type { InputProps } from "./components/input";
 export {
@@ -58,7 +59,7 @@ export {
 } from "./components/dropdown-menu";
 export { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "./components/field";
 export { Label } from "./components/label";
-export { NativeSelect } from "./components/native-select";
+export { FormActions } from "./components/form-actions";
 export { Progress } from "./components/progress";
 export {
   Popover,
@@ -132,3 +133,15 @@ export {
 export { StatusBadge } from "./StatusBadge";
 export type { StatusTone } from "./StatusBadge";
 export { cn } from "./lib/utils";
+
+export {
+  Table,
+  TableHeader,
+  TableBody,
+  TableFooter,
+  TableRow,
+  TableHead,
+  TableCell,
+  TableCaption,
+} from "./components/table";
+export { WorkflowSections } from "./WorkflowSections";

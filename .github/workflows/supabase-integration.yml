@@ -70,3 +70,10 @@ jobs:
       - name: Stop disposable services
         if: always()
         run: pnpm exec supabase stop --no-backup
+      - name: Upload service startup diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: recall-supabase-startup
+          path: ${{ runner.temp }}/recall-supabase-start.log
+          retention-days: 7

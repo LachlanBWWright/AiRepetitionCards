@@ -1,4 +1,5 @@
-import { NativeButton } from "../../ui/NativeButton";
+import { NativeCollapsibleTrigger, NativeCollapsibleContent } from "@recall/ui-native";
+
 import { useEffect, useState } from "react";
 import { ActivityIndicator, Text, View } from "react-native";
 import { Effect, Either } from "effect";
@@ -76,6 +77,7 @@ export function NativeTutorPanel({
     : "knowledge-notebook:card-refinements";
   const [notebookReload, setNotebookReload] = useState(0);
   const [showRefinementNotebook, setShowRefinementNotebook] = useState(false);
+  const [showPractice, setShowPractice] = useState(Boolean(initialActivity || searchTarget));
   useEffect(() => {
     if (
       !searchTarget ||
@@ -226,47 +228,24 @@ export function NativeTutorPanel({
   if (!area) return null;
   return (
     <View testID="native-tutor-panel" className={"gap-[10px] mt-[12px]"}>
-      <NativeKnowledgeNotebookPanel
-        storageNamespace={notebookNamespace}
-        area={area}
-        searchTarget={
-          searchTarget &&
-          "namespace" in searchTarget &&
-          searchTarget.namespace === notebookNamespace
-            ? searchTarget
-            : undefined
-        }
-        duplicateCandidates={duplicateCandidates}
-        reviewEvents={reviewEvents}
-        api={api}
-        createId={createId}
-        mayWrite={mayWrite}
-        onApproveProposal={onApproveProposal}
-        onStartReview={onStartReview}
-        initialActivity={initialActivity}
-      />
-      <NativeButton
-        label={showRefinementNotebook ? "Hide split suggestions" : "Split suggestions"}
-        onPress={() => {
-          setShowRefinementNotebook((previous) => !previous);
+      <NativeCollapsibleTrigger
+        open={showPractice}
+        title="Practice and study materials"
+        onToggle={() => {
+          setShowPractice(!showPractice);
         }}
-        className={
-          "min-h-[38px] justify-center items-center px-[12px] rounded-[10px] bg-transparent"
-        }
-        labelClassName="text-recall-darkGreen text-[11px] font-bold"
       />
-      {showRefinementNotebook ? (
+      <NativeCollapsibleContent open={showPractice}>
         <NativeKnowledgeNotebookPanel
-          key={`${area.id}:${refinementNamespace}:${String(notebookReload)}`}
-          storageNamespace={refinementNamespace}
+          storageNamespace={notebookNamespace}
+          area={area}
           searchTarget={
             searchTarget &&
             "namespace" in searchTarget &&
-            searchTarget.namespace === refinementNamespace
+            searchTarget.namespace === notebookNamespace
               ? searchTarget
               : undefined
           }
-          area={area}
           duplicateCandidates={duplicateCandidates}
           reviewEvents={reviewEvents}
           api={api}
@@ -274,8 +253,39 @@ export function NativeTutorPanel({
           mayWrite={mayWrite}
           onApproveProposal={onApproveProposal}
           onStartReview={onStartReview}
+          initialActivity={initialActivity}
         />
-      ) : null}
+      </NativeCollapsibleContent>
+      <NativeCollapsibleTrigger
+        open={showRefinementNotebook}
+        title="Split suggestions"
+        onToggle={() => {
+          setShowRefinementNotebook((previous) => !previous);
+        }}
+      />
+      <NativeCollapsibleContent open={showRefinementNotebook}>
+        {
+          <NativeKnowledgeNotebookPanel
+            key={`${area.id}:${refinementNamespace}:${String(notebookReload)}`}
+            storageNamespace={refinementNamespace}
+            searchTarget={
+              searchTarget &&
+              "namespace" in searchTarget &&
+              searchTarget.namespace === refinementNamespace
+                ? searchTarget
+                : undefined
+            }
+            area={area}
+            duplicateCandidates={duplicateCandidates}
+            reviewEvents={reviewEvents}
+            api={api}
+            createId={createId}
+            mayWrite={mayWrite}
+            onApproveProposal={onApproveProposal}
+            onStartReview={onStartReview}
+          />
+        }
+      </NativeCollapsibleContent>
       <NativeTutorPanelConversation
         conversation={{
           area,
@@ -330,28 +340,29 @@ export function NativeTutorPanel({
             onSubmit={() => void evaluateQuizAnswer()}
           />
         ) : null}
-        <NativeTutorPanelProposalEditor
-          area={area}
-          api={api}
-          busy={busy}
-          mayWrite={mayWrite}
-          session={session}
-          proposalKey={proposalKey}
-          proposalContent={proposalContent}
-          approvalSaved={approvalSaved}
-          editProposal={editProposal}
-          setDraft={setDraft}
-          duplicateMatches={duplicateMatches}
-          duplicateAcknowledgement={duplicateAcknowledgement}
-          setDuplicateAcknowledgement={setDuplicateAcknowledgement}
-          duplicateKey={duplicateKey}
-          duplicatesAllowed={duplicatesAllowed}
-          assistProposal={assistProposal}
-          inspectProposal={inspectProposal}
-          keepRefinement={keepRefinement}
-          resolveProposal={resolveProposal}
-        />
       </NativeTutorPanelConversation>
+      <NativeTutorPanelProposalEditor
+        area={area}
+        api={api}
+        busy={busy}
+        mayWrite={mayWrite}
+        session={session}
+        proposalKey={proposalKey}
+        proposalContent={proposalContent}
+        approvalSaved={approvalSaved}
+        editProposal={editProposal}
+        setDraft={setDraft}
+        duplicateMatches={duplicateMatches}
+        duplicateAcknowledgement={duplicateAcknowledgement}
+        setDuplicateAcknowledgement={setDuplicateAcknowledgement}
+        duplicateKey={duplicateKey}
+        duplicatesAllowed={duplicatesAllowed}
+        assistProposal={assistProposal}
+        inspectProposal={inspectProposal}
+        keepRefinement={keepRefinement}
+        resolveProposal={resolveProposal}
+      />
+
       {busy ? <ActivityIndicator color={palette.darkGreen} /> : null}
       {notice ? (
         <Text

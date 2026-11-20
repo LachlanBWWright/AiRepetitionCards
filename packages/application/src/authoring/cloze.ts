@@ -48,7 +48,14 @@ function parseSegments(
   const segments: Segment[] = [];
   let offset = start;
   let literal = "";
+  let groupDepth = 0;
   while (offset < text.length) {
+    if (text[offset] === "}" && groupDepth > 0) {
+      groupDepth--;
+      literal += text.charAt(offset);
+      offset++;
+      continue;
+    }
     if (text.startsWith("}}", offset) || (nested && text.startsWith("::", offset))) {
       if (!nested) return undefined;
       if (literal) segments.push({ kind: "text", text: literal });
@@ -75,6 +82,7 @@ function parseSegments(
       });
       offset = child.offset;
     } else {
+      if (text[offset] === "{" && text[offset - 1] !== "\\") groupDepth++;
       literal += text.charAt(offset);
       offset += 1;
     }

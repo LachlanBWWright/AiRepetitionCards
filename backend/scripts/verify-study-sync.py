@@ -214,12 +214,54 @@ def verify_linked_family(fixture, token):
             "Stale batch partially modified linked destination.")
 
 
+def verify_session_settings(fixture, token):
+    path = "/api/v1/workspace/study/pages"
+    current = checked("Read scheduling settings before acceptance", fixture.api(path, token=token), (200,))
+    document = study_document()
+    controls = {"studyDayStartHour": 4, "learnAheadMinutes": 20,
+        "leechAction": "suspend", "leechSuspensions": {},
+        "manualBurials": {identifier(): 1790000000000}}
+    document["settings"].update(controls)
+    checked("Save study session controls", fixture.api(path, "POST",
+        {"revision": current["revision"], "document": document}, token), (200,))
+    reopened = checked("Read scheduling controls on second client", fixture.api(path, token=token), (200,))
+    require(reopened["document"]["settings"] == document["settings"],
+            "Scheduling controls changed across clients.")
+    for key, invalid in [("studyDayStartHour", 24), ("learnAheadMinutes", 61), ("leechAction", "delete"),
+            ("manualBurials", {"card": -1}), ("manualBurials", {"card": 1.5}), ("manualBurials", {"card": "tomorrow"})]:
+        invalid_document = copy.deepcopy(document)
+        invalid_document["settings"][key] = invalid
+        checked("Reject invalid scheduling control", fixture.api(path, "POST",
+            {"revision": reopened["revision"], "document": invalid_document}, token), (400,))
+
+
+def verify_card_explanations(fixture, token):
+    document = area(identifier())
+    explanation = r"Worked example: \(E = mc^2\)."
+    document["cards"][0]["explanation"] = explanation
+    document["cards"].append({"kind": "cloze", "id": identifier(),
+        "text": r"Compute {{c1::\(\frac{a}{\frac{b}{c}}\)::fraction}}.",
+        "deletionIndex": 1, "explanation": "Divide by a fraction by multiplying by its reciprocal.",
+        "objectiveIds": [], "tags": [], "origin": "authored"})
+    push(fixture, token, [entry(document)])
+    rows = checked("Read saved card explanations", fixture.db(
+        "/rest/v1/knowledge_area_versions?select=content&knowledge_area_id=eq."
+        + document["id"] + "&order=version.desc&limit=1", token=token), (200,))
+    require(isinstance(rows, list) and rows[0]["content"]["cards"][0].get("explanation") == explanation,
+            "Card explanation was lost during API normalization or persistence.")
+    bad = copy.deepcopy(document)
+    bad["cards"][0]["explanation"] = "x" * 10001
+    push(fixture, token, [entry(bad, latest_hash(fixture, token, document["id"]))], (400,))
+
+
 def run(fixture):
     token, other = fixture.actor("owner"), fixture.actor("other")
     card_id = identifier()
     source, destination = area(card_id), area()
     push(fixture, token, [entry(source), entry(destination)])
     verify_study(fixture, token, other, source, card_id)
+    verify_session_settings(fixture, token)
+    verify_card_explanations(fixture, token)
     verify_move(fixture, token, other, source, destination, card_id)
     verify_linked_family(fixture, token)
 

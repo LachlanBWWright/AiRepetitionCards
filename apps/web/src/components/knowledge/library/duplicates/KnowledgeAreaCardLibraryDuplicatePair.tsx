@@ -1,11 +1,6 @@
 import type { Assessment, LearningArea } from "@recall/domain";
 import type { CardDuplicateCandidate } from "@recall/application";
 import { Button } from "@recall/ui-web";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@recall/ui-web/components/collapsible";
 import type { KnowledgeAreaCardLibraryDuplicateScope } from "../KnowledgeAreaCardLibraryDerivations";
 import type { getKnowledgeAreaCardLibraryDuplicates } from "../KnowledgeAreaCardLibraryDerivations";
 
@@ -35,45 +30,46 @@ export function KnowledgeAreaCardLibraryDuplicatePair({
   };
 
   return (
-    <li className="border-b py-4 last:border-b-0">
-      <p>{left.front}</p>
-      {scope === "workspace" && <p>{left.areaTitle}</p>}
-      <p>{right.front}</p>
-      {scope === "workspace" && <p>{right.areaTitle}</p>}
-      <p>{reason}</p>
-      <Collapsible>
-        <CollapsibleTrigger asChild>
-          <Button size="small" variant="secondary">
-            Compare answers
-          </Button>
-        </CollapsibleTrigger>
-        <CollapsibleContent>
-          <p>{left.back}</p>
-          <p>{right.back}</p>
-        </CollapsibleContent>
-      </Collapsible>
-      <Button
-        size="small"
-        variant="secondary"
-        disabled={restoring}
-        onClick={() => {
-          openCandidate(left);
-        }}
-      >
-        Open first card
-      </Button>
-      {(onOpenDuplicate || right.areaId === area.id) && (
+    <li className="flex min-w-0 flex-col gap-4 border-b pb-4 last:border-b-0 last:pb-0">
+      <section className="flex min-w-0 flex-col gap-2" aria-label="First card">
+        <h3 className="text-sm font-semibold">First card</h3>
+        <p className="break-words">{left.front}</p>
+        <p className="break-words text-muted-foreground">{left.back}</p>
+        {scope === "workspace" && <p className="text-sm text-muted-foreground">{left.areaTitle}</p>}
+      </section>
+      <section className="flex min-w-0 flex-col gap-2" aria-label="Matching card">
+        <h3 className="text-sm font-semibold">Matching card</h3>
+        <p className="break-words">{right.front}</p>
+        <p className="break-words text-muted-foreground">{right.back}</p>
+        {scope === "workspace" && (
+          <p className="text-sm text-muted-foreground">{right.areaTitle}</p>
+        )}
+      </section>
+      <p className="text-sm text-muted-foreground">{reason}</p>
+      <div className="flex flex-wrap gap-2">
         <Button
-          size="small"
-          variant="secondary"
+          size="default"
+          variant="default"
           disabled={restoring}
           onClick={() => {
-            openCandidate(right);
+            openCandidate(left);
           }}
         >
-          Open matching card
+          Open first card
         </Button>
-      )}
+        {(onOpenDuplicate || right.areaId === area.id) && (
+          <Button
+            size="default"
+            variant="default"
+            disabled={restoring}
+            onClick={() => {
+              openCandidate(right);
+            }}
+          >
+            Open matching card
+          </Button>
+        )}
+      </div>
     </li>
   );
 }

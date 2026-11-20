@@ -38,7 +38,7 @@ export function NativeDeckSharingBrowseResults({
           ) : null}
           <NativeButton
             label="View deck and versions"
-            tone="soft"
+            variant="default"
             disabled={busy}
             onPress={() => {
               onOpenDeck(deck.id);
@@ -49,7 +49,7 @@ export function NativeDeckSharingBrowseResults({
       {nextCursor ? (
         <NativeButton
           label="Load more decks"
-          tone="soft"
+          variant="default"
           disabled={busy}
           onPress={() => {
             onSearch(nextCursor);

@@ -1,3 +1,4 @@
+import { createLuaHttpRuntime } from "./lua/transport";
 import { Effect, Schema } from "effect";
 import {
   ActivityLibrarySchema,
@@ -65,7 +66,7 @@ function decodeAssessmentResult(
   );
 }
 export function createActivityServices(transport: ActivityHttpTransport) {
-  const read = transport({ path: "/api/v1/activities", method: "GET" }).pipe(
+  const read = Effect.suspend(() => transport({ path: "/api/v1/activities", method: "GET" })).pipe(
     Effect.flatMap((reply) =>
       reply.status === 200
         ? Schema.decodeUnknown(snapshot)(reply.body).pipe(Effect.mapError(() => error(null, 502)))
@@ -73,6 +74,7 @@ export function createActivityServices(transport: ActivityHttpTransport) {
     ),
   );
   return {
+    lua: createLuaHttpRuntime(transport),
     read: read.pipe(Effect.map((value) => value.library)),
     sync: (local: ActivityLibrary): Effect.Effect<ActivityLibrary, ActivityFailure> =>
       Effect.gen(function* () {
@@ -107,6 +109,24 @@ export function createActivityServices(transport: ActivityHttpTransport) {
         Effect.flatMap((reply) =>
           reply.status === 200
             ? decodeAssessmentResult(reply.body, activity, response)
+            : Effect.fail(error(reply.body, reply.status)),
+        ),
+      ),
+    execute: (
+      activity: LearningActivity,
+      response: ActivityResponse,
+      mode: "run" | "submit" = "submit",
+    ) =>
+      transport({
+        path: "/api/v1/activities/execute",
+        method: "POST",
+        body: { activity, response, executionMode: mode },
+      }).pipe(
+        Effect.flatMap((reply) =>
+          reply.status === 200
+            ? Schema.decodeUnknown(CodingExecutionSchema)(reply.body).pipe(
+                Effect.mapError(() => error(null, 502)),
+              )
             : Effect.fail(error(reply.body, reply.status)),
         ),
       ),

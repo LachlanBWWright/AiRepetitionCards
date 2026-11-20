@@ -31,22 +31,20 @@ function LibraryCoverage({
   readonly cards: readonly KnowledgeNotebookModel["knowledgeArea"]["cards"][number][];
 }) {
   return (
-    <section className="space-y-3">
+    <section className="flex flex-col gap-3">
       <h3 className="text-sm font-semibold leading-6">Library coverage · {cards.length} cards</h3>
-      <div className="space-y-4 pt-3">
-        {cards.map((card) => (
-          <div key={card.id} className="whitespace-pre-wrap py-2">
-            {card.kind === "basic" ? (
-              <>
-                <strong>{card.front}</strong>
-                <p>{card.back}</p>
-              </>
-            ) : (
-              <p>{card.text}</p>
-            )}
-          </div>
-        ))}
-      </div>
+      {cards.map((card) => (
+        <div key={card.id} className="whitespace-pre-wrap">
+          {card.kind === "basic" ? (
+            <>
+              <strong>{card.front}</strong>
+              <p>{card.back}</p>
+            </>
+          ) : (
+            <p>{card.text}</p>
+          )}
+        </div>
+      ))}
     </section>
   );
 }
@@ -82,16 +80,12 @@ export function KnowledgeNotebookConcept({
     .join(", ");
 
   return (
-    <li
-      tabIndex={-1}
-      data-search-target={`concept:${concept.id}`}
-      className="border-b py-3 [&_p]:my-1.5"
-    >
-      <section className="space-y-3">
+    <li tabIndex={-1} data-search-target={`concept:${concept.id}`} className="border-b py-3">
+      <section className="flex flex-col gap-3">
         <h3 className="text-sm font-semibold leading-6">
           {concept.title} · {assessment?.status.replaceAll("-", " ") ?? "unassessed"}
         </h3>
-        <div className="space-y-4 pt-3">
+        <div className="flex flex-col gap-4">
           {parent && <p>Within {parent.title}</p>}
           {prerequisites && <p>Builds on: {prerequisites}</p>}
           <p>

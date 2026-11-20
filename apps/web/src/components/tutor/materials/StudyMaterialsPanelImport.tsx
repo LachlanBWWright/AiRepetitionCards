@@ -1,3 +1,8 @@
+import {
+  Collapsible,
+  CollapsibleTrigger,
+  CollapsibleContent,
+} from "@recall/ui-web/components/collapsible";
 import { Alert, AlertDescription } from "@recall/ui-web/components/alert";
 import { Progress } from "@recall/ui-web/components/progress";
 import { Button, Input } from "@recall/ui-web";
@@ -29,8 +34,8 @@ export function StudyMaterialsPanelImport({
   onCancel,
 }: StudyMaterialsPanelImportProps) {
   return (
-    <aside className="space-y-4 border-t pt-6 lg:border-l lg:border-t-0 lg:pl-8 lg:pt-0">
-      <div className="space-y-2">
+    <aside className="flex flex-col gap-4 border-t pt-4 lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0">
+      <div className="flex flex-col gap-2">
         <h4 className="text-sm font-semibold">Import a file</h4>
         <p className="text-sm leading-6 text-muted-foreground">
           Add a document or an image of your notes. Text is extracted on this device.
@@ -51,7 +56,7 @@ export function StudyMaterialsPanelImport({
       />
       <Button
         type="button"
-        variant="outline"
+        variant="default"
         className="w-full"
         disabled={disabled || importing}
         onClick={() => fileInput.current?.click()}
@@ -62,10 +67,10 @@ export function StudyMaterialsPanelImport({
       <p className="text-xs leading-5 text-muted-foreground">
         TXT, Markdown, Word, PDF, PNG, JPEG and WebP.
       </p>
-      <section className="space-y-3">
-        <h3 className="text-sm font-semibold leading-6">Scanned PDFs and import help</h3>
-        <div className="space-y-4 pt-3">
-          <Label>
+      <Collapsible>
+        <CollapsibleTrigger>Scanned PDFs and import help</CollapsibleTrigger>
+        <CollapsibleContent className="flex flex-col gap-4">
+          <Label className="items-start leading-5">
             <Checkbox
               checked={ocrScans}
               disabled={disabled || importing}
@@ -75,13 +80,13 @@ export function StudyMaterialsPanelImport({
             />
             Read scanned PDF pages (up to 30)
           </Label>
-          <p>
+          <p className="text-sm leading-6 text-muted-foreground">
             Supports TXT, Markdown, DOCX, PDF, PNG, JPEG and WebP. Scanned text recognition is
             English only. Check spelling, tables, formulas and code after import. Files are read on
             this device.
           </p>
-        </div>
-      </section>
+        </CollapsibleContent>
+      </Collapsible>
       {importing && (
         <>
           <Alert role="status">
@@ -97,7 +102,7 @@ export function StudyMaterialsPanelImport({
               aria-label={`Reading page ${String(ocrProgress.page)} of ${String(ocrProgress.pages)}`}
             />
           )}
-          <Button type="button" variant="outline" onClick={onCancel}>
+          <Button type="button" variant="secondary" onClick={onCancel}>
             Cancel import
           </Button>
         </>

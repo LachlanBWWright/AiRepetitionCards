@@ -1,3 +1,5 @@
+import { siblingKey, siblingNoteKeys } from "./sibling-identity";
+import { isManuallyBuried } from "./administration/manual-burial";
 import { reviewBudget } from "./study-limits";
 import { reviewPlacement, effectiveReviewEvents } from "@recall/domain";
 import type { Assessment, LearningArea, ReviewEvent, Workspace } from "@recall/domain";
@@ -6,32 +8,8 @@ import { resolveStudySettings, studyAncestors, studyScope } from "./presets/reso
 import { searchStudyCards } from "./search/card-search";
 import { Effect, Either } from "effect";
 
-export type StudyDay = { readonly startsAt: number; readonly endsAt: number };
-
-/** Platform boundary supplies the local calendar day, including DST transitions. */
-export function localStudyDay(now: number): StudyDay {
-  const date = new Date(now);
-  return {
-    startsAt: new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime(),
-    endsAt: new Date(date.getFullYear(), date.getMonth(), date.getDate() + 1).getTime(),
-  };
-}
-
-function siblingKey(
-  card: Assessment,
-  areaId: string,
-  noteKeys: ReadonlyMap<string, string>,
-): string | undefined {
-  if (card.noteId) {
-    const key = noteKeys.get(JSON.stringify([areaId, card.noteId]));
-    if (key) return key;
-  }
-  const legacy =
-    card.siblingId ??
-    (card.cloze ? `cloze:${card.cloze.text}` : undefined) ??
-    /^anki:(.+):\d+$/.exec(card.sourceId ?? "")?.[1];
-  return legacy === undefined ? undefined : JSON.stringify(["legacy", areaId, legacy]);
-}
+export { localStudyDay, type StudyDay } from "./study-day";
+import type { StudyDay } from "./study-day";
 
 function todayEvents(events: readonly ReviewEvent[], day: StudyDay): readonly ReviewEvent[] {
   return events.filter((event) => {
@@ -101,21 +79,7 @@ export function studyQueue(workspace: Workspace, area: LearningArea, now: number
     events.filter((event) => placement.areaId(event) === area.id).map((event) => event.cardId),
   );
   const reviewedIdentities = new Set(events.map((event) => placement.key(event)));
-  const noteKeys = new Map(
-    workspace.areas.flatMap((deck) =>
-      (deck.noteLibrary?.notes ?? []).map(
-        (note) =>
-          [
-            JSON.stringify([deck.id, note.id]),
-            JSON.stringify([
-              "note",
-              note.source?.areaId ?? deck.id,
-              note.source?.noteId ?? note.id,
-            ]),
-          ] as const,
-      ),
-    ),
-  );
+  const noteKeys = siblingNoteKeys(workspace);
   const reviewedSiblings = new Set(
     workspace.areas.flatMap((deck) =>
       deck.cards
@@ -127,7 +91,8 @@ export function studyQueue(workspace: Workspace, area: LearningArea, now: number
   const due = area.cards.filter(
     (card) => Date.parse(card.schedule.due) <= now && !studyCardStatus(workspace, card).suspended,
   );
-  const buried = due.filter((card) => {
+  const isBuried = (card: Assessment) => {
+    if (isManuallyBuried(workspace, card.id, now)) return true;
     const bury =
       card.schedule.state === 0
         ? settings.buryNewSiblings
@@ -139,13 +104,15 @@ export function studyQueue(workspace: Workspace, area: LearningArea, now: number
       !reviewedCards.has(card.id) &&
       reviewedSiblings.has(siblingKey(card, area.id, noteKeys) ?? "")
     );
-  });
+  };
+  const buried = due.filter(isBuried);
   const buriedIds = new Set(buried.map((card) => card.id));
   const overdue = workspace.areas.some((deck) =>
     deck.cards.some(
       (card) =>
         card.schedule.state !== 0 &&
         Date.parse(card.schedule.due) < day.startsAt &&
+        !isManuallyBuried(workspace, card.id, now) &&
         !studyCardStatus(workspace, card).suspended,
     ),
   );
@@ -222,8 +189,26 @@ export function studyQueue(workspace: Workspace, area: LearningArea, now: number
     if (card.schedule.state !== 2 || budget.reviewedCardIds.has(card.id)) return true;
     return remainingReview-- > 0;
   });
+  const ahead =
+    cards.length === 0 && (settings.learnAheadMinutes ?? 0) > 0
+      ? area.cards
+          .filter((card) => {
+            const dueAt = Date.parse(card.schedule.due);
+            return (
+              (card.schedule.state === 1 || card.schedule.state === 3) &&
+              dueAt > now &&
+              dueAt <= now + (settings.learnAheadMinutes ?? 0) * 60_000 &&
+              !studyCardStatus(workspace, card).suspended &&
+              !isBuried(card) &&
+              (!filteredIds || filteredIds.has(card.id))
+            );
+          })
+          .sort((a, b) => a.schedule.due.localeCompare(b.schedule.due) || a.id.localeCompare(b.id))
+          .slice(0, 1)
+      : [];
   return {
-    cards,
+    cards: [...cards, ...ahead],
+    learningAheadCount: ahead.length,
     dueCount: due.length,
     deferredReviewCount:
       ordered.filter((card) => card.schedule.state === 2).length -

@@ -2,7 +2,7 @@ import { TodayStudyLimits } from "./TodayStudyLimits";
 import { useStudyPresets } from "@recall/react";
 import { assignStudyGroup } from "@recall/application";
 import type { SchedulerSettings, Workspace } from "@recall/domain";
-import { Input } from "@recall/ui-web";
+import { Input, FieldLabel, FieldDescription } from "@recall/ui-web";
 import { Button } from "@/components/ui/Button";
 import {
   Select,
@@ -54,13 +54,13 @@ export function StudyPresetEditor({
     </SelectItem>
   ));
   return (
-    <section className="grid gap-3 border-t pt-4" aria-label="Subject presets">
-      <h3 className="font-semibold">Subject presets and groups</h3>
-      <p className="text-sm text-muted-foreground">
+    <section className="flex flex-col gap-4" aria-label="Subject presets">
+      <h3 className="m-0 font-semibold">Subject presets and groups</h3>
+      <FieldDescription>
         A subject inherits its parent’s preset until assigned its own. Subject and parent budgets
         also respect the workspace-wide daily limit above. Save settings to apply.
-      </p>
-      <label>
+      </FieldDescription>
+      <FieldLabel className="flex min-w-0 flex-col gap-2">
         New preset name
         <Input
           value={name}
@@ -69,14 +69,14 @@ export function StudyPresetEditor({
             setName(event.target.value);
           }}
         />
-      </label>
-      <Button type="button" variant="secondary" disabled={!canCreate} onClick={create}>
+      </FieldLabel>
+      <Button type="button" variant="default" disabled={!canCreate} onClick={create}>
         Create preset from workspace defaults
       </Button>
       {presets.length > 0 && (
         <>
           <Select value={selectedId || presets[0]?.id} onValueChange={setSelectedId}>
-            <SelectTrigger aria-label="Edit preset">
+            <SelectTrigger className="w-full" aria-label="Edit preset">
               <SelectValue placeholder="Choose preset" />
             </SelectTrigger>
             <SelectContent>{presetOptions}</SelectContent>
@@ -99,7 +99,7 @@ export function StudyPresetEditor({
         <AccordionItem value="assignments">
           <AccordionTrigger>Assign presets and parent subjects</AccordionTrigger>
           <AccordionContent>
-            <div className="grid gap-4">{assignmentRows}</div>
+            <div className="flex flex-col gap-4">{assignmentRows}</div>
           </AccordionContent>
         </AccordionItem>
       </Accordion>
@@ -121,8 +121,8 @@ function SubjectAssignment({
     onChange(assignStudyGroup(settings, areaId, field, value === "inherit" ? undefined : value));
   };
   return (
-    <div className="grid gap-2 border-b pb-3">
-      <label>
+    <div className="flex flex-col gap-2 border-b pb-3">
+      <FieldLabel className="flex min-w-0 flex-col gap-2">
         Subject returning-card limit (blank inherits)
         <Input
           type="number"
@@ -142,20 +142,20 @@ function SubjectAssignment({
             });
           }}
         />
-      </label>
+      </FieldLabel>
       <TodayStudyLimits
         settings={settings}
         onChange={onChange}
         areaId={workspace.areas.find((area) => area.id === areaId)?.id}
       />
-      <p className="font-medium">{workspace.areas.find((area) => area.id === areaId)?.title}</p>
+      <p className="m-0 font-medium">{workspace.areas.find((area) => area.id === areaId)?.title}</p>
       <Select
         value={settings.areaPresets?.[areaId] ?? "inherit"}
         onValueChange={(value) => {
           update("areaPresets", value);
         }}
       >
-        <SelectTrigger aria-label="Subject preset">
+        <SelectTrigger className="w-full" aria-label="Subject preset">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
@@ -173,7 +173,7 @@ function SubjectAssignment({
           update("areaParents", value);
         }}
       >
-        <SelectTrigger aria-label="Parent subject">
+        <SelectTrigger className="w-full" aria-label="Parent subject">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>

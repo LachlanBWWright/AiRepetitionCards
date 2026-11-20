@@ -1,3 +1,4 @@
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@recall/ui-web/components/tabs";
 import type { ComponentProps, ReactNode } from "react";
 import type { KnowledgeArea } from "@recall/domain";
 import { Button } from "@/components/ui/Button";
@@ -54,14 +55,23 @@ export function KnowledgeAreaPublishingView({
           <p>Shared content has no personal schedules or review history.</p>
         </div>
       )}
-      <div
-        className={
-          embedded ? "grid grid-cols-1 gap-6" : "mt-6 grid grid-cols-1 gap-4 lg:grid-cols-2"
-        }
+      <Tabs
+        defaultValue={area && !receivePanelProps.versionId ? "publish" : "receive"}
+        className="mt-4 flex flex-col gap-4"
       >
-        {area && publishForm}
-        <KnowledgeAreaReceivePanel {...receivePanelProps} />
-      </div>
+        <TabsList className="h-10 w-full">
+          {area && <TabsTrigger value="publish">Publish</TabsTrigger>}
+          <TabsTrigger value="receive">Receive</TabsTrigger>
+        </TabsList>
+        {area && (
+          <TabsContent value="publish" forceMount className="data-[state=inactive]:hidden">
+            {publishForm}
+          </TabsContent>
+        )}
+        <TabsContent value="receive" forceMount className="data-[state=inactive]:hidden">
+          <KnowledgeAreaReceivePanel {...receivePanelProps} />
+        </TabsContent>
+      </Tabs>
       {forkConflict && (
         <Button type="button" disabled={busy} onClick={startNewForkAttempt}>
           Start a new copy attempt

@@ -38,13 +38,17 @@ export function createEditorBuilders({ workspace, area, createId }: EditorBuilde
       : {}),
   });
 
-  const cardEditor = (index?: number, kind: "basic" | "cloze" = "basic"): Editor | null => {
-    if (!area) return null;
-    const card = index === undefined ? undefined : area.cards[index];
+  const cardEditor = (
+    index?: number,
+    kind: "basic" | "cloze" = "basic",
+    targetArea = area,
+  ): Editor | null => {
+    if (!targetArea) return null;
+    const card = index === undefined ? undefined : targetArea.cards[index];
     return {
       kind: "card",
       mode: card ? "edit" : "create",
-      areaId: area.id,
+      areaId: targetArea.id,
       id: card?.id ?? createId(),
       tagsText: formatTagInput(card?.tags ?? []),
       stagedAssets: [],
@@ -54,6 +58,7 @@ export function createEditorBuilders({ workspace, area, createId }: EditorBuilde
             kind: card.cloze ? "cloze" : "basic",
             front: card.front,
             back: card.back,
+            explanation: card.explanation ?? "",
             ...(card.imageOcclusion ? { imageOcclusion: card.imageOcclusion } : {}),
             ...(card.cloze ? { cloze: card.cloze } : {}),
             objectiveIds: card.objectiveIds ?? [],
@@ -66,7 +71,7 @@ export function createEditorBuilders({ workspace, area, createId }: EditorBuilde
             kind,
             ...(kind === "cloze" ? { cloze: { text: "", deletionIndex: 1 } } : {}),
           },
-      ...(card ? bound({ kind: "delete-card", areaId: area.id, cardId: card.id }) : {}),
+      ...(card ? bound({ kind: "delete-card", areaId: targetArea.id, cardId: card.id }) : {}),
     };
   };
 
@@ -77,6 +82,7 @@ export function createEditorBuilders({ workspace, area, createId }: EditorBuilde
       : { kind: "delete-area", areaId: area.id };
     return {
       kind: "delete",
+      actionLabel: cardId ? "Delete card" : "Delete subject",
       command,
       title: cardId
         ? `Delete card: ${area.cards.find((card) => card.id === cardId)?.front.slice(0, 150) ?? "this card"}?`

@@ -1,3 +1,4 @@
+import type { AnkiImportControl } from "./anki-import-contracts";
 import { sha1 } from "@noble/hashes/legacy.js";
 import { Effect, Either, Schema } from "effect";
 import { MediaReferenceSchema } from "@recall/domain";
@@ -23,6 +24,8 @@ const MISSING = (reason: AnkiImportError["reason"]): AnkiImportError => ({
 });
 
 type DecodeDatabaseInput = {
+  readonly control?: AnkiImportControl;
+  readonly releaseEntry?: (name: string) => void;
   readonly archive: Readonly<Record<string, Uint8Array>>;
   readonly names: readonly string[];
   readonly databaseFormat: AnkiPackageDatabaseFormat;
@@ -99,8 +102,15 @@ export function decodePackageDatabaseAndMedia(
       const mediaZipNames = new Set(modernMedia.map((entry) => String(entry.zipName)));
       if (names.some((name) => /^\d+$/.test(name) && !mediaZipNames.has(name)))
         return yield* Effect.fail(MISSING("invalid-archive"));
-      let totalDecodedMediaBytes = 0;
+      let totalDecodedMediaBytes = database.byteLength;
+      let completed = 0;
       for (const entry of modernMedia) {
+        yield* input.control?.checkpoint?.({
+          phase: "media",
+          completed: completed++,
+          total: modernMedia.length,
+        }) ?? Effect.void;
+        if (input.control?.checkpoint) yield* Effect.yieldNow();
         if (entry.size > MAX_MEDIA_BYTES) return yield* Effect.fail(MISSING("media-too-large"));
         const payload = archive[String(entry.zipName)];
         if (!payload) return yield* Effect.fail(MISSING("invalid-media"));
@@ -124,9 +134,18 @@ export function decodePackageDatabaseAndMedia(
         });
         if (Either.isLeft(decodedReference)) return yield* Effect.fail(MISSING("invalid-media"));
         mediaByName.set(entry.name, { reference: decodedReference.right, bytes: expanded });
+        input.releaseEntry?.(String(entry.zipName));
       }
     } else {
+      let completed = 0;
+      const total = Object.keys(mediaIndexRecord ?? {}).length;
       for (const [index, fileName] of Object.entries(mediaIndexRecord ?? {})) {
+        yield* input.control?.checkpoint?.({
+          phase: "media",
+          completed: completed++,
+          total,
+        }) ?? Effect.void;
+        if (input.control?.checkpoint) yield* Effect.yieldNow();
         const bytes = archive[index];
         if (!bytes) return yield* Effect.fail(MISSING("invalid-media"));
         if (bytes.byteLength > MAX_MEDIA_BYTES)

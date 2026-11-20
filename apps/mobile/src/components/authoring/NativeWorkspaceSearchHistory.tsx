@@ -1,3 +1,5 @@
+import { NativeCollapsibleTrigger, NativeCollapsibleContent } from "@recall/ui-native";
+import { NativeCollapsible } from "@recall/ui-native";
 import { Text, View } from "react-native";
 import { findDuplicateCardPairs, type WorkspaceSearchResult } from "@recall/application";
 import type { Workspace } from "@recall/domain";
@@ -60,7 +62,7 @@ export function NativeWorkspaceSearchHistory({
           {searchTarget.target.kind === "card" && (
             <NativeButton
               label={editor ? "Discard draft and open selected card" : "Edit selected card"}
-              tone="soft"
+              variant="default"
               disabled={locked}
               onPress={onOpenSearchCard}
             />
@@ -68,7 +70,7 @@ export function NativeWorkspaceSearchHistory({
           {searchTarget.target.kind === "objective" && (
             <NativeButton
               label="Filter cards by this objective"
-              tone="soft"
+              variant="default"
               onPress={filterSelectedObjective}
             />
           )}
@@ -76,34 +78,35 @@ export function NativeWorkspaceSearchHistory({
       )}
       {workspace && (
         <View className={"gap-[8px] pb-[12px]"}>
-          <NativeButton
-            label={history ? "Hide history" : "Card history and recovery"}
-            tone="soft"
+          <NativeCollapsibleTrigger
+            open={history !== null}
+            title="Card history and recovery"
+            onToggle={onToggleHistory}
             disabled={locked}
-            onPress={onToggleHistory}
           />
           {history && editor && (
             <Text className={"text-recall-muted text-[12px] leading-[18px]"}>
               Save or cancel your draft before restoring a version.
             </Text>
           )}
-          {history && (
-            <NativeCardHistoryPanel
-              workspace={workspace}
-              {...history}
-              disabled={locked || editor !== null}
-              onRestore={onRestore}
-            />
-          )}
-          <NativeButton
-            label={showDuplicates ? "Hide duplicates" : "Find duplicates"}
-            tone="soft"
+          <NativeCollapsibleContent open={history !== null}>
+            {
+              <NativeCardHistoryPanel
+                workspace={workspace}
+                {...history}
+                disabled={locked || editor !== null}
+                onRestore={onRestore}
+              />
+            }
+          </NativeCollapsibleContent>
+          <NativeCollapsible
+            open={showDuplicates}
+            title="Find duplicates"
+            onToggle={onToggleDuplicates}
             disabled={locked}
-            onPress={onToggleDuplicates}
-          />
-          {showDuplicates && (
-            <DuplicateList pairs={duplicatePairs} locked={locked} onEdit={editDuplicate} />
-          )}
+          >
+            {<DuplicateList pairs={duplicatePairs} locked={locked} onEdit={editDuplicate} />}
+          </NativeCollapsible>
         </View>
       )}
     </>
@@ -131,7 +134,7 @@ function DuplicatePair({
         <NativeButton
           key={candidate.id}
           label={`Edit: ${candidate.front.slice(0, 60)}`}
-          tone="soft"
+          variant="default"
           disabled={locked}
           onPress={() => {
             onEdit(candidate.areaId, candidate.id);

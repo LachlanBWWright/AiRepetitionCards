@@ -18,7 +18,7 @@ export function NativeNoteAttachments({ model, disabled, area, pickAttachment }:
       {pickAttachment && (
         <NativeButton
           label="Attach image or audio"
-          tone="soft"
+          variant="default"
           disabled={disabled || (model.note.media?.length ?? 0) >= 20}
           onPress={() => {
             model.addAttachment(pickAttachment());
@@ -32,7 +32,7 @@ export function NativeNoteAttachments({ model, disabled, area, pickAttachment }:
           </Text>
           <NativeButton
             label="Remove attachment"
-            tone="soft"
+            variant="default"
             disabled={disabled}
             onPress={() => {
               model.removeAttachment(media.id);
@@ -45,7 +45,7 @@ export function NativeNoteAttachments({ model, disabled, area, pickAttachment }:
           key={objective.id}
           label={`${model.note.objectiveIds.includes(objective.id) ? "✓ " : ""}${objective.title}`}
           disabled={disabled}
-          tone="soft"
+          variant="default"
           onPress={() => {
             model.toggleObjective(objective.id);
           }}

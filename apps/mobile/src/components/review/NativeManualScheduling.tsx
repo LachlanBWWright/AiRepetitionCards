@@ -79,7 +79,7 @@ export function NativeManualScheduling({
       />
       <NativeButton
         label={`Set due date for ${String(cards.length)} cards`}
-        tone="soft"
+        variant="default"
         disabled={!save || controls.busy || !cards.length || !due}
         onPress={() => {
           apply("due");
@@ -93,7 +93,7 @@ export function NativeManualScheduling({
       />
       <NativeButton
         label="Reposition matching new cards"
-        tone="soft"
+        variant="default"
         disabled={
           !save || controls.busy || !cards.length || cards.some((card) => card.schedule.state !== 0)
         }
@@ -112,7 +112,7 @@ export function NativeManualScheduling({
       />
       <NativeButton
         label={`Reset ${String(cards.length)} cards to new`}
-        tone="soft"
+        variant="default"
         disabled={!save || controls.busy || !cards.length || confirmation !== "RESET"}
         onPress={() => {
           apply("reset");

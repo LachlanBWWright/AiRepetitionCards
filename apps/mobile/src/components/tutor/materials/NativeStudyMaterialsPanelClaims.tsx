@@ -1,6 +1,7 @@
 import { Text, View } from "react-native";
 import type { KnowledgeNotebook, StudyMaterial } from "@recall/application";
 import { NativeButton } from "../../ui/NativeButton";
+import { NativeCollapsibleContent, NativeCollapsibleTrigger } from "@recall/ui-native";
 
 type CoveragePlan = NonNullable<KnowledgeNotebook["coveragePlans"]>[number];
 type ClaimCoverage = {
@@ -37,22 +38,28 @@ function ClaimCoverageCard({
 }) {
   return (
     <View className="gap-[5px] border-b border-b-recall-line pb-[8px]">
-      <NativeButton
-        label={claim.title}
-        onPress={() => {
+      <NativeCollapsibleTrigger
+        open={expanded}
+        title={claim.title}
+        onToggle={() => {
           onToggleClaim(claim.id);
         }}
         disabled={disabled}
-        className="py-[10px] px-[4px]"
-        labelClassName="text-recall-surface text-[12px] font-bold"
       />
-      {expanded ? (
-        <Text className="text-recall-ink text-[12px] leading-[18px]">{claim.description}</Text>
-      ) : null}
       <Text className="text-recall-muted text-[11px] leading-[16px]">
         {progress?.approvedCards ?? 0} cards · {progress?.pendingCards ?? 0} suggestions
       </Text>
-      {expanded && <ClaimSources claim={claim} />}
+      <NativeCollapsibleContent open={expanded}>
+        <Text className="text-recall-ink text-[12px] leading-[18px]">{claim.description}</Text>
+        <ClaimSources claim={claim} />
+        <ClaimPriorityButtons
+          claim={claim}
+          disabled={disabled}
+          onChange={(priority) => {
+            onChangeClaim(plan.id, claim.id, claim.decision, priority);
+          }}
+        />
+      </NativeCollapsibleContent>
       <View className="flex-row flex-wrap gap-[7px]">
         <DecisionButton
           label={claim.decision === "selected" ? "✓ Selected" : "Select"}
@@ -68,15 +75,6 @@ function ClaimCoverageCard({
             onChangeClaim(plan.id, claim.id, "skipped", claim.priority);
           }}
         />
-        {expanded && (
-          <ClaimPriorityButtons
-            claim={claim}
-            disabled={disabled}
-            onChange={(priority) => {
-              onChangeClaim(plan.id, claim.id, claim.decision, priority);
-            }}
-          />
-        )}
         <DecisionButton
           label={`${focused ? "✓ " : ""}Focus on this topic`}
           disabled={disabled || claim.decision !== "selected"}
@@ -98,15 +96,7 @@ function DecisionButton({
   readonly disabled: boolean;
   readonly onPress: () => void;
 }) {
-  return (
-    <NativeButton
-      label={label}
-      onPress={onPress}
-      disabled={disabled}
-      className="py-[10px] px-[4px]"
-      labelClassName="text-recall-surface text-[12px] font-bold"
-    />
-  );
+  return <NativeButton label={label} onPress={onPress} disabled={disabled} />;
 }
 
 function ClaimPriorityButtons({

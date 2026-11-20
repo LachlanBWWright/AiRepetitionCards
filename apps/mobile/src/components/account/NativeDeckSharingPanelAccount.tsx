@@ -40,14 +40,14 @@ function NativeDeckSharingUpdateRow({
       </Text>
       <NativeButton
         label="Review exact public version"
-        tone="soft"
+        variant="default"
         disabled={busy}
         onPress={() => onReviewVersion?.(update.latestVersionId)}
       />
       {!update.seen ? (
         <NativeButton
           label="Mark as reviewed"
-          tone="soft"
+          variant="default"
           disabled={busy}
           onPress={() => onMarkUpdateRead?.(update.areaId, update.latestVersionId)}
         />
@@ -98,7 +98,7 @@ export function NativeDeckSharingPanelAccount({
               </Text>
               <NativeButton
                 label="Manage"
-                tone="soft"
+                variant="default"
                 disabled={busy}
                 onPress={() => onManageDeck?.(deck.id)}
               />
@@ -113,7 +113,7 @@ export function NativeDeckSharingPanelAccount({
               </Text>
               <NativeButton
                 label="Unfollow"
-                tone="soft"
+                variant="default"
                 disabled={busy}
                 onPress={() => onUnfollow?.(item.areaId)}
               />

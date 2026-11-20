@@ -46,5 +46,5 @@ export const dashboardViewLabels: Readonly<Record<DashboardView, string>> = {
   [DashboardView.Library]: "Overview",
   [DashboardView.Tutor]: "Tutor",
   [DashboardView.Improve]: "Improve",
-  [DashboardView.Insights]: "Progress",
+  [DashboardView.Insights]: "Workspace insights",
 };

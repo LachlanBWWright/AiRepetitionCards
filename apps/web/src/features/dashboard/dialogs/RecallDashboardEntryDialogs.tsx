@@ -19,11 +19,8 @@ import {
   DialogTitle,
 } from "@recall/ui-web/components/dialog";
 
-export type DashboardConfirmation = {
-  readonly description: string;
-  readonly onConfirm: () => unknown;
-  readonly onCancel?: () => void;
-};
+import type { DashboardConfirmation } from "./dashboard-confirmation";
+export type { DashboardConfirmation } from "./dashboard-confirmation";
 
 export function RecallDashboardEntryDialogs({
   confirmation,
@@ -75,7 +72,7 @@ export function RecallDashboardEntryDialogs({
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+            <AlertDialogTitle>{confirmation?.title ?? "Confirm action"}</AlertDialogTitle>
             <AlertDialogDescription className="whitespace-pre-line">
               {confirmation?.description}
             </AlertDialogDescription>
@@ -83,6 +80,7 @@ export function RecallDashboardEntryDialogs({
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
+              variant={confirmation?.variant ?? "default"}
               onClick={(event) => {
                 event.preventDefault();
                 const selected = confirmation;
@@ -90,7 +88,7 @@ export function RecallDashboardEntryDialogs({
                 if (selected) void selected.onConfirm();
               }}
             >
-              Confirm
+              {confirmation?.confirmLabel ?? "Continue"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -136,13 +134,13 @@ export function RecallDashboardEntryDialogs({
             </DialogDescription>
           </DialogHeader>
           <Button onClick={onAddCard}>Write manually</Button>
-          <Button variant="secondary" onClick={onGenerateCards}>
+          <Button variant="default" onClick={onGenerateCards}>
             Generate from materials
           </Button>
-          <Button variant="secondary" onClick={onImportCards}>
+          <Button variant="default" onClick={onImportCards}>
             Import existing cards
           </Button>
-          <Button variant="secondary" onClick={onFinishLater}>
+          <Button variant="default" onClick={onFinishLater}>
             Finish later
           </Button>
         </DialogContent>

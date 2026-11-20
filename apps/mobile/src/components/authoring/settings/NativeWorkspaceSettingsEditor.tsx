@@ -211,7 +211,7 @@ export function NativeWorkspaceSettingsEditor({
       {
         <NativeButton
           label={"Add objective"}
-          tone="soft"
+          variant="default"
           disabled={locked}
           onPress={addObjective}
         />
@@ -219,7 +219,7 @@ export function NativeWorkspaceSettingsEditor({
       {
         <NativeButton
           label={pending ? "Saving…" : "Save settings"}
-          tone="soft"
+          variant="default"
           disabled={locked}
           onPress={() => {
             const tags = parseTagInput(editor.tagsText);

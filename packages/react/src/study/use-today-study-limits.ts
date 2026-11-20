@@ -27,7 +27,7 @@ export function useTodayStudyLimits(
     onChange(
       todayStudyLimits(
         settings,
-        localStudyDay(clock()),
+        localStudyDay(clock(), settings.studyDayStartHour),
         {
           ...(dailyNewLimit === undefined ? {} : { dailyNewLimit }),
           ...(dailyReviewLimit === undefined ? {} : { dailyReviewLimit }),

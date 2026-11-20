@@ -12,6 +12,7 @@ var fixtures = Path.Combine(root, "contracts", "fixtures", "dotnet-v1");
 using var manifest = JsonDocument.Parse(File.ReadAllText(Path.Combine(fixtures, "manifest.json")));
 var schemas = new Dictionary<string, JsonSchema>
 {
+    ["managed-ai-status"] = JsonSchema.FromFile(Path.Combine(root, "contracts/generated/managed-ai-status.schema.json")),
     ["auth-session"] = JsonSchema.FromFile(Path.Combine(root, "contracts/generated/auth-session.schema.json")),
     ["workspace-snapshot"] = JsonSchema.FromFile(Path.Combine(root, "contracts/generated/workspace-snapshot.schema.json"))
 };
@@ -25,7 +26,7 @@ foreach (var entry in manifest.RootElement.EnumerateArray())
     var value = payload.RootElement;
     var evaluation = schemas[contract].Evaluate(value);
     var shapeValid = evaluation.IsValid;
-    var semantic = contract == "auth-session"
+    var semantic = contract == "managed-ai-status" ? ContractBoundaryValidator.ValidateManagedAiStatus(value) : contract == "auth-session"
         ? ContractBoundaryValidator.ValidateAuthSession(value)
         : ContractBoundaryValidator.ValidateWorkspaceSnapshot(value);
     if (shapeValid != entry.GetProperty("schemaValid").GetBoolean())
@@ -36,6 +37,9 @@ foreach (var entry in manifest.RootElement.EnumerateArray())
 }
 failures.AddRange(AuthoredMetadataChecks.Run());
 failures.AddRange(PublishingMetadataChecks.Run());
+failures.AddRange(WorkspaceScaleChecks.Run(root));
+failures.AddRange(await TutorPrivacyChecks.Run());
+failures.AddRange(await ManagedAiChecks.Run());
 if (count < 15) failures.Add("The shared contract corpus is incomplete.");
 foreach (var failure in failures) Console.Error.WriteLine(failure);
 Console.WriteLine($"Shared contract fixtures: {count} checked, {failures.Count} failures.");

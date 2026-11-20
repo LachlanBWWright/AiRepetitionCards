@@ -1,6 +1,4 @@
 using System.Net.Http.Headers;
-using System.Diagnostics;
-using System.ComponentModel;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -54,7 +52,7 @@ public sealed partial class LearningActivityOperations(
         return TrySnapshot(result.Value, out var saved) ? Results.Json(saved, options: JsonOptions) : Error("activity-storage-invalid", 502);
     }
 
-    public async Task<IResult> AssessAsync(HttpContext http, CancellationToken token)
+    public async Task<IResult> AssessAsync(HttpContext http, CancellationToken token, bool executeOnly = false)
     {
         Private(http);
         var context = await ResolveAsync(http, token);
@@ -62,6 +60,9 @@ public sealed partial class LearningActivityOperations(
         var bytes = await ReadBodyAsync(http, MaximumRequestBytes, token);
         if (bytes is null || !TryObject(bytes, out var root) || !root.TryGetProperty("activity", out var supplied) ||
             !ValidActivity(supplied) || !root.TryGetProperty("response", out var response) || !ValidResponse(response)) return Error("invalid-activity-or-response", 400);
+        if (root.TryGetProperty("executionMode", out var requestedMode) && (requestedMode.ValueKind != JsonValueKind.String || requestedMode.GetString() is not ("run" or "submit")))
+            return Error("invalid-execution-mode", 400);
+        var executionMode = root.TryGetProperty("executionMode", out var validMode) ? validMode.GetString()! : "submit";
         var snapshot = await ReadSnapshotAsync(context.Value!, token);
         if (snapshot is null) return Error("activity-storage-unavailable", 503);
         var activity = FindActivity(snapshot.Value.Library, supplied.GetProperty("id").GetString()!);
@@ -69,12 +70,13 @@ public sealed partial class LearningActivityOperations(
             activity.Value.TryGetProperty("archived", out var archived) && archived.ValueKind == JsonValueKind.True)
             return Error("activity-sync-required", 409);
         var plugin = activity.Value.GetProperty("pluginId").GetString()!;
+        if (executeOnly && plugin != "recall.coding") return Error("unsupported-executor", 400);
         if (!ValidSequence(activity.Value, response, plugin == "recall.interrogation")) return Error("invalid-question-sequence", 400);
         if (plugin == "recall.coding" && !ValidCodingPayload(activity.Value) || plugin != "recall.coding" && !ValidRubricPayload(activity.Value))
             return Error("invalid-activity-payload", 400);
         var canonical = await ReadCanonicalAreaAsync(context.Value!, activity.Value.GetProperty("areaId").GetString()!, token);
         if (canonical is null) return Error("activity-sync-required", 409);
-        if (plugin == "recall.coding") return await AssessCodeAsync(activity.Value, response, token);
+        if (plugin == "recall.coding") return await AssessCodeAsync(activity.Value, response, token, executeOnly, executeOnly ? executionMode : "submit");
         if (plugin is not ("recall.short-answer" or "recall.interrogation" or "recall.basic" or "recall.cloze"))
             return Error("unsupported-evaluator", 400);
         return await GenerateAssessmentAsync(context.Value!, activity.Value, response, canonical.Value, token);
@@ -128,7 +130,7 @@ public sealed partial class LearningActivityOperations(
             var sharedBudgetSettled = budgetResult is not BudgetReservationResult.Reserved hold || await budget.SettleAsync(hold, inputTokens, outputTokens, token);
             if (!sharedBudgetSettled || settled is null || settled.Value.ValueKind != JsonValueKind.True) return Error("ai-budget-unavailable", 503);
         }
-        if (generated is Result<TutorProviderReply, TutorProviderFailure>.Failure) return Error("question-provider-unavailable", 503);
+        if (generated is Result<TutorProviderReply, TutorProviderFailure>.Failure questionFailure) return ManagedProviderError(questionFailure.Error, "question-provider-unavailable");
         var reply = ((Result<TutorProviderReply, TutorProviderFailure>.Success)generated).Value;
         if (reply.Output.ValueKind != JsonValueKind.Object || !reply.Output.TryGetProperty("question", out var question) || question.ValueKind != JsonValueKind.String || question.GetString() is not { Length: > 0 and <= 2_000 } text || !reply.Output.TryGetProperty("objectiveId", out var returnedObjective) || returnedObjective.ValueKind != JsonValueKind.String || returnedObjective.GetString() != objectiveId) return Error("invalid-question", 502);
         return Results.Json(new { question = text }, options: JsonOptions);
@@ -168,7 +170,7 @@ public sealed partial class LearningActivityOperations(
             var sharedBudgetSettled = reservationResult is not BudgetReservationResult.Reserved reserved || await budget.SettleAsync(reserved, inputTokens, outputTokens, token);
             if (!sharedBudgetSettled || settled is null || settled.Value.ValueKind != JsonValueKind.True) return Error("ai-budget-unavailable", 503);
         }
-        if (generated is Result<TutorProviderReply, TutorProviderFailure>.Failure) return Error("ai-assessment-unavailable", 503);
+        if (generated is Result<TutorProviderReply, TutorProviderFailure>.Failure assessmentFailure) return ManagedProviderError(assessmentFailure.Error, "ai-assessment-unavailable");
         var reply = ((Result<TutorProviderReply, TutorProviderFailure>.Success)generated).Value;
         if (reply.Output.ValueKind != JsonValueKind.Object || !reply.Output.TryGetProperty("result", out var result) || result.ValueKind != JsonValueKind.String ||
             !reply.Output.TryGetProperty("objectiveId", out var objective) || objective.ValueKind != JsonValueKind.String || objective.GetString() != objectiveId ||
@@ -187,123 +189,6 @@ public sealed partial class LearningActivityOperations(
             : feedback.GetString()![..Math.Min(4_000, feedback.GetString()!.Length)];
         return Results.Json(new { evidence = new[] { new { objectiveId, dimension, score = evidenceResult, confidence = confidenceValue, assistance, assessment = "ai", explanation } }, feedback = feedback.GetString(), evaluatorId = "recall.ai:rubric", evaluatorVersion = model }, options: JsonOptions);
     }
-
-    private async Task<IResult> AssessCodeAsync(JsonElement activity, JsonElement response, CancellationToken token)
-    {
-        if (!activity.TryGetProperty("payload", out var payload) || payload.ValueKind != JsonValueKind.Object ||
-            !payload.TryGetProperty("tests", out var tests) || tests.ValueKind != JsonValueKind.Array || tests.GetArrayLength() is < 1 or > 20 ||
-            !tests.EnumerateArray().All(test => test.ValueKind == JsonValueKind.Object && test.TryGetProperty("input", out var input) && input.ValueKind == JsonValueKind.Array && input.GetArrayLength() <= 10 && test.TryGetProperty("expected", out _)))
-            return Error("invalid-coding-activity", 400);
-        var source = response.GetProperty("answers").GetArrayLength() > 0 ? response.GetProperty("answers")[0].GetString() : null;
-        if (string.IsNullOrWhiteSpace(source)) return Error("coding-solution-required", 400);
-        var image = configuration["RECALL_CODE_IMAGE"]?.Trim() ?? "recall-code-runner:1";
-        if (image.Length is 0 or > 200 || !char.IsAsciiLetterOrDigit(image[0]) || !image.All(character => char.IsAsciiLetterOrDigit(character) || character is '.' or '_' or '/' or '@' or ':' or '-')) return Error("coding-runner-unavailable", 503);
-        var name = "recall-code-" + Guid.NewGuid().ToString("N");
-        var harness = CodingHarness;
-        var args = new[] { "run", "--pull=never", "--rm", "--name", name, "-i", "--network=none", "--read-only", "--cap-drop=ALL", "--security-opt=no-new-privileges", "--pids-limit=32", "--memory=128m", "--memory-swap=128m", "--cpus=0.5", "--user=65534:65534", "--ulimit=nofile=64:64", "--ulimit=cpu=10:10", image, "node", "--max-old-space-size=64", "-e", harness };
-        var start = new ProcessStartInfo("docker") { RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false, CreateNoWindow = true };
-        foreach (var arg in args) start.ArgumentList.Add(arg);
-        using var process = new Process { StartInfo = start };
-        try
-        {
-            if (!process.Start()) return Error("coding-runner-unavailable", 503);
-            var request = JsonSerializer.Serialize(new { source, tests }, JsonOptions);
-            if (Encoding.UTF8.GetByteCount(request) > 200_000) { process.Kill(true); return Error("invalid-coding-activity", 400); }
-            await process.StandardInput.WriteAsync(request.AsMemory(), token);
-            process.StandardInput.Close();
-            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token);
-            timeout.CancelAfter(TimeSpan.FromSeconds(15));
-            var outputTask = ReadBoundedAsync(process.StandardOutput, 65_536, timeout.Token);
-            var errorTask = ReadBoundedAsync(process.StandardError, 2_000, timeout.Token);
-            await process.WaitForExitAsync(timeout.Token);
-            var output = await outputTask;
-            _ = await errorTask;
-            if (process.ExitCode != 0 || output is null) return Error("coding-runner-failed", 503);
-            using var resultDoc = JsonDocument.Parse(output, new JsonDocumentOptions { MaxDepth = 8 });
-            var result = resultDoc.RootElement;
-            if (result.ValueKind != JsonValueKind.Object || !result.TryGetProperty("passed", out var passedValue) || passedValue.ValueKind != JsonValueKind.Number || !passedValue.TryGetInt32(out var passed) ||
-                !result.TryGetProperty("total", out var totalValue) || totalValue.ValueKind != JsonValueKind.Number || !totalValue.TryGetInt32(out var total) || total != tests.GetArrayLength() || passed < 0 || passed > total ||
-                !result.TryGetProperty("failures", out var failures) || failures.ValueKind != JsonValueKind.Array || failures.GetArrayLength() > 20) return Error("coding-runner-invalid-result", 502);
-            var score = (double)passed / total;
-            var assistance = response.GetProperty("assistance").GetString();
-            var evidence = activity.GetProperty("objectiveIds").EnumerateArray().Select(objective => new { objectiveId = objective.GetString(), dimension = "application", score, confidence = 0.9, assistance, assessment = "deterministic", explanation = "Bounded, isolated JavaScript execution against the activity's approved test cases." });
-            var failureText = string.Join(" ", failures.EnumerateArray().Where(value => value.ValueKind == JsonValueKind.String).Select(value => value.GetString()));
-            return Results.Json(new { evidence, feedback = $"{passed}/{total} tests passed. {failureText} Tests establish correctness against these examples, not algorithmic complexity.", evaluatorId = "recall.coding:javascript-tests", evaluatorVersion = "docker-vm-1" }, options: JsonOptions);
-        }
-        catch (Win32Exception) { return Error("coding-runner-unavailable", 503); }
-        catch (OperationCanceledException) when (!token.IsCancellationRequested)
-        {
-            try { if (!process.HasExited) process.Kill(true); } catch (InvalidOperationException) { }
-            return Error("coding-runner-timeout", 503);
-        }
-        catch (JsonException) { return Error("coding-runner-invalid-result", 502); }
-        catch (IOException) { return Error("coding-runner-failed", 503); }
-        finally
-        {
-            try { if (!process.HasExited) process.Kill(true); } catch (InvalidOperationException) { }
-            await RemoveContainerAsync(name);
-        }
-    }
-
-    private static async Task RemoveContainerAsync(string name)
-    {
-        var start = new ProcessStartInfo("docker") { UseShellExecute = false, CreateNoWindow = true };
-        foreach (var argument in new[] { "rm", "-f", name }) start.ArgumentList.Add(argument);
-        using var cleanup = new Process { StartInfo = start };
-        try
-        {
-            if (!cleanup.Start()) return;
-            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-            await cleanup.WaitForExitAsync(timeout.Token);
-        }
-        catch (Win32Exception) { }
-        catch (OperationCanceledException)
-        {
-            try { if (!cleanup.HasExited) cleanup.Kill(true); } catch (InvalidOperationException) { }
-        }
-        catch (InvalidOperationException) { }
-    }
-
-    private static async Task<string?> ReadBoundedAsync(StreamReader reader, int limit, CancellationToken token)
-    {
-        var buffer = new char[4096];
-        var builder = new StringBuilder();
-        while (true)
-        {
-            var count = await reader.ReadAsync(buffer.AsMemory(), token);
-            if (count == 0) return builder.ToString();
-            if (builder.Length + count > limit) return null;
-            builder.Append(buffer, 0, count);
-        }
-    }
-
-    private const string CodingHarness = """
-        const vm = require('node:vm');
-        const {isDeepStrictEqual} = require('node:util');
-        let input = '';
-        process.stdin.setEncoding('utf8');
-        process.stdin.on('data', chunk => { input += chunk; if (input.length > 200000) process.exit(2); });
-        process.stdin.on('end', () => {
-          const request = JSON.parse(input);
-          const failures = [];
-          let passed = 0;
-          for (let index = 0; index < request.tests.length; index++) {
-            const test = request.tests[index];
-            try {
-              const context = vm.createContext(Object.create(null), { codeGeneration: { strings: false, wasm: false }, microtaskMode: 'afterEvaluate' });
-              new vm.Script('Object.freeze(JSON); Object.defineProperty(globalThis, "JSON", { value: JSON, writable: false, configurable: false });').runInContext(context, { timeout: 500 });
-              new vm.Script('"use strict";\n' + request.source).runInContext(context, { timeout: 500, microtaskMode: 'afterEvaluate' });
-              const encoded = new vm.Script('JSON.stringify(solve(...' + JSON.stringify(test.input) + '))').runInContext(context, { timeout: 500 });
-              const actual = JSON.parse(encoded);
-              if (isDeepStrictEqual(actual, test.expected)) passed++;
-              else failures.push('Test ' + (index + 1) + ': returned the wrong value.');
-            } catch (error) {
-              failures.push('Test ' + (index + 1) + ': could not complete. ' + String(error).slice(0, 300));
-            }
-          }
-          process.stdout.write(JSON.stringify({ passed, total: request.tests.length, failures }));
-        });
-        """;
 
     private static void Private(HttpContext http) { http.Response.Headers.CacheControl = "private, no-store, max-age=0"; http.Response.Headers.Vary = "Authorization, Cookie"; }
     private static IResult Error(string error, int status) => Results.Json(new { error }, statusCode: status, options: JsonOptions);

@@ -23,6 +23,9 @@ export default defineConfig(({ mode }) => {
     main: {
       define: {
         ...publicEnvironment,
+        "process.env.RECALL_DESKTOP_UPDATE_URL": JSON.stringify(
+          env.RECALL_DESKTOP_UPDATE_URL ?? "",
+        ),
       },
     },
     preload: {

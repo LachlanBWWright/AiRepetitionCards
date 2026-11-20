@@ -5,7 +5,7 @@ import {
   type SchedulerSettings,
 } from "@recall/domain";
 import { Checkbox } from "@/components/ui/Checkbox";
-import { Input } from "@recall/ui-web";
+import { Input, FieldLabel, FieldDescription } from "@recall/ui-web";
 import {
   Accordion,
   AccordionContent,
@@ -54,8 +54,8 @@ function ReviewerControlsFields({
   readonly id: string;
 }) {
   return (
-    <div className="grid gap-4">
-      <label className="flex items-center gap-2">
+    <div className="flex flex-col gap-4">
+      <FieldLabel className="flex items-center gap-2">
         <Checkbox
           checked={reviewer.showTimer}
           onCheckedChange={(checked) => {
@@ -63,10 +63,14 @@ function ReviewerControlsFields({
           }}
         />
         Show elapsed time
-      </label>
-      <div className="grid gap-3 sm:grid-cols-2">
+      </FieldLabel>
+      <div className="grid gap-4 sm:grid-cols-2">
         {(["questionSeconds", "answerSeconds"] as const).map((field) => (
-          <label key={field} htmlFor={`${id}-${field}`}>
+          <FieldLabel
+            key={field}
+            htmlFor={`${id}-${field}`}
+            className="flex min-w-0 flex-col gap-2"
+          >
             {field === "questionSeconds" ? "Reveal after (seconds)" : "Rate after (seconds)"}
             <Input
               id={`${id}-${field}`}
@@ -79,13 +83,13 @@ function ReviewerControlsFields({
                 update({ [field]: event.target.value ? Number(event.target.value) : NaN });
               }}
             />
-          </label>
+          </FieldLabel>
         ))}
       </div>
-      <p className="text-sm text-muted-foreground">
+      <FieldDescription>
         Zero disables that step. Start auto-advance in the reviewer; it pauses when you leave the
         screen.
-      </p>
+      </FieldDescription>
       <ReviewerActionSelect
         label="Automatic rating"
         value={reviewer.answerAction}
@@ -94,10 +98,14 @@ function ReviewerControlsFields({
           if (value !== "reveal") update({ answerAction: value });
         }}
       />
-      <fieldset className="grid grid-cols-2 gap-3 sm:grid-cols-5">
-        <legend className="mb-2">Keyboard shortcuts</legend>
+      <fieldset className="grid grid-cols-2 gap-4 sm:grid-cols-5">
+        <legend className="col-span-full m-0">Keyboard shortcuts</legend>
         {(["reveal", "again", "hard", "good", "easy"] as const).map((action) => (
-          <label key={action} htmlFor={`${id}-${action}`} className="capitalize">
+          <FieldLabel
+            key={action}
+            htmlFor={`${id}-${action}`}
+            className="flex min-w-0 flex-col gap-2 capitalize"
+          >
             {action}
             <Input
               id={`${id}-${action}`}
@@ -109,13 +117,13 @@ function ReviewerControlsFields({
                 update({ shortcuts: { ...reviewer.shortcuts, [action]: event.target.value } });
               }}
             />
-          </label>
+          </FieldLabel>
         ))}
       </fieldset>
-      <p className="text-sm text-muted-foreground">
+      <FieldDescription>
         Use distinct letters, numbers, or a space. Enter also reveals the answer.
-      </p>
-      <label className="flex items-center gap-2">
+      </FieldDescription>
+      <FieldLabel className="flex items-center gap-2">
         <Checkbox
           checked={reviewer.swipeEnabled}
           onCheckedChange={(checked) => {
@@ -123,9 +131,9 @@ function ReviewerControlsFields({
           }}
         />
         Enable swipe gestures
-      </label>
+      </FieldLabel>
       {reviewer.swipeEnabled && (
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid gap-4 sm:grid-cols-2">
           <ReviewerActionSelect
             label="Swipe left"
             value={reviewer.swipeLeft}
@@ -162,8 +170,8 @@ function ReviewerActionSelect({
     ? ["again", "hard", "good", "easy"]
     : ["reveal", "again", "hard", "good", "easy"];
   return (
-    <div className="grid gap-1">
-      <label htmlFor={id}>{label}</label>
+    <div className="flex flex-col w-full gap-2">
+      <FieldLabel htmlFor={id}>{label}</FieldLabel>
       <Select
         value={value}
         onValueChange={(value) => {
@@ -177,7 +185,7 @@ function ReviewerActionSelect({
             onChange(value);
         }}
       >
-        <SelectTrigger id={id}>
+        <SelectTrigger id={id} className="w-full">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>

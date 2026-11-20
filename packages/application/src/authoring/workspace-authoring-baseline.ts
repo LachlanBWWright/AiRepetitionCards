@@ -20,6 +20,7 @@ export function workspaceAuthoringBaseline(
   workspace: Workspace,
   command: WorkspaceAuthoringCommand,
 ): string | undefined {
+  if (command.kind === "apply-agent-changes") return undefined;
   if (
     command.kind === "restore-workspace-checkpoint" ||
     command.kind === "repair-collection-references"
@@ -66,6 +67,16 @@ export function workspaceAuthoringBaseline(
     );
   if (command.kind === "update-scheduler-settings")
     return JSON.stringify(canonical(workspace.schedulerSettings ?? { requestRetention: 0.9 }));
+  if (command.kind === "create-cards" && command.sourceCardId)
+    return JSON.stringify(
+      canonical({
+        owner: workspace.syncOwnerId ?? null,
+        card: workspace.areas
+          .find((area) => area.id === command.areaId)
+          ?.cards.filter((card) => card.id === command.sourceCardId)
+          .map(authoredCard),
+      }),
+    );
   if (
     command.kind === "create-card" ||
     command.kind === "create-cards" ||

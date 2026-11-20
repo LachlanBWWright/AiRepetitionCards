@@ -58,7 +58,7 @@ declare global {
       };
       readonly auth: {
         readonly getStatus: () => Promise<unknown>;
-        readonly requestMagicLink: (email: string) => Promise<unknown>;
+        readonly signInWithGoogle: () => Promise<unknown>;
         readonly signOut: () => Promise<unknown>;
         readonly onStateChanged: (callback: (state: unknown) => void) => () => void;
         readonly onSignInResult: (callback: (result: unknown) => void) => () => void;
@@ -69,6 +69,8 @@ declare global {
           readonly method: string;
           readonly body: string | null;
           readonly expectedOwnerId?: string;
+          readonly aiFunding?: "managed";
+          readonly aiRequestId?: string;
         }) => Promise<unknown>;
         readonly requestMedia: (request: {
           readonly path: string;
@@ -168,12 +170,18 @@ export async function apiFetch(path: string, init?: RequestInit): Promise<Respon
 
   const method = init?.method?.toUpperCase() ?? "GET";
   const body = typeof init?.body === "string" ? init.body : null;
-  const expectedOwnerId = new Headers(init?.headers).get("x-recall-workspace-owner");
+  const expectedOwnerId =
+    new Headers(init?.headers).get("x-recall-workspace-owner") ??
+    new Headers(init?.headers).get("x-recall-owner");
+  const funding = new Headers(init?.headers).get("x-recall-ai-funding");
+  const requestId = new Headers(init?.headers).get("x-recall-ai-request-id");
   const raw = await bridge.api.request({
     path,
     method,
     body,
     ...(expectedOwnerId === null ? {} : { expectedOwnerId }),
+    ...(funding === "managed" ? { aiFunding: funding } : {}),
+    ...(requestId === null ? {} : { aiRequestId: requestId }),
   });
   if (
     typeof raw !== "object" ||

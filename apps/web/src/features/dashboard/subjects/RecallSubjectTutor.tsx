@@ -1,6 +1,7 @@
-import { useRef, useState, useEffect } from "react";
-import { Effect, Either } from "effect";
-import { askSubjectTutor, tutorApiFailureMessage, type SubjectDialogue } from "@recall/application";
+import type { AgentDialogue } from "@recall/application";
+import { useMemo } from "react";
+import { useSubjectTutor } from "@recall/react";
+import { createBrowserTutorConversationStore } from "@/lib/tutor-conversation-store";
 import type { KnowledgeArea } from "@recall/domain";
 import { Alert } from "@recall/ui-web/components/alert";
 import type { ChatModelSelection } from "@/components/tutor/chat/ChatModelPicker";
@@ -12,58 +13,29 @@ export function RecallSubjectTutor({
   modelSelection,
   api,
   disabled,
-  tools,
   unavailableReason,
+  connectionPrompt,
+  conversationScope,
+  renderHandover,
 }: {
+  readonly renderHandover?: ((history: AgentDialogue) => ReactNode) | undefined;
   readonly area: KnowledgeArea;
+  readonly conversationScope: string;
   readonly modelSelection?: ChatModelSelection | undefined;
   readonly api: typeof tutorApi;
   readonly disabled: boolean;
-  readonly tools?: ReactNode;
   readonly unavailableReason?: string | null;
+  readonly connectionPrompt?: ReactNode;
 }) {
-  const [history, setHistory] = useState<SubjectDialogue>([]);
-  const [question, setQuestion] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
-  const pending = useRef(false);
-  const alive = useRef(true);
-  useEffect(() => {
-    alive.current = true;
-    return () => {
-      alive.current = false;
-    };
-  }, []);
-  function ask() {
-    if (disabled || pending.current || !question.trim()) return;
-    pending.current = true;
-    setBusy(true);
-    setMessage(null);
-    const submitted = question;
-    Effect.runFork(
-      askSubjectTutor(api, area, history, submitted).pipe(
-        Effect.either,
-        Effect.flatMap((result) =>
-          Effect.sync(() => {
-            if (!alive.current) return;
-            if (Either.isLeft(result)) setMessage(tutorApiFailureMessage(result.left));
-            else {
-              setHistory(result.right.history);
-              setQuestion((value) => (value === submitted ? "" : value));
-            }
-          }),
-        ),
-        Effect.ensuring(
-          Effect.sync(() => {
-            pending.current = false;
-            if (alive.current) setBusy(false);
-          }),
-        ),
-      ),
-    );
-  }
+  const store = useMemo(
+    () => createBrowserTutorConversationStore(conversationScope, area.id),
+    [conversationScope, area.id],
+  );
+  const chat = useSubjectTutor({ api, area, disabled, store });
+  const { history, question, setQuestion, busy, message, ask } = chat;
   return (
     <ChatRoom
+      tools={renderHandover?.(history)}
       label="Tutor"
       modelSelection={modelSelection}
       inputId={`subject-question-${area.id}`}
@@ -74,7 +46,7 @@ export function RecallSubjectTutor({
       onChange={setQuestion}
       onSend={ask}
       busy={busy}
-      disabled={disabled}
+      disabled={disabled || chat.loading}
       maxLength={2000}
       pendingMessage={busy ? question : undefined}
       afterMessages={
@@ -84,8 +56,8 @@ export function RecallSubjectTutor({
               {unavailableReason}
             </p>
           )}
+          {connectionPrompt}
           {message && <Alert variant="destructive">{message}</Alert>}
-          {tools}
         </>
       }
     />

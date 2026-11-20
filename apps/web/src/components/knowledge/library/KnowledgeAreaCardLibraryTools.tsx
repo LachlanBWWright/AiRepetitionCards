@@ -1,15 +1,21 @@
 "use client";
 
 import type { Assessment, LearningArea, Workspace } from "@recall/domain";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { getKnowledgeAreaCardLibraryDuplicates } from "./KnowledgeAreaCardLibraryDerivations";
 import { Ellipsis, Search } from "lucide-react";
 import { KnowledgeAreaCardLibraryDuplicateResults } from "./duplicates/KnowledgeAreaCardLibraryDuplicateResults";
 import { KnowledgeAreaCardLibraryObjectiveFilter } from "./KnowledgeAreaCardLibraryObjectiveFilter";
 import { KnowledgeAreaCardLibraryDuplicateScopeSelect } from "./duplicates/KnowledgeAreaCardLibraryDuplicateScope";
-import { Input } from "@recall/ui-web";
+import { Input, FieldLabel } from "@recall/ui-web";
 import { Button as ShadcnButton } from "@recall/ui-web/components/button";
-import { Collapsible, CollapsibleContent } from "@recall/ui-web/components/collapsible";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@recall/ui-web/components/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -57,6 +63,8 @@ export function KnowledgeAreaCardLibraryTools(props: KnowledgeAreaCardLibraryToo
     onEdit,
     onOpenDuplicate,
   } = props;
+  const toolsTrigger = useRef<HTMLButtonElement>(null);
+  const hasObjectives = objectives.length > 0 || legacyObjectives.length > 0;
   const [duplicateScope, setDuplicateScope] = useState<"area" | "workspace">("area");
   const [scanDuplicates, setScanDuplicates] = useState(false);
   const duplicatePairs = getKnowledgeAreaCardLibraryDuplicates(
@@ -67,66 +75,87 @@ export function KnowledgeAreaCardLibraryTools(props: KnowledgeAreaCardLibraryToo
   );
   const flaggedCount = area.cards.filter((card) => flaggedCardIds.includes(card.id)).length;
   const toggleDuplicates = () => {
-    setScanDuplicates((open) => !open);
+    setScanDuplicates(true);
   };
   const setDuplicateSearchScope = (value: string) => {
     setDuplicateScope(value === "workspace" ? "workspace" : "area");
   };
+  const flaggedFilter = onFlag ? (
+    <DropdownMenuCheckboxItem checked={flaggedOnly} onCheckedChange={setFlaggedOnly}>
+      Flagged cards ({flaggedCount})
+    </DropdownMenuCheckboxItem>
+  ) : null;
   return (
-    <Collapsible className="mb-4" open={scanDuplicates} onOpenChange={setScanDuplicates}>
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="relative min-w-0 flex-1 basis-64">
-          <label htmlFor={`${fieldId}-search`} className="sr-only">
-            Search cards
-          </label>
-          <Search
-            aria-hidden="true"
-            className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
-          />
-          <Input
-            id={`${fieldId}-search`}
-            type="search"
-            className="w-full bg-transparent pl-9"
-            value={search}
-            onChange={(event) => {
-              setSearch(event.target.value);
+    <Dialog open={scanDuplicates} onOpenChange={setScanDuplicates}>
+      <div className="flex flex-col gap-2">
+        <div
+          className={`grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 ${hasObjectives ? "lg:grid-cols-[minmax(0,1fr)_13rem_auto]" : ""}`}
+        >
+          <div className={`relative min-w-0 ${hasObjectives ? "col-span-2 lg:col-span-1" : ""}`}>
+            <FieldLabel htmlFor={`${fieldId}-search`} className="sr-only">
+              Search cards
+            </FieldLabel>
+            <Search
+              aria-hidden="true"
+              className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+            />
+            <Input
+              id={`${fieldId}-search`}
+              type="search"
+              className="w-full bg-transparent pl-9"
+              value={search}
+              onChange={(event) => {
+                setSearch(event.target.value);
+              }}
+              placeholder="Search questions, answers or tags…"
+            />
+          </div>
+          <KnowledgeAreaCardLibraryObjectiveFilter
+            fieldId={fieldId}
+            objectives={objectives}
+            legacyObjectives={legacyObjectives}
+            value={objectiveFilter}
+            onChange={(value) => {
+              setObjectiveFilter(value === "all" ? "" : value);
             }}
-            placeholder="Search questions, answers or tags…"
           />
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <ShadcnButton
+                ref={toolsTrigger}
+                type="button"
+                variant="secondary"
+                size="icon"
+                aria-label="Card tools"
+              >
+                <Ellipsis aria-hidden="true" />
+              </ShadcnButton>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              {flaggedFilter}
+              <DropdownMenuItem onSelect={toggleDuplicates}>Find duplicates</DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
-        <KnowledgeAreaCardLibraryObjectiveFilter
-          fieldId={fieldId}
-          objectives={objectives}
-          legacyObjectives={legacyObjectives}
-          value={objectiveFilter}
-          onChange={(value) => {
-            setObjectiveFilter(value === "all" ? "" : value);
-          }}
-        />
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <ShadcnButton type="button" variant="outline" size="icon" aria-label="Card tools">
-              <Ellipsis aria-hidden="true" />
-            </ShadcnButton>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            {onFlag && (
-              <DropdownMenuCheckboxItem checked={flaggedOnly} onCheckedChange={setFlaggedOnly}>
-                Flagged cards ({flaggedCount})
-              </DropdownMenuCheckboxItem>
-            )}
-            <DropdownMenuItem onSelect={toggleDuplicates}>
-              {scanDuplicates ? "Close duplicate finder" : "Find duplicates"}
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        {flaggedOnly && (
+          <p className="text-sm text-muted-foreground">
+            Showing flagged cards. Change this in Card tools.
+          </p>
+        )}
       </div>
-      {flaggedOnly && (
-        <p className="mt-3 text-sm text-muted-foreground">
-          Showing flagged cards. Change this in Card tools.
-        </p>
-      )}
-      <CollapsibleContent className="pt-4">
+      <DialogContent
+        className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-3xl"
+        onCloseAutoFocus={(event) => {
+          event.preventDefault();
+          toolsTrigger.current?.focus();
+        }}
+      >
+        <DialogHeader>
+          <DialogTitle>Find duplicate cards</DialogTitle>
+          <DialogDescription>
+            Compare similar cards before choosing which to keep.
+          </DialogDescription>
+        </DialogHeader>
         <KnowledgeAreaCardLibraryDuplicateScopeSelect
           fieldId={fieldId}
           workspace={workspace}
@@ -142,7 +171,7 @@ export function KnowledgeAreaCardLibraryTools(props: KnowledgeAreaCardLibraryToo
           onEdit={onEdit}
           onOpenDuplicate={onOpenDuplicate}
         />
-      </CollapsibleContent>
-    </Collapsible>
+      </DialogContent>
+    </Dialog>
   );
 }

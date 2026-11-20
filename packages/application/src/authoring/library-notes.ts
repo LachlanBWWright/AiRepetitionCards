@@ -32,6 +32,7 @@ export const LibraryDraftSchema = Schema.Union(
     cardKind: Schema.Literal("basic", "cloze"),
     front: text,
     back: text,
+    explanation: Schema.optional(text),
     clozeText: text,
     clozeIndex: text,
     presentation: Schema.optional(ReviewPresentationSchema),

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useId, useState, useSyncExternalStore } from "react";
-import { Download, LogOut, Trash2 } from "lucide-react";
+import { LogOut } from "lucide-react";
 import { Effect, Fiber, Either, Schema } from "effect";
 import type { Workspace } from "@/features/workspace/types";
 import { Button } from "@/components/ui/Button";
@@ -9,6 +9,7 @@ import { Alert, toast } from "@recall/ui-web";
 import { readBrowserSession } from "@/lib/auth/browser-session";
 import { readSupabaseConfig } from "@/lib/supabase/config";
 import { TutorPrivacyControls } from "@/components/tutor/connection/TutorPrivacyControls";
+import { AiFundingSettings } from "@/components/tutor/funding/AiFundingSettings";
 import { DesktopAISettings } from "@/components/tutor/connection/LocalChatGPTTutor";
 import { DesktopAccountAction } from "@/components/auth/DesktopAccountAction";
 import { isDesktopRuntime } from "@/lib/desktop-api";
@@ -18,6 +19,7 @@ import { eraseLocalData } from "@/features/workspace/erase-local-data";
 import { sharedPublicationReturnPath } from "@/lib/auth/return-path";
 import { browserLocalBudget } from "@/lib/local-ai-budget";
 import { ChatGPTAccountConnection } from "./ChatGPTAccountConnection";
+import { AccountDataActions } from "./AccountDataActions";
 import { AccountActionDeleteConfirmation } from "./AccountActionDeleteConfirmation";
 import { AccountActionBudgetSettings } from "./AccountActionBudgetSettings";
 
@@ -48,7 +50,11 @@ export function AccountAction({
   );
   const [busy, setBusy] = useState(false);
   const handleCleared = () => {
-    window.dispatchEvent(new CustomEvent("recall-tutor-history-cleared", { detail: "hosted" }));
+    window.dispatchEvent(
+      new CustomEvent("recall-tutor-history-cleared", {
+        detail: `managed:${ownerId ?? "disconnected"}`,
+      }),
+    );
   };
   const [message, setMessage] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(demoDeleteConfirm);
@@ -246,24 +252,16 @@ export function AccountAction({
   if (demo && demoEmail) {
     return (
       <>
-        <div data-slot="account-action" className="grid gap-3">
+        <div data-slot="account-action" className="grid gap-4">
           <p className="break-all text-sm text-muted-foreground">{demoEmail}</p>
-          <Button variant="secondary" type="button" onClick={() => void exportAccount()}>
-            <Download aria-hidden="true" className="size-4" />
-            Export account data
-          </Button>
-          <Button
-            variant="secondary"
-            className="text-destructive hover:bg-destructive/10 hover:text-destructive"
-            type="button"
-            onClick={() => {
+          <AccountDataActions
+            busy={busy}
+            onExport={() => void exportAccount()}
+            onDelete={() => {
               setShowDeleteConfirm(true);
             }}
-          >
-            <Trash2 aria-hidden="true" className="size-4" />
-            Delete account
-          </Button>
-          <Button variant="secondary" type="button" disabled>
+          />
+          <Button className="w-full" variant="default" type="button" disabled>
             Sign out
           </Button>
           {message && <Alert role="status">{message}</Alert>}
@@ -287,20 +285,14 @@ export function AccountAction({
           <p className="text-sm text-muted-foreground">Web study requires a signed-in account.</p>
         )}
         {!demo && isConfigured && (
-          <a
-            className="inline-flex min-h-9 items-center rounded-md border px-3 text-sm hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            href={signInHref}
-          >
-            Sign in
-          </a>
+          <Button asChild variant="default" size="default">
+            <a href={signInHref}>Sign in</a>
+          </Button>
         )}
         {demo && (
-          <a
-            className="inline-flex min-h-9 items-center rounded-md border px-3 text-sm hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            href={signInHref}
-          >
-            Sign in
-          </a>
+          <Button asChild variant="default" size="default">
+            <a href={signInHref}>Sign in</a>
+          </Button>
         )}
       </div>
     );
@@ -310,19 +302,16 @@ export function AccountAction({
   }
   if (!email && !accountDeleted) {
     return (
-      <a
-        className="inline-flex min-h-9 items-center rounded-md border px-3 text-sm hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        href={signInHref}
-      >
-        Sign in
-      </a>
+      <Button asChild variant="default" size="default">
+        <a href={signInHref}>Sign in</a>
+      </Button>
     );
   }
 
   return (
     <>
       <div data-slot="account-action" className="grid gap-4">
-        <div className="min-w-0 space-y-1">
+        <div className="flex min-w-0 flex-col gap-1">
           <p className="text-xs text-muted-foreground">Signed in as</p>
           <p className="break-all text-sm font-medium">
             {email && /^chatgpt\+[a-f0-9]{48}@identity\.recall\.invalid$/.test(email)
@@ -337,6 +326,7 @@ export function AccountAction({
           </>
         ) : (
           <>
+            <AiFundingSettings />
             <ChatGPTAccountConnection compact />
             <TutorPrivacyControls
               demo={demo}
@@ -346,31 +336,16 @@ export function AccountAction({
             />
           </>
         )}
-        <div className="grid gap-2 sm:grid-cols-2">
-          <Button
-            variant="secondary"
-            type="button"
-            disabled={busy}
-            onClick={() => void exportAccount()}
-          >
-            <Download aria-hidden="true" className="size-4" />
-            {busy ? "Preparing export…" : "Export account data"}
-          </Button>
-          <Button
-            variant="secondary"
-            className="text-destructive hover:bg-destructive/10 hover:text-destructive"
-            type="button"
-            onClick={() => {
-              setShowDeleteConfirm(true);
-            }}
-          >
-            <Trash2 aria-hidden="true" className="size-4" />
-            Delete account
-          </Button>
-        </div>
+        <AccountDataActions
+          busy={busy}
+          onExport={() => void exportAccount()}
+          onDelete={() => {
+            setShowDeleteConfirm(true);
+          }}
+        />
         {!desktop && (
           <form action="/auth/sign-out" method="post">
-            <Button variant="secondary" type="submit" className="w-full">
+            <Button variant="default" type="submit" className="w-full">
               <LogOut aria-hidden="true" className="size-4" />
               Sign out
             </Button>

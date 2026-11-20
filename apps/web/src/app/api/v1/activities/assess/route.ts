@@ -29,8 +29,8 @@ export async function POST(request: NextRequest) {
       return privateJson({ error: executed.left.message }, { status: 503 });
     const result = executed.right;
     return assessedReply({
-      evaluatorId: "recall.coding:javascript-tests",
-      evaluatorVersion: "docker-vm-1",
+      evaluatorId: "recall.coding:json-tests",
+      evaluatorVersion: "docker-functions-2",
       feedback: `${String(result.passed)}/${String(result.total)} tests passed. ${result.failures.join(" ")} Tests establish correctness against these examples, not algorithmic complexity.`,
       evidence: activity.objectiveIds.map((objectiveId) => ({
         objectiveId,
@@ -39,8 +39,7 @@ export async function POST(request: NextRequest) {
         confidence: 0.9,
         assistance: response.assistance,
         assessment: "deterministic",
-        explanation:
-          "Bounded, isolated JavaScript execution against the activity's approved test cases.",
+        explanation: "Bounded, isolated code execution against the activity's approved test cases.",
       })),
     });
   }
@@ -54,9 +53,18 @@ export async function POST(request: NextRequest) {
       { status: 400 },
     );
   const model = hostedTutorModel("evaluate");
-  const callId = randomUUID();
-  const provider = createHostedTutorProvider(userId, callId, new Date());
-  if (!process.env.OPENAI_API_KEY || !model || Either.isLeft(provider))
+  const callId = request.headers.get("x-recall-ai-request-id") ?? randomUUID();
+  const provider = createHostedTutorProvider(
+    userId,
+    callId,
+    new Date(),
+    request.headers.get("x-recall-ai-funding"),
+  );
+  if (
+    (process.env.MANAGED_AI_ENABLED !== "true" && !process.env.OPENAI_API_KEY) ||
+    !model ||
+    Either.isLeft(provider)
+  )
     return privateJson({ error: "AI assessment is unavailable." }, { status: 503 });
   const result = await Effect.runPromise(
     Effect.either(
@@ -78,6 +86,15 @@ export async function POST(request: NextRequest) {
       ),
     ),
   );
+  if (
+    Either.isLeft(result) &&
+    "_tag" in result.left &&
+    result.left._tag === "AiManagedAccessDenied"
+  )
+    return privateJson(
+      { error: "Managed AI is unavailable for this account. Check your allowance in AI settings." },
+      { status: 403 },
+    );
   if (Either.isLeft(result))
     return privateJson(
       {

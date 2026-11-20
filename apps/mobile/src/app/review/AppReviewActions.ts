@@ -86,7 +86,10 @@ export function createAppReviewActions(
           eventId,
           ratedAt,
           elapsedMs,
-          studyDay: localStudyDay(Date.parse(ratedAt)),
+          studyDay: localStudyDay(
+            Date.parse(ratedAt),
+            current.schedulerSettings?.studyDayStartHour,
+          ),
         });
         sessionEvent = transition.event;
         return transition.workspace;

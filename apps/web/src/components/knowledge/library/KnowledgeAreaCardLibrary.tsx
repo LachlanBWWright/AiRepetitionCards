@@ -101,7 +101,7 @@ export function KnowledgeAreaCardLibrary({
   );
 
   return (
-    <section aria-label="Card library" className="mt-0">
+    <section aria-label="Card library" className="flex flex-col gap-4">
       {onBulk && (
         <KnowledgeAreaCardLibraryBulkPanel
           area={area}
@@ -166,18 +166,18 @@ export function KnowledgeAreaCardLibrary({
           }
           action={
             area.cards.length === 0 ? (
-              <Button size="small" onClick={onAdd}>
+              <Button size="default" onClick={onAdd}>
                 Add a card
               </Button>
             ) : (
-              <Button size="small" variant="secondary" onClick={clearFilters}>
+              <Button size="default" variant="default" onClick={clearFilters}>
                 Clear filters
               </Button>
             )
           }
         />
       )}
-      <p className="mt-4 text-xs text-[var(--muted)]" role="status" aria-live="polite">
+      <p className="text-xs text-[var(--muted)]" role="status" aria-live="polite">
         Showing {filteredCards.length} of {area.cards.length} cards
       </p>
     </section>

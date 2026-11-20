@@ -1,38 +1,76 @@
-import { Pressable, Text } from "react-native";
+import { Pressable, Text, type AccessibilityState, type PressableProps } from "react-native";
+
+export type NativeButtonVariant = "default" | "secondary" | "destructive" | "ghost";
+export type NativeButtonPrimitiveProps = Omit<PressableProps, "className"> & {
+  readonly variant?: NativeButtonVariant;
+  readonly layout?: "row" | "column";
+  readonly size?: "default" | "icon" | "rating";
+  readonly className?: string | undefined;
+};
+const variants = {
+  default: "bg-recall-action",
+  secondary: "border border-recall-line bg-recall-surface",
+  ghost: "bg-transparent",
+  destructive: "bg-recall-danger",
+} as const;
+
+export function NativeButtonPrimitive({
+  variant = "default",
+  layout = "row",
+  size = "default",
+  disabled = false,
+  className,
+  accessibilityState,
+  ...props
+}: NativeButtonPrimitiveProps) {
+  return (
+    <Pressable
+      {...props}
+      accessibilityRole="button"
+      disabled={disabled ?? false}
+      accessibilityState={{ ...accessibilityState, disabled: disabled ?? false }}
+      className={`min-h-12 ${size === "rating" ? "flex-col items-center" : layout === "column" ? "flex-col items-start" : "flex-row items-center"} justify-center gap-2 rounded-[8px] py-3 ${size === "icon" ? "w-12 px-0" : size === "rating" ? "px-2" : "px-4"} ${accessibilityState?.selected ? "border border-recall-action bg-recall-action" : variants[variant]} ${disabled ? "opacity-50" : "active:opacity-80"} ${className ?? ""}`}
+    />
+  );
+}
 
 export type NativeButtonProps = {
   readonly label: string;
   readonly accessibilityLabel?: string;
+  readonly accessibilityState?: AccessibilityState;
+  readonly selected?: boolean;
   readonly onPress: () => void;
-  readonly tone?: "dark" | "soft";
+  readonly variant?: NativeButtonVariant;
+  readonly size?: "default" | "icon";
   readonly disabled?: boolean;
-  readonly className?: string;
-  readonly labelClassName?: string;
+  readonly className?: string | undefined;
 };
 
 export function NativeButton({
   label,
   accessibilityLabel,
+  accessibilityState,
+  selected,
   onPress,
-  tone = "dark",
+  variant = "default",
+  size,
   disabled = false,
   className,
-  labelClassName,
 }: NativeButtonProps) {
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={accessibilityLabel ?? label}
-      accessibilityState={{ disabled }}
+    <NativeButtonPrimitive
+      variant={variant}
+      {...(size ? { size } : {})}
       disabled={disabled}
       onPress={onPress}
-      className={`min-h-12 items-center justify-center rounded-[8px] px-[18px] ${tone === "dark" ? "bg-recall-ink" : "mt-2 bg-recall-paper"} ${disabled ? "opacity-[0.45]" : ""} active:opacity-70 active:scale-[0.99] ${className ?? ""}`}
+      accessibilityLabel={accessibilityLabel ?? label}
+      accessibilityState={{
+        ...accessibilityState,
+        ...(selected === undefined ? {} : { selected }),
+      }}
+      className={className}
     >
-      <Text
-        className={`text-[13px] font-bold ${tone === "soft" ? "text-recall-ink" : "text-recall-surface"} ${labelClassName ?? ""}`}
-      >
-        {label}
-      </Text>
-    </Pressable>
+      <Text className="text-center text-[14px] font-medium text-white">{label}</Text>
+    </NativeButtonPrimitive>
   );
 }

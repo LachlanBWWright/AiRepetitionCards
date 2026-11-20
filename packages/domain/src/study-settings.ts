@@ -38,6 +38,8 @@ export const SchedulerPolicySchema = Schema.Struct({
     ),
   ),
   rescheduleOnParameterChange: Schema.optional(Schema.Boolean),
+  learnAheadMinutes: Schema.optional(Schema.Number.pipe(Schema.int(), Schema.between(0, 60))),
+  leechAction: Schema.optional(Schema.Literal("notify", "suspend")),
   leechThreshold: Schema.optional(Schema.Number.pipe(Schema.int(), Schema.between(2, 100))),
   weights: Schema.optional(
     Schema.Array(Schema.Number.pipe(Schema.finite(), Schema.between(0, 46.655))).pipe(
@@ -67,6 +69,16 @@ export const FilteredDeckSchema = Schema.Struct({
 });
 export type FilteredDeck = typeof FilteredDeckSchema.Type;
 export const SchedulerSettingsSchema = Schema.Struct({
+  manualBurials: Schema.optional(
+    Schema.Record({
+      key: Schema.String.pipe(Schema.minLength(1)),
+      value: Schema.Number.pipe(Schema.int(), Schema.finite(), Schema.between(0, 8640000000000000)),
+    }).pipe(Schema.filter((entries) => Object.keys(entries).length <= 50000)),
+  ),
+  studyDayStartHour: Schema.optional(Schema.Number.pipe(Schema.int(), Schema.between(0, 23))),
+  leechSuspensions: Schema.optional(
+    Schema.Record({ key: Schema.String, value: ReviewEventIdSchema }),
+  ),
   reviewer: Schema.optional(ReviewerSettingsSchema),
   areaReviewLimits: Schema.optional(
     Schema.Record({

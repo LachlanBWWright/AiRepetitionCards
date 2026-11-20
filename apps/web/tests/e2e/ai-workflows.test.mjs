@@ -149,14 +149,17 @@ test("source proposals expose exact quote and preserve edited questions across a
   await withBrowser(t, async ({ page }) => {
     await page.goto(storyUrl("screens-study-materials--proposals"));
     await page.getByRole("tab", { name: /Suggestions/ }).click();
+    await page.getByRole("button", { name: "Edit", exact: true }).first().click();
     const question = page.getByRole("textbox", { name: "Question", exact: true });
     await expectVisible(question);
     await question.fill("Does copying a slice create separate element storage?");
+    await page.getByRole("button", { name: "Done", exact: true }).click();
     await expectVisible(
       page.getByText("Copying a slice does not copy its backing array.", { exact: true }),
     );
     await page.getByRole("tab", { name: "Practice", exact: true }).click();
     await page.getByRole("tab", { name: /Suggestions/ }).click();
+    await page.getByRole("button", { name: "Edit", exact: true }).first().click();
     assert.equal(
       await question.inputValue(),
       "Does copying a slice create separate element storage?",
@@ -192,6 +195,7 @@ test("coverage topics retain selection and priority across activities", async (t
   await withBrowser(t, async ({ page }) => {
     await page.goto(storyUrl("screens-study-materials--coverage-plan"));
     await page.getByRole("tab", { name: "Materials", exact: true }).click();
+    await page.getByRole("tab", { name: "3. Choose topics", exact: true }).click();
     const claim = page.locator(
       "article[data-search-target='claim:00000000-0000-4000-8000-000000000032']",
     );

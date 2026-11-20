@@ -12,6 +12,8 @@ export const designTokens = {
     violet: "#c4b5fd",
     amber: "#f7cb70",
     danger: "#a74132",
+    action: "#2563eb",
+    dangerForeground: "#fca5a5",
   },
   radius: {
     card: 12,

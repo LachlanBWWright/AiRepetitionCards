@@ -1,3 +1,4 @@
+import { extractAnkiArchive } from "./anki-import-extract";
 import { Effect, Either, Schema } from "effect";
 import { unzipSync, type UnzipFileInfo } from "fflate";
 import { decodePackageDatabaseAndMedia } from "./anki-import-decode";
@@ -16,6 +17,7 @@ import {
   type AnkiCollection,
   type AnkiImportError,
   type AnkiSqliteReader,
+  type AnkiImportControl,
 } from "./anki-import-contracts";
 const MISSING = (reason: AnkiImportError["reason"]): AnkiImportError => ({
   _tag: "AnkiImportError",
@@ -24,6 +26,7 @@ const MISSING = (reason: AnkiImportError["reason"]): AnkiImportError => ({
 export function readAnkiPackage(
   input: unknown,
   readSqlite: AnkiSqliteReader,
+  control: AnkiImportControl = {},
 ): Effect.Effect<
   {
     readonly collection: AnkiCollection;
@@ -59,36 +62,13 @@ export function readAnkiPackage(
       })
     )
       return yield* Effect.fail(MISSING("limits-exceeded"));
-    let fileCount = 0;
-    let expandedBytes = 0;
-    const archiveState = { duplicatePath: false };
-    const seenPaths = new Set<string>();
-    const archive = yield* Effect.try({
-      try: () =>
-        unzipSync(input, {
-          filter: (entry) => {
-            fileCount += 1;
-            expandedBytes += entry.originalSize;
-            if (seenPaths.has(entry.name)) archiveState.duplicatePath = true;
-            seenPaths.add(entry.name);
-            return (
-              fileCount <= MAX_FILES &&
-              expandedBytes <= MAX_EXPANDED_BYTES &&
-              validArchivePath(entry.name)
-            );
-          },
-        }),
-      catch: () => MISSING("invalid-archive"),
-    });
-    if (fileCount > MAX_FILES || expandedBytes > MAX_EXPANDED_BYTES)
-      return yield* Effect.fail(MISSING("limits-exceeded"));
-    const names = Object.keys(archive);
     if (
-      archiveState.duplicatePath ||
-      names.length !== fileCount ||
-      names.some((name) => !validArchivePath(name))
+      zipEntries.some((entry) => !validArchivePath(entry.name)) ||
+      new Set(zipEntries.map((entry) => entry.name)).size !== zipEntries.length
     )
       return yield* Effect.fail(MISSING("invalid-archive"));
+    const archive = yield* extractAnkiArchive(input, control);
+    const names = Object.keys(archive);
     const metadataBytes = archive.meta;
     const packageVersion = metadataBytes ? parsePackageVersion(metadataBytes) : undefined;
     if (metadataBytes && (packageVersion === undefined || packageVersion < 1 || packageVersion > 3))
@@ -127,6 +107,10 @@ export function readAnkiPackage(
       databaseFormat,
       databasePayload,
       mediaIndexBytes,
+      control,
+      releaseEntry: (name) => {
+        Reflect.deleteProperty(archive, name);
+      },
     });
     const rawCollection = yield* readSqlite(database).pipe(
       Effect.mapError((error) =>

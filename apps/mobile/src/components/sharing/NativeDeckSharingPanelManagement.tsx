@@ -50,9 +50,19 @@ export function NativeDeckSharingPanelManagement({
         maxLength={4000}
         multiline
       />
-      <NativeButton label="Save metadata" tone="soft" disabled={busy} onPress={onSaveMetadata} />
+      <NativeButton
+        label="Save metadata"
+        variant="default"
+        disabled={busy}
+        onPress={onSaveMetadata}
+      />
       {deck.status === "active" ? (
-        <NativeButton label="Withdraw deck" tone="soft" disabled={busy} onPress={onWithdraw} />
+        <NativeButton
+          label="Withdraw deck"
+          variant="default"
+          disabled={busy}
+          onPress={onWithdraw}
+        />
       ) : null}
       <NativeDeckSharingPanelAccount
         section="management"

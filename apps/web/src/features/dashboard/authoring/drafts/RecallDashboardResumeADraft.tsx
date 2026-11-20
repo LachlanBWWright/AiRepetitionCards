@@ -13,7 +13,7 @@ export function RecallDashboardResumeADraft({ model }: { readonly model: RecallD
       {libraryNotes.notes.drafts.map((draft) => (
         <div key={draft.key} className="flex flex-wrap items-center gap-2">
           <Button
-            variant="secondary"
+            variant="default"
             onClick={() => {
               resumeLibraryDraft(draft);
             }}

@@ -59,6 +59,7 @@ export function useRecallDashboardDerivedState(
     | "clozeIndex"
     | "front"
     | "back"
+    | "explanation"
     | "editingCardId"
     | "duplicateAcknowledgement"
     | "addingArea"
@@ -90,6 +91,7 @@ export function useRecallDashboardDerivedState(
     clozeIndex,
     front,
     back,
+    explanation,
     editingCardId,
     duplicateAcknowledgement,
     addingArea,
@@ -144,6 +146,7 @@ export function useRecallDashboardDerivedState(
   const duplicateDraft = {
     front: cardKind === "cloze" ? clozeText : front,
     back,
+    explanation,
     ...(cardKind === "cloze" && clozePreview && Either.isRight(clozePreview)
       ? { cloze: { text: clozeText, deletionIndex: Number(clozeIndex) } }
       : {}),
@@ -179,6 +182,7 @@ export function useRecallDashboardDerivedState(
         editingCardId,
         front,
         back,
+        explanation,
         clozeText,
         cardPresentation,
         cardTags,
@@ -200,6 +204,7 @@ export function useRecallDashboardDerivedState(
       area,
       front,
       back,
+      explanation,
       clozeText,
       cardPresentation,
       cardTags,

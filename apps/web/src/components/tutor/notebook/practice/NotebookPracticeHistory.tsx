@@ -27,9 +27,9 @@ export function NotebookRecentAnswers({
     .reverse();
   if (recent.length === 0) return null;
   return (
-    <section className="space-y-3">
+    <section className="flex flex-col gap-3">
       <h3 className="text-sm font-semibold leading-6">Recent answers</h3>
-      <div className="space-y-4 pt-3">
+      <div className="flex flex-col gap-4">
         {recent.map((entry) => (
           <RecentAnswer
             key={entry.id}

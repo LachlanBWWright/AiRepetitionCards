@@ -1,11 +1,11 @@
 import { Alert, AlertDescription } from "@recall/ui-web/components/alert";
-import { ChevronDown } from "lucide-react";
+
+import { Button } from "@recall/ui-web";
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@recall/ui-web/components/collapsible";
-import { Button } from "@recall/ui-web";
 import type { CardInspectionResult, CardProposal, CardRefinementResult } from "@recall/ai-core";
 import type { CardDuplicateCandidate } from "@recall/application";
 import {
@@ -49,29 +49,16 @@ export function CardAssistancePanelReview({
   onDiscard,
 }: CardAssistancePanelReviewProps) {
   return (
-    <div className="space-y-3 text-sm leading-6">
+    <div className="flex flex-col gap-3 text-sm leading-6">
       <h4 className="font-medium">Suggested changes</h4>
       <Collapsible>
-        <CollapsibleTrigger asChild>
-          <Button
-            type="button"
-            variant="ghost"
-            size="small"
-            className="group gap-2 px-2 text-xs text-muted-foreground"
-          >
-            Compare original
-            <ChevronDown
-              className="size-3 transition-transform group-data-[state=open]:rotate-180"
-              aria-hidden="true"
-            />
-          </Button>
-        </CollapsibleTrigger>
-        <CollapsibleContent className="space-y-2 border-l-2 pl-3 pt-2 text-muted-foreground">
+        <CollapsibleTrigger type="button">Compare original</CollapsibleTrigger>
+        <CollapsibleContent className="flex flex-col gap-2 border-l-2 pl-3 pt-2 text-muted-foreground">
           <p className="whitespace-pre-wrap">{baseline.front}</p>
           <p className="whitespace-pre-wrap">{baseline.back}</p>
         </CollapsibleContent>
       </Collapsible>
-      <div className="space-y-3">
+      <div className="flex flex-col gap-3">
         {refinement.cards.map((card, index) => {
           const candidates = [
             ...duplicateCandidates.filter((candidate) => candidate.id !== excludeCardId),
@@ -104,7 +91,7 @@ export function CardAssistancePanelReview({
       )}
       <div className="flex flex-wrap gap-2">
         <Button
-          size="small"
+          size="default"
           variant="default"
           type="button"
           disabled={disabled || busy || stale || !duplicatesApproved}
@@ -119,8 +106,8 @@ export function CardAssistancePanelReview({
           refinement.cards[0]?.meaningChanged === false &&
           refinement.cards[0].front.includes("{{c") === proposal.front.includes("{{c") && (
             <Button
-              size="small"
-              variant="outline"
+              size="default"
+              variant="default"
               type="button"
               disabled={disabled || busy || stale || !duplicatesApproved}
               onClick={() => {
@@ -130,7 +117,13 @@ export function CardAssistancePanelReview({
               Update wording · keep schedule
             </Button>
           )}
-        <Button size="small" variant="ghost" type="button" disabled={busy} onClick={onDiscard}>
+        <Button
+          size="default"
+          variant="secondary"
+          type="button"
+          disabled={busy}
+          onClick={onDiscard}
+        >
           Discard
         </Button>
       </div>
@@ -179,7 +172,7 @@ function CardAssistancePanelReviewCard({
   readonly disabled: boolean;
 }) {
   return (
-    <article className="space-y-3 rounded-lg border bg-muted/20 p-4 text-sm leading-6">
+    <article className="flex flex-col gap-3 rounded-lg border bg-muted/20 p-4 text-sm leading-6">
       <p className="whitespace-pre-wrap font-medium">{card.front}</p>
       <p className="whitespace-pre-wrap border-t pt-3">{card.back}</p>
       <CardDuplicateWarnings
@@ -205,30 +198,15 @@ function CardAssistancePanelReviewRationale({
   readonly sourceReferences: CardRefinementResult["cards"][number]["sourceReferences"];
 }) {
   return (
-    <Collapsible>
-      <CollapsibleTrigger asChild>
-        <Button
-          type="button"
-          variant="ghost"
-          size="small"
-          className="group h-7 gap-2 px-0 text-xs text-muted-foreground"
-        >
-          Change details
-          <ChevronDown
-            className="size-3 transition-transform group-data-[state=open]:rotate-180"
-            aria-hidden="true"
-          />
-        </Button>
-      </CollapsibleTrigger>
-      <CollapsibleContent className="space-y-2 pt-2 text-xs leading-5 text-muted-foreground">
-        <p>{rationale}</p>
-        {sourceReferences.map((reference, referenceIndex) => (
-          <blockquote key={referenceIndex}>
-            {reference.quote}
-            {reference.pageNumber ? ` · page ${String(reference.pageNumber)}` : ""}
-          </blockquote>
-        ))}
-      </CollapsibleContent>
-    </Collapsible>
+    <section className="flex flex-col gap-2 border-t pt-3 text-xs leading-5 text-muted-foreground">
+      <h5 className="font-medium text-foreground">Why these changes</h5>
+      <p>{rationale}</p>
+      {sourceReferences.map((reference, referenceIndex) => (
+        <blockquote key={referenceIndex}>
+          {reference.quote}
+          {reference.pageNumber ? ` · page ${String(reference.pageNumber)}` : ""}
+        </blockquote>
+      ))}
+    </section>
   );
 }

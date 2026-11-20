@@ -14,11 +14,11 @@ export function NativeStudyPlanner({
 }) {
   const planner = useStudyPlanner(workspace, now, areaId);
   return (
-    <View className="gap-3 border-t py-4">
+    <View className="gap-4 border-t py-4">
       <Text className="font-bold">Workload simulator</Text>
       <Text>
-        Seeded estimate of repeat reviews, forgetting and time. Uses 24-hour days and the limits
-        below; excludes sibling burying and reduced-load weekdays.
+        Seeded estimate of repeat reviews, forgetting and time. Uses your study-day boundary,
+        sibling-burying policy and reduced-load weekdays.
       </Text>
       {planner.fields.map((field) => (
         <NativeTextField
@@ -29,8 +29,17 @@ export function NativeStudyPlanner({
           keyboardType="numeric"
         />
       ))}
-      <NativeButton label="Simulate workload" tone="soft" onPress={planner.run} />
+      <NativeButton label="Simulate workload" variant="default" onPress={planner.run} />
       {planner.message ? <Text accessibilityLiveRegion="polite">{planner.message}</Text> : null}
+      {planner.comparisons.map((scenario) => (
+        <Text key={scenario.targetRetention}>
+          {Math.round(scenario.targetRetention * 100)}% target: {scenario.totalReviews} answers ·{" "}
+          {scenario.totalMinutes.toFixed(0)} min · final predicted recall{" "}
+          {scenario.expectedRetention === null
+            ? "unavailable"
+            : `${(scenario.expectedRetention * 100).toFixed(1)}%`}
+        </Text>
+      ))}
       {planner.result && (
         <>
           <Text>
@@ -38,10 +47,13 @@ export function NativeStudyPlanner({
             minutes. {planner.result.averageSeconds.toFixed(1)} seconds/answer (
             {planner.result.timingEstimated ? "estimate" : "recorded"}).
           </Text>
+          {planner.result.assumptions.map((assumption) => (
+            <Text key={assumption}>{assumption}</Text>
+          ))}
           {planner.result.days.map((day) => (
             <Text key={day.day}>
               Day {day.day}: {day.reviews} answers · {day.minutes.toFixed(1)} min · {day.backlog}{" "}
-              overdue
+              overdue · {day.buried} buried siblings
             </Text>
           ))}
         </>

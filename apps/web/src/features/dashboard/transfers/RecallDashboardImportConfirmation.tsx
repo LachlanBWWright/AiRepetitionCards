@@ -41,6 +41,7 @@ export function RecallDashboardImportConfirmation({
         <>
           <Button onClick={retryImport}>Retry saving import</Button>
           <Button
+            variant="secondary"
             onClick={() => {
               setPendingContentImport(null);
               setImportNotice("Import cancelled. Your current workspace remains available.");

@@ -35,6 +35,6 @@ content_path = "./supabase/templates/magic_link.html"
 
 [auth.external.google]
 enabled = true
-client_id = "665227303267-pshhcim4kanflebp240710u7sc0kb16h.apps.googleusercontent.com"
+client_id = "env(SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID)"
 secret = "env(SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_SECRET)"
 skip_nonce_check = false

@@ -313,6 +313,7 @@ export function noteOwnershipConflicts(workspace: Workspace, owner: LearningArea
             digest({
               front: card.front,
               back: card.back,
+              explanation: card.explanation,
               cloze: card.cloze,
               presentation: card.presentation,
               tags: card.tags ?? [],
@@ -321,6 +322,7 @@ export function noteOwnershipConflicts(workspace: Workspace, owner: LearningArea
               digest({
                 front: preview.front,
                 back: preview.back,
+                explanation: preview.explanation,
                 cloze: preview.cloze,
                 presentation: preview.presentation,
                 tags: original.tags,

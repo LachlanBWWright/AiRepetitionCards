@@ -45,6 +45,7 @@ function prepareDelimitedRecord(
   objectiveIndex: number,
   tagsIndex: number,
   tagsJsonIndex: number,
+  explanationIndex: number,
 ) {
   return Effect.gen(function* () {
     const front = record[frontIndex]?.trim() ?? "";
@@ -62,7 +63,8 @@ function prepareDelimitedRecord(
               .map((tag) => tag.trim())
               .filter(Boolean),
           );
-    return { front, back, objective, tags: yield* tags };
+    const explanation = record[explanationIndex]?.trim();
+    return { front, back, objective, tags: yield* tags, ...(explanation ? { explanation } : {}) };
   });
 }
 
@@ -183,6 +185,7 @@ export function importDelimitedCards(
   const tagsIndex = hasHeader
     ? headers.findIndex((header) => header === "tags" || header === "tag")
     : -1;
+  const explanationIndex = hasHeader ? headers.findIndex((header) => header === "explanation") : -1;
   const tagsJsonIndex = hasHeader ? headers.findIndex((header) => header === "tagsjson") : -1;
   if (frontIndex < 0 || backIndex < 0) return { _tag: "Failure", reason: "missing-front-back" };
 
@@ -197,6 +200,7 @@ export function importDelimitedCards(
           objectiveIndex,
           tagsIndex,
           tagsJsonIndex,
+          explanationIndex,
         ),
       ),
     ),
@@ -273,14 +277,16 @@ export function importDelimitedCards(
 
 /** Keep a readable legacy tags column and an authoritative JSON column for lossless tag text. */
 export function exportDelimitedCards(area: LearningArea, delimiter: Delimiter): string {
+  const supporting = area.cards.some((card) => Boolean(card.explanation));
   const rows = [
-    ["front", "back", "objective", "tags", "tags_json"],
+    ["front", "back", "objective", "tags", "tags_json", ...(supporting ? ["explanation"] : [])],
     ...area.cards.map((card) => [
       card.front,
       card.back,
       card.objective,
       card.tags?.join(" | ") ?? "",
       JSON.stringify(card.tags ?? []),
+      ...(supporting ? [card.explanation ?? ""] : []),
     ]),
   ];
   return rows.map((row) => row.map((cell) => quote(cell, delimiter)).join(delimiter)).join("\r\n");

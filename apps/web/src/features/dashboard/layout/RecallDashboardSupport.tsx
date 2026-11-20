@@ -1,13 +1,14 @@
 import { useEffect, useState } from "react";
 import type { AssessmentSchedule, ReviewEvent } from "@recall/domain";
 import { type ReviewRating } from "@recall/scheduler";
-import { workspaceAuthoringBaseline, type WorkspaceAuthoringCommand } from "@recall/application";
+import {
+  createStarterWorkspace,
+  workspaceAuthoringBaseline,
+  type WorkspaceAuthoringCommand,
+} from "@recall/application";
 import type { StoredMediaAsset } from "@recall/local-store";
 import { InlineImage } from "@/components/ui/InlineImage";
 import type { LearningArea, Assessment, Workspace } from "@/features/workspace/types";
-import { fromKnowledgeArea, toKnowledgeArea } from "@/features/workspace/knowledge-area-json";
-import { mockWorkspace } from "@/features/workspace/mock-data";
-import { Effect } from "effect";
 
 export const dashboardColors = [
   "#c4ed68",
@@ -33,24 +34,7 @@ export const starterWorkspace: Workspace = {
 
 /** Create independent content identities for a fresh device. */
 export function createFreshStarterWorkspace() {
-  return Effect.gen(function* () {
-    const now = new Date();
-    const areas = yield* Effect.forEach(mockWorkspace.areas, (area) =>
-      Effect.gen(function* () {
-        const document = yield* toKnowledgeArea(area);
-        const ids = yield* Effect.try({
-          try: () =>
-            Array.from({ length: document.objectives.length + document.cards.length + 1 }, () =>
-              crypto.randomUUID(),
-            ),
-          catch: () => ({ _tag: "StarterIdentityUnavailable" }) as const,
-        });
-        let index = 0;
-        return yield* fromKnowledgeArea(document, area.color, false, () => ids[index++] ?? "", now);
-      }),
-    );
-    return { ...starterWorkspace, areas };
-  });
+  return createStarterWorkspace(new Date(), () => crypto.randomUUID());
 }
 
 export function downloadText(filename: string, content: string, mimeType: string): void {

@@ -1,3 +1,5 @@
+import { FieldDescription, FieldGroup } from "@recall/ui-web/components/field";
+import { Label } from "@recall/ui-web/components/label";
 import { NoteTemplateDeck } from "./NoteTemplateDeck";
 import { NoteLifecycleEditor } from "./NoteLifecycleEditor";
 import { ReviewPresentationSettings } from "@/components/cards/ReviewPresentationSettings";
@@ -12,8 +14,8 @@ export function NoteTypeEditor({ model }: { readonly model: NoteAuthoringModel }
   const [fieldName, setFieldName] = useState("");
   const { type, setType } = model;
   return (
-    <div className="grid gap-3 rounded border p-3">
-      <label>
+    <FieldGroup className="gap-4 rounded border p-3">
+      <Label className="grid gap-2">
         Type name
         <Input
           value={type.name}
@@ -22,17 +24,17 @@ export function NoteTypeEditor({ model }: { readonly model: NoteAuthoringModel }
           }}
           maxLength={80}
         />
-      </label>
-      <p className="text-xs text-muted-foreground">
+      </Label>
+      <FieldDescription className="text-xs">
         Templates use {"{{Field name}}"}. Type edits update every note using this type; clone the
         type to experiment independently.
-      </p>
-      <Button type="button" size="small" variant="secondary" onClick={model.cloneType}>
+      </FieldDescription>
+      <Button type="button" size="sm" variant="default" onClick={model.cloneType}>
         Clone as a new type and note
       </Button>
       <NoteLifecycleEditor key={type.id} model={model} />
       {type.fields.map((field) => (
-        <label key={field.name} className="flex gap-2 items-center">
+        <Label key={field.name} className="flex items-center gap-2">
           <Checkbox
             checked={field.sticky ?? false}
             onCheckedChange={(sticky) => {
@@ -40,9 +42,9 @@ export function NoteTypeEditor({ model }: { readonly model: NoteAuthoringModel }
             }}
           />
           Keep {field.name} when adding another note
-        </label>
+        </Label>
       ))}
-      <label>
+      <Label className="grid gap-2">
         New field name
         <Input
           value={fieldName}
@@ -52,11 +54,11 @@ export function NoteTypeEditor({ model }: { readonly model: NoteAuthoringModel }
           placeholder="Example"
           maxLength={80}
         />
-      </label>
+      </Label>
       <Button
         type="button"
-        size="small"
-        variant="secondary"
+        size="sm"
+        variant="default"
         disabled={
           !/^[A-Za-z][A-Za-z0-9 _-]{0,79}$/.test(fieldName) ||
           type.fields.some((field) => field.name === fieldName) ||
@@ -71,8 +73,8 @@ export function NoteTypeEditor({ model }: { readonly model: NoteAuthoringModel }
         Add field
       </Button>
       {type.templates.map((template) => (
-        <div key={template.id} className="grid gap-2 rounded border p-2">
-          <label>
+        <div key={template.id} className="grid gap-4 rounded border p-2">
+          <Label className="grid gap-2">
             Card template name
             <Input
               value={template.name}
@@ -80,8 +82,8 @@ export function NoteTypeEditor({ model }: { readonly model: NoteAuthoringModel }
                 model.updateTemplate(template.id, { name: event.target.value });
               }}
             />
-          </label>
-          <label>
+          </Label>
+          <Label className="grid gap-2">
             Question template
             <Textarea
               value={template.front}
@@ -90,8 +92,8 @@ export function NoteTypeEditor({ model }: { readonly model: NoteAuthoringModel }
               }}
               rows={2}
             />
-          </label>
-          <label>
+          </Label>
+          <Label className="grid gap-2">
             Answer template
             <Textarea
               value={template.back}
@@ -100,7 +102,18 @@ export function NoteTypeEditor({ model }: { readonly model: NoteAuthoringModel }
               }}
               rows={2}
             />
-          </label>
+          </Label>
+          <Label className="grid gap-2">
+            Explanation template (optional)
+            <Textarea
+              value={template.explanation ?? ""}
+              maxLength={10000}
+              onChange={(event) => {
+                model.updateTemplate(template.id, { explanation: event.target.value });
+              }}
+              rows={3}
+            />
+          </Label>
           <NoteTemplateDeck model={model} templateId={template.id} />
           <ReviewPresentationSettings
             value={template.presentation}
@@ -111,8 +124,8 @@ export function NoteTypeEditor({ model }: { readonly model: NoteAuthoringModel }
           {type.templates.length > 1 && (
             <Button
               type="button"
-              size="small"
-              variant="secondary"
+              size="sm"
+              variant="default"
               onClick={() => {
                 model.removeTemplate(template.id);
               }}
@@ -124,15 +137,15 @@ export function NoteTypeEditor({ model }: { readonly model: NoteAuthoringModel }
       ))}
       <Button
         type="button"
-        size="small"
-        variant="secondary"
+        size="sm"
+        variant="default"
         disabled={type.templates.length >= 20}
         onClick={model.addTemplate}
       >
         Add card template
       </Button>
       {model.affectsOthers && (
-        <label className="flex items-center gap-2">
+        <Label className="flex items-center gap-2">
           <Checkbox
             checked={model.confirmedTypeChange}
             onCheckedChange={(value) => {
@@ -140,8 +153,8 @@ export function NoteTypeEditor({ model }: { readonly model: NoteAuthoringModel }
             }}
           />
           Apply these field and template changes to all notes using this type
-        </label>
+        </Label>
       )}
-    </div>
+    </FieldGroup>
   );
 }

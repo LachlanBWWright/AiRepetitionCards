@@ -96,6 +96,7 @@ const meta = {
   title: "Screens/Native AI Tutor",
   component: NativeTutorPanel,
   parameters: {
+    nativePreview: true,
     layout: "fullscreen",
     docs: {
       description: {
@@ -125,7 +126,7 @@ export const ProposalApproval: Story = {
   },
   globals: { viewport: { value: "recallMobile", isRotated: false } },
   render: (args) => (
-    <div style={{ minHeight: 844, padding: 18, backgroundColor: "#faf9f6" }}>
+    <div style={{ minHeight: 844, padding: 18, backgroundColor: "var(--recall-paper)" }}>
       <NativeTutorPanel {...args} />
     </div>
   ),
@@ -262,7 +263,7 @@ export const WeakSecondObjective: Story = {
   },
   globals: { viewport: { value: "recallMobile", isRotated: false } },
   render: (args) => (
-    <div style={{ minHeight: 844, padding: 18, backgroundColor: "#faf9f6" }}>
+    <div style={{ minHeight: 844, padding: 18, backgroundColor: "var(--recall-paper)" }}>
       <NativeTutorPanel {...args} />
     </div>
   ),

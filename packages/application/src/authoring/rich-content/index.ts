@@ -1,70 +1,8 @@
 export * from "./selection";
 export * from "./appearance";
-/** An HTML-free format shared by both review clients. */
-export type RichInline =
-  | { readonly kind: "text" | "strong" | "emphasis" | "code" | "math"; readonly text: string }
-  | { readonly kind: "image"; readonly text: string; readonly mediaId: string };
-export type RichBlock = {
-  readonly kind: "paragraph" | "heading" | "quote" | "bullet" | "number" | "math";
-  readonly content: readonly RichInline[];
-  readonly number?: number;
-};
-
-const inlinePattern =
-  /!\[([^\]\n]{0,200})\]\(media:([a-zA-Z0-9_-]{1,160})\)|\*\*([^*\n]+)\*\*|\*([^*\n]+)\*|`([^`\n]+)`|\$([^$\n]+)\$|\\\(([^\n]*?)\\\)/g;
-
-export function parseRichInline(text: string): readonly RichInline[] {
-  const result: RichInline[] = [];
-  let offset = 0;
-  for (const match of text.matchAll(inlinePattern)) {
-    const index = match.index;
-    if (index > offset) result.push({ kind: "text", text: text.slice(offset, index) });
-    if (match[2]) result.push({ kind: "image", text: match[1] ?? "", mediaId: match[2] });
-    else {
-      const kind = match[3] ? "strong" : match[4] ? "emphasis" : match[5] ? "code" : "math";
-      result.push({ kind, text: match[3] ?? match[4] ?? match[5] ?? match[6] ?? match[7] ?? "" });
-    }
-    offset = index + match[0].length;
-  }
-  if (offset < text.length) result.push({ kind: "text", text: text.slice(offset) });
-  return result;
-}
-
-export function parseRichContent(text: string): readonly RichBlock[] {
-  const blocks: RichBlock[] = [];
-  let offset = 0;
-  for (const match of text.matchAll(/\$\$([\s\S]*?)\$\$|\\\[([\s\S]*?)\\\]/g)) {
-    const before = text.slice(offset, match.index).replace(/\n$/, "");
-    if (before) blocks.push(...parseTextBlocks(before));
-    blocks.push({
-      kind: "math",
-      content: [{ kind: "math", text: (match[1] ?? match[2] ?? "").trim() }],
-    });
-    offset = match.index + match[0].length;
-    if (text[offset] === "\n") offset += 1;
-  }
-  if (offset < text.length || !blocks.length) blocks.push(...parseTextBlocks(text.slice(offset)));
-  return blocks;
-}
-function parseTextBlocks(text: string): readonly RichBlock[] {
-  return text.split("\n").map((line) => {
-    const heading = /^#{1,3}\s+(.+)$/.exec(line);
-    const quote = /^>\s?(.*)$/.exec(line);
-    const bullet = /^[-*]\s+(.+)$/.exec(line);
-    const numbered = /^(\d{1,3})\.\s+(.+)$/.exec(line);
-    if (heading) return { kind: "heading", content: parseRichInline(heading[1] ?? "") };
-    if (quote) return { kind: "quote", content: parseRichInline(quote[1] ?? "") };
-    if (bullet) return { kind: "bullet", content: parseRichInline(bullet[1] ?? "") };
-    if (numbered)
-      return {
-        kind: "number",
-        number: Number(numbered[1]),
-        content: parseRichInline(numbered[2] ?? ""),
-      };
-    return { kind: "paragraph", content: parseRichInline(line) };
-  });
-}
-
+export * from "./types";
+export * from "./inline";
+export * from "./blocks";
 const mathSymbols: Readonly<Record<string, string>> = {
   alpha: "α",
   beta: "β",
@@ -167,3 +105,4 @@ export function richInsertion(value: string, kind: RichInsertion): string {
   };
   return value + (value && !value.endsWith("\n") ? " " : "") + snippets[kind];
 }
+export * from "./equations";

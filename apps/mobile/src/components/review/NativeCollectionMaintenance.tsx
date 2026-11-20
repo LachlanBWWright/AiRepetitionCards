@@ -47,7 +47,7 @@ export function NativeCollectionMaintenance({
             {health.report.issues.length} card issues.
           </Text>
           <NativeButton
-            tone="soft"
+            variant="default"
             label="Move unused files to recoverable trash"
             disabled={!save || !health.report.unused.length || health.controls.busy}
             onPress={() => {
@@ -55,7 +55,7 @@ export function NativeCollectionMaintenance({
             }}
           />
           <NativeButton
-            tone="soft"
+            variant="default"
             label="Tag cards with missing media"
             disabled={!save || !health.report.missing.length || health.controls.busy}
             onPress={() => {
@@ -85,7 +85,7 @@ export function NativeCollectionMaintenance({
       </Text>
       <NativeButton
         label="Restore files from trash"
-        tone="soft"
+        variant="default"
         disabled={!save || !health.trashCount || health.controls.busy}
         onPress={() => {
           health.act("restore");

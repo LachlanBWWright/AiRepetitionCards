@@ -1,9 +1,13 @@
+import { Undo2 } from "lucide-react";
+import { ManualBurialControls } from "./ManualBurialControls";
+import { StudyToolsDisclosure } from "./StudyToolsDisclosure";
+import { Alert } from "@recall/ui-web/components/alert";
 import type { MediaTrashPurgeResult } from "@recall/application";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@recall/ui-web/components/tabs";
 import { CardBrowser } from "./CardBrowser";
 import { CollectionMaintenance } from "./CollectionMaintenance";
 import { StudySyncConflict } from "./StudySyncConflict";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { WorkspaceStore, MediaStore } from "@recall/local-store";
 import type { Assessment, LearningArea, Workspace, MediaReference } from "@recall/domain";
 import { undoableReview } from "@recall/application";
@@ -38,6 +42,7 @@ export function StudyTools({
   save,
   onEdit,
   disabled,
+  onBusyChange,
 }: {
   readonly protectedReferences?: readonly MediaReference[] | undefined;
   readonly workspaceStore?: WorkspaceStore | undefined;
@@ -49,8 +54,13 @@ export function StudyTools({
   readonly save: SaveStudyCommand;
   readonly onEdit: (card: Assessment) => void;
   readonly disabled: boolean;
+  readonly onBusyChange?: ((busy: boolean) => void) | undefined;
 }) {
   const controls = useStudyCardControls(workspace, save);
+  useEffect(() => {
+    onBusyChange?.(controls.busy);
+    return () => onBusyChange?.(false);
+  }, [controls.busy, onBusyChange]);
   const undo = undoableReview(workspace);
   const [now] = useState(() => Date.now());
   const attention = area.cards.filter((item) => {
@@ -67,23 +77,36 @@ export function StudyTools({
       onToggle={controls.toggleSuspension}
     />
   ));
+  function undoLastReview() {
+    if (undo)
+      controls.commit(
+        { kind: "undo-review", eventId: undo.id, operationId: crypto.randomUUID() },
+        "Last review undone.",
+      );
+  }
   return (
-    <section className="mb-4 grid gap-3" aria-label="Study tools">
+    <section className="grid min-w-0 gap-4" aria-label="Study tools">
       <StudySyncConflict workspace={workspace} save={save} />
-      <div className="flex flex-wrap gap-2">
-        <Button
-          variant="secondary"
-          disabled={disabled || controls.busy || !undo}
-          onClick={() => {
-            if (undo)
-              controls.commit(
-                { kind: "undo-review", eventId: undo.id, operationId: crypto.randomUUID() },
-                "Last review undone.",
-              );
-          }}
-        >
-          Undo last review
-        </Button>
+      <StudyToolsDisclosure
+        disabled={disabled}
+        undoAction={
+          <Button
+            variant="secondary"
+            disabled={disabled || controls.busy || !undo}
+            onClick={undoLastReview}
+          >
+            <Undo2 className="size-4" aria-hidden="true" /> Undo last review
+          </Button>
+        }
+      >
+        <ManualBurialControls
+          now={now}
+          workspace={workspace}
+          card={card}
+          disabled={disabled || controls.busy}
+          onBury={controls.bury}
+          onUnbury={controls.unbury}
+        />
         <Dialog>
           <DialogTrigger asChild>
             <Button variant="secondary" disabled={disabled || area.cards.length === 0}>
@@ -134,10 +157,10 @@ export function StudyTools({
             Suspend this card
           </Button>
         )}
-      </div>
+      </StudyToolsDisclosure>
       {controls.message && <p role="status">{controls.message}</p>}
       {workspace.schedulerSettings?.activeStudyQuery && (
-        <div role="status" className="grid gap-2 border p-3">
+        <Alert role="status" className="grid gap-2">
           <p>Scheduled review filter: {workspace.schedulerSettings.activeStudyQuery}</p>
           <Button
             variant="secondary"
@@ -153,7 +176,7 @@ export function StudyTools({
           >
             Show all scheduled reviews
           </Button>
-        </div>
+        </Alert>
       )}
       {attention.length > 0 && (
         <Accordion type="single" collapsible>
@@ -165,10 +188,6 @@ export function StudyTools({
           </AccordionItem>
         </Accordion>
       )}
-      <p className="text-sm text-muted-foreground">
-        Again means forgotten; Hard means recalled with difficulty. Repeated failures are flagged
-        for editing, never suspended automatically.
-      </p>
     </section>
   );
 }

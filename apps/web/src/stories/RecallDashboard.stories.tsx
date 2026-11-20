@@ -236,6 +236,12 @@ export const AddCardWithMedia: Story = {
   globals: { viewport: { value: "recallDesktop", isRotated: false } },
 };
 
+export const AddCardPhone: Story = {
+  ...AddCardWithMedia,
+  name: "Library · add card on phone",
+  globals: { viewport: { value: "recallMobile", isRotated: false } },
+};
+
 export const EditCardObjectivesAndTags: Story = {
   name: "Library · edit card objectives and tags",
   args: {
@@ -335,3 +341,33 @@ export {
   AreaDeletionFailure,
   CardDeletionFailure,
 } from "./RecallDashboard.recovery-stories";
+
+export const TutorConversation: Story = {
+  name: "Tutor · conversation",
+  args: {
+    demo: {
+      workspace: authoredWorkspace,
+      view: DashboardView.Tutor,
+      selectedAreaId: "area-biology",
+    },
+  },
+  globals: { viewport: { value: "recallDesktop", isRotated: false } },
+};
+
+export const CollapsedSidebar: Story = {
+  name: "Navigation · collapsed sidebar",
+  args: {
+    demo: {
+      workspace: authoredWorkspace,
+      view: DashboardView.Library,
+      selectedAreaId: "area-biology",
+      syncAccountState: "owner-adoption-required",
+    },
+  },
+  globals: { viewport: { value: "recallDesktop", isRotated: false } },
+  play: ({ canvasElement }) => {
+    canvasElement
+      .querySelector<HTMLButtonElement>('[data-slot="sidebar"] [data-slot="sidebar-trigger"]')
+      ?.click();
+  },
+};

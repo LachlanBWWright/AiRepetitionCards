@@ -1,3 +1,4 @@
+import { DashboardAgentHandover } from "../subjects/DashboardAgentHandover";
 import { Effect } from "effect";
 import { DashboardView } from "@/features/dashboard/navigation/dashboard-navigation";
 import { Button } from "@/components/ui/Button";
@@ -25,7 +26,7 @@ import type { RecallDashboardModel } from "../state/useRecallDashboardController
 function BrowseSharedDeckButton({ onClick }: { readonly onClick: () => void }) {
   return (
     <div className="flex flex-wrap items-center justify-between gap-3">
-      <Button variant="link" className="h-auto p-0" onClick={onClick}>
+      <Button size="sm" variant="default" onClick={onClick}>
         Browse shared decks
       </Button>
     </div>
@@ -108,13 +109,13 @@ export function RecallDashboardLibraryView({ model }: { readonly model: RecallDa
   }
   return (
     <div
-      className="mx-auto min-h-[80vh] w-full max-w-[1080px] px-4 py-8 sm:px-8 sm:py-10"
+      className="mx-auto flex min-h-[80vh] flex-col gap-6 w-full max-w-[1080px] px-4 py-8 sm:px-8 sm:py-10"
       inert={reviewSaving || reviewSaveFailed}
     >
       <RecallDashboardLibraryToolbar model={model} />
       {activeView === DashboardView.Library ? (
         <>
-          <div className="mt-7 grid gap-7">
+          <div className="flex min-w-0 flex-col gap-6">
             {(libraryNotes.error || activityRestoreError) && (
               <Alert variant="destructive">
                 {libraryNotes.error ?? activityRestoreError}
@@ -142,6 +143,11 @@ export function RecallDashboardLibraryView({ model }: { readonly model: RecallDa
               />
             )}
             <RecallDashboardDeckToolbar model={model} />
+            {libraryDeckOpen && area && (
+              <div>
+                <DashboardAgentHandover model={model} areaId={area.id} />
+              </div>
+            )}
             {!area && (
               <EmptyState
                 className="rounded-xl border bg-card px-6 py-12"
@@ -154,6 +160,7 @@ export function RecallDashboardLibraryView({ model }: { readonly model: RecallDa
         </>
       ) : (
         <>
+          <StudyStatisticsPanel workspace={workspace} now={now.getTime()} />
           <RecallDashboardInsightsSummary
             totalReviews={totalReviews}
             dueCount={dueCount}
@@ -175,7 +182,6 @@ export function RecallDashboardLibraryView({ model }: { readonly model: RecallDa
             reviewHistory={reviewHistory}
             totalReviewEvents={workspace.reviewEvents?.length ?? 0}
           />
-          <StudyStatisticsPanel workspace={workspace} now={now.getTime()} />
           <DeletedCardRecovery
             workspace={workspace}
             onRestoreVersion={restoreVersion}
@@ -185,7 +191,7 @@ export function RecallDashboardLibraryView({ model }: { readonly model: RecallDa
       )}
       {activeView === DashboardView.Insights && (
         <Dialog open={reviewSettingsOpen && workspaceUnlocked} onOpenChange={setReviewSettingsOpen}>
-          <DialogContent className="max-h-[calc(100dvh-2rem)] gap-5 overflow-y-auto sm:max-w-2xl">
+          <DialogContent className="max-h-[calc(100dvh-2rem)] gap-6 overflow-y-auto sm:max-w-2xl">
             <DialogHeader>
               <DialogTitle>Review settings</DialogTitle>
               <DialogDescription>

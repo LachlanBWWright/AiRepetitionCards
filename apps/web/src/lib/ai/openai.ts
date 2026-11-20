@@ -1,14 +1,11 @@
 import "server-only";
+import { managedAiRpc } from "./managed-rpc";
+import { createManagedTutorProvider } from "./managed-provider";
 
 import { Effect, Either, Schema } from "effect";
-import type { AiOperation, AiProviderService } from "@recall/ai-core";
+import type { AiOperation, AiProviderService, AiProviderError } from "@recall/ai-core";
 import { AccountIdSchema } from "@recall/domain";
-import {
-  reserveAiUsage,
-  settleAiUsage,
-  type AiUsageReservation,
-  type AiUsageBudgetFailure,
-} from "@recall/application";
+import { reserveAiUsage, settleAiUsage, type AiUsageReservation } from "@recall/application";
 import { readHostedAiBudgetConfiguration, createHostedAiUsageBudget } from "./usage-budget";
 import { createOpenAiProvider, resolveOpenAiModel } from "@recall/infra-openai";
 
@@ -27,7 +24,21 @@ export function createHostedTutorProvider(
   userId: string,
   aiCallId: string,
   now: Date,
-): Either.Either<AiProviderService, AiUsageBudgetFailure> {
+  funding?: string | null,
+): Either.Either<AiProviderService, AiProviderError> {
+  if (funding === "managed" || process.env.MANAGED_AI_ENABLED === "true")
+    return funding === "managed" && process.env.MANAGED_AI_ENABLED === "true"
+      ? Either.right(
+          createManagedTutorProvider(userId, aiCallId, {
+            enabled: true,
+            rpc: managedAiRpc,
+            credentials: {
+              openai: process.env.OPENAI_API_KEY,
+              anthropic: process.env.ANTHROPIC_API_KEY,
+            },
+          }),
+        )
+      : Either.left({ _tag: "AiManagedAccessDenied" });
   const configured = readHostedAiBudgetConfiguration();
   if (Either.isLeft(configured)) return Either.left(configured.left);
   if (configured.right === null) return Either.right(createOpenAiProvider(configuration));
@@ -72,5 +83,7 @@ export function createHostedTutorProvider(
 }
 
 export function hostedTutorModel(operation: AiOperation): string | null {
-  return resolveOpenAiModel(configuration, operation);
+  return process.env.MANAGED_AI_ENABLED === "true"
+    ? "managed"
+    : resolveOpenAiModel(configuration, operation);
 }

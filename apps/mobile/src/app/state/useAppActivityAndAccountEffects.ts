@@ -1,8 +1,10 @@
+import * as Crypto from "expo-crypto";
 import { emptyActivityLibrary } from "@recall/domain";
 import { useEffect, useLayoutEffect } from "react";
 import { Effect, Either, Schema } from "effect";
 import * as Linking from "expo-linking";
 import {
+  createStarterWorkspace,
   clearWorkspaceAndMedia,
   loadWorkspace,
   saveWorkspace,
@@ -14,7 +16,7 @@ import {
   openSqliteMediaStore,
   openSqliteWorkspaceStore,
 } from "../../storage/workspace/sqlite-workspace-store";
-import { confirmNativeMagicLink, supabaseAuthClient } from "../../storage/auth/supabase-auth";
+import { confirmNativeGoogleSignIn, supabaseAuthClient } from "../../storage/auth/supabase-auth";
 import type { AppCoreState } from "../useAppController";
 
 type LocalMutation = <A, E>(
@@ -185,7 +187,7 @@ export function useAppActivityAndAccountEffects(
       updateSession(session);
     });
     const handleUrl = (url: string | null) => {
-      if (url) void Effect.runPromise(Effect.either(confirmNativeMagicLink(url)));
+      if (url) void Effect.runPromise(Effect.either(confirmNativeGoogleSignIn(url)));
     };
     const initialUrl = Effect.tryPromise({
       try: () => Linking.getInitialURL(),
@@ -288,7 +290,17 @@ export function useAppActivityAndAccountEffects(
         setWorkspace(loaded.right.workspace);
         setCacheWritable(true);
       } else if (loaded.right._tag === "Empty") {
-        const emptyWorkspace = createEmptyWorkspace();
+        const fresh = await Effect.runPromise(
+          Effect.either(createStarterWorkspace(new Date(), () => Crypto.randomUUID())),
+        );
+        if (!isMounted()) return;
+        if (Either.isLeft(fresh)) {
+          setWorkspace(createEmptyWorkspace());
+          setMessage("Starter decks could not be prepared. Reload before saving changes.");
+          setReady(true);
+          return;
+        }
+        const emptyWorkspace = fresh.right;
         const saved = await Effect.runPromise(
           Effect.either(saveWorkspace(localStore, emptyWorkspace)),
         );

@@ -31,10 +31,6 @@ export function NativeKnowledgeNotebookQueue({ model }: { readonly model: Native
         disabled={busy || !!unsaved || !api || !mayWrite()}
         onPress={() => void proposeBatch()}
         label="Suggest cards"
-        className={
-          "min-h-[36px] justify-center items-center px-[10px] rounded-[10px] bg-transparent"
-        }
-        labelClassName="text-recall-darkGreen text-[11px] font-bold"
       />
       {notebook.proposals
         .filter(
@@ -53,10 +49,6 @@ export function NativeKnowledgeNotebookQueue({ model }: { readonly model: Native
               })
             }
             label="Retry confirmation"
-            className={
-              "min-h-[36px] justify-center items-center px-[10px] rounded-[10px] bg-transparent"
-            }
-            labelClassName="text-recall-darkGreen text-[11px] font-bold"
           />
         ))}
     </View>

@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+import type { AgentDialogue } from "@recall/application";
 import type { KnowledgeArea, ReviewEvent } from "@recall/domain";
 import { type CardDuplicateCandidate, type WorkspaceSearchTarget } from "@recall/application";
 import type { CardProposal } from "@recall/ai-core";
@@ -18,6 +20,7 @@ export const failureMessage =
   "The notebook could not be updated. Your saved cards and review history are unchanged.";
 
 export type NativeKnowledgeNotebookProps = {
+  readonly renderHandover?: ((history: AgentDialogue) => ReactNode) | undefined;
   readonly experience?: "chat";
   readonly sessionOnly?: boolean;
   readonly onStartReview?: (() => void) | undefined;

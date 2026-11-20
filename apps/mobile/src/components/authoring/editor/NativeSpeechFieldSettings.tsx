@@ -17,7 +17,7 @@ export function NativeSpeechFieldSettings({
     <View className="gap-2">
       <NativeButton
         disabled={disabled}
-        tone="soft"
+        variant="default"
         label={`${side === "front" ? "Question" : "Answer"} speech: ${speech ? "on" : "off"}`}
         onPress={() => {
           update(speech ? undefined : { language: "en-US", rate: 1, autoplay: false });
@@ -34,7 +34,7 @@ export function NativeSpeechFieldSettings({
             onChangeText={(language) => {
               update({ ...speech, language });
             }}
-            className="border border-recall-line rounded p-2 text-recall-ink"
+            className="w-full min-h-12 border border-recall-line rounded-xl px-3 py-3 text-base text-recall-ink"
           />
           <NativeSpeechVoicePicker speech={speech} update={update} disabled={disabled} />
           <Text className="text-recall-ink">Speed (0.25–2)</Text>
@@ -47,11 +47,11 @@ export function NativeSpeechFieldSettings({
               const rate = Number(text);
               if (rate >= 0.25 && rate <= 2) update({ ...speech, rate });
             }}
-            className="border border-recall-line rounded p-2 text-recall-ink"
+            className="w-full min-h-12 border border-recall-line rounded-xl px-3 py-3 text-base text-recall-ink"
           />
           <NativeButton
             disabled={disabled}
-            tone="soft"
+            variant="default"
             label={`Automatic speech: ${speech.autoplay ? "on" : "off"}`}
             onPress={() => {
               update({ ...speech, autoplay: !speech.autoplay });

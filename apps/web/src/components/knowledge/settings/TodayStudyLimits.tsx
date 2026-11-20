@@ -1,6 +1,6 @@
 import type { AreaId, SchedulerSettings } from "@recall/domain";
 import { useTodayStudyLimits } from "@recall/react";
-import { Input } from "@recall/ui-web";
+import { Input, FieldLabel, FieldDescription } from "@recall/ui-web";
 import { Button } from "@/components/ui/Button";
 export function TodayStudyLimits({
   settings,
@@ -13,9 +13,9 @@ export function TodayStudyLimits({
 }) {
   const limits = useTodayStudyLimits(settings, onChange, Date.now, areaId);
   return (
-    <fieldset className="grid gap-2 rounded border p-3">
+    <fieldset className="flex flex-col gap-2 rounded border p-3">
       <legend>Today only</legend>
-      <label>
+      <FieldLabel className="flex min-w-0 flex-col gap-2">
         New cards today
         <Input
           type="number"
@@ -27,8 +27,8 @@ export function TodayStudyLimits({
           }}
           placeholder="Keep usual limit"
         />
-      </label>
-      <label>
+      </FieldLabel>
+      <FieldLabel className="flex min-w-0 flex-col gap-2">
         Returning cards today
         <Input
           type="number"
@@ -40,14 +40,14 @@ export function TodayStudyLimits({
           }}
           placeholder="Keep usual limit"
         />
-      </label>
+      </FieldLabel>
       <Button type="button" disabled={!limits.canApply} onClick={limits.apply}>
         Apply to settings draft
       </Button>
-      <p className="text-sm text-muted-foreground">
+      <FieldDescription>
         Save settings to apply. Expires at local midnight on this device; synced devices use the
         same expiry instant.
-      </p>
+      </FieldDescription>
     </fieldset>
   );
 }

@@ -1,3 +1,4 @@
+import { clearNativeAiFunding } from "../../storage/ai/native-managed-ai";
 import { withNativeOperationStoreLane } from "../../storage/workspace/native-operation-store";
 import { Effect, Either } from "effect";
 import { supabaseAuthClient } from "../../storage/auth/supabase-auth";
@@ -10,6 +11,7 @@ import type { createAppWorkspaceActions } from "./AppWorkspaceActions";
 export function createAppAccountActions(
   model: Pick<
     AppCoreState & ReturnType<typeof createAppWorkspaceActions>,
+    | "accountUserId"
     | "workspace"
     | "workspaceLifetime"
     | "captureCleanupTargets"
@@ -27,6 +29,7 @@ export function createAppAccountActions(
   >,
 ) {
   const {
+    accountUserId,
     workspace,
     workspaceLifetime,
     captureCleanupTargets,
@@ -69,9 +72,11 @@ export function createAppAccountActions(
             ? yield* withNativeOperationStoreLane(clearLocalStores.current)
             : { workspaceCleared: false, mediaCleared: false };
         const auxiliary = yield* clearAuxiliaryNativeData(targets);
+        const funding = yield* Effect.either(clearNativeAiFunding(accountUserId));
         return {
           ...workspaceAndMedia,
           ...auxiliary,
+          tutorSessionsCleared: auxiliary.tutorSessionsCleared && Either.isRight(funding),
         } as const;
       }),
     );

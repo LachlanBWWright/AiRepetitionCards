@@ -1,3 +1,4 @@
+import { Alert, AlertDescription } from "@recall/ui-web/components/alert";
 import type { Assessment } from "@recall/domain";
 import { useCardSpeech } from "@recall/react";
 import { Button } from "@recall/ui-web/components/button";
@@ -15,14 +16,18 @@ export function ReviewSpeech({
     <div className="mb-3 text-center">
       <Button
         type="button"
-        variant="secondary"
+        variant="default"
         onClick={() => {
           void speech.speak();
         }}
       >
         Read aloud
       </Button>
-      {speech.error && <p role="status">{speech.error}</p>}
+      {speech.error && (
+        <Alert variant="destructive">
+          <AlertDescription>{speech.error}</AlertDescription>
+        </Alert>
+      )}
     </div>
   );
 }

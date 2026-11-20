@@ -26,6 +26,7 @@ export function createRecallDashboardDraftActions(
     | "setEditingCardId"
     | "setFront"
     | "setBack"
+    | "setExplanation"
     | "setImageOcclusion"
     | "setCardKind"
     | "setClozeText"
@@ -66,6 +67,7 @@ export function createRecallDashboardDraftActions(
     setEditingCardId,
     setFront,
     setBack,
+    setExplanation,
     setImageOcclusion,
     setCardKind,
     setClozeText,
@@ -116,6 +118,7 @@ export function createRecallDashboardDraftActions(
     setEditingCardId(draft.mode === "edit" ? draft.id : null);
     setFront(draft.front);
     setBack(draft.back);
+    setExplanation(draft.explanation ?? "");
     setImageOcclusion(draft.imageOcclusion);
     setCardKind(draft.cardKind);
     setClozeText(draft.clozeText);

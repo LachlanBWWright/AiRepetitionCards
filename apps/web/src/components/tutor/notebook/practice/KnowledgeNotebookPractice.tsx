@@ -34,7 +34,7 @@ export function KnowledgeNotebookPractice({ model }: { readonly model: Knowledge
   } = model;
   function renderActiveQuestion() {
     return (
-      <div className="grid gap-5 rounded-xl border bg-card p-4 sm:p-6">
+      <div className="grid gap-0 rounded-xl border bg-card p-4 sm:p-6">
         {pendingQuestion ? (
           <NotebookPracticeQuestion
             question={pendingQuestion}
@@ -49,7 +49,7 @@ export function KnowledgeNotebookPractice({ model }: { readonly model: Knowledge
             draftDisabled={busy || unsaved}
           />
         ) : (
-          <Button type="button" variant="primary" disabled={questionDisabled} onClick={ask}>
+          <Button type="button" variant="default" disabled={questionDisabled} onClick={ask}>
             Ask a question
           </Button>
         )}
@@ -62,16 +62,20 @@ export function KnowledgeNotebookPractice({ model }: { readonly model: Knowledge
     );
   }
   return (
-    <TabsContent value="practice" forceMount className="space-y-6 data-[state=inactive]:hidden">
-      <div className="grid gap-4">
-        <form
-          className="max-w-3xl space-y-3"
-          onSubmit={(event) => {
-            event.preventDefault();
-            if (notebook) saveGoal();
-            else begin();
-          }}
-        >
+    <TabsContent
+      value="practice"
+      forceMount
+      className="flex flex-col gap-6 data-[state=inactive]:hidden"
+    >
+      <form
+        className="flex max-w-3xl flex-col gap-4"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (notebook) saveGoal();
+          else begin();
+        }}
+      >
+        <div className="flex flex-col gap-2">
           <Label htmlFor={goalId}>Session objective</Label>
           <Textarea
             id={goalId}
@@ -86,26 +90,26 @@ export function KnowledgeNotebookPractice({ model }: { readonly model: Knowledge
             placeholder="What do you want to understand? For example, how cells turn food into energy."
             aria-describedby={goalChanged ? goalHelpId : undefined}
           />
-          {(!active || goalChanged) && (
-            <GoalActions
-              active={active}
-              goalChanged={goalChanged}
-              hasNotebook={Boolean(notebook)}
-              disabled={busy || !loaded || unsaved || !goal.trim()}
-              busy={busy}
-              onBegin={begin}
-              onCancel={() => {
-                if (notebook) setGoal(notebook.goal);
-              }}
-            />
-          )}
-          {goalChanged && (
-            <p id={goalHelpId} className="text-sm leading-6 text-muted-foreground">
-              {practiceGoalHelp(Boolean(pendingQuestion), active)}
-            </p>
-          )}
-        </form>
-      </div>
+        </div>
+        {(!active || goalChanged) && (
+          <GoalActions
+            active={active}
+            goalChanged={goalChanged}
+            hasNotebook={Boolean(notebook)}
+            disabled={busy || !loaded || unsaved || !goal.trim()}
+            busy={busy}
+            onBegin={begin}
+            onCancel={() => {
+              if (notebook) setGoal(notebook.goal);
+            }}
+          />
+        )}
+        {goalChanged && (
+          <p id={goalHelpId} className="text-sm leading-6 text-muted-foreground">
+            {practiceGoalHelp(Boolean(pendingQuestion), active)}
+          </p>
+        )}
+      </form>
       {notebook && (
         <>
           <div className="space-y-5">
@@ -146,12 +150,12 @@ function GoalActions({
   readonly onCancel: () => void;
 }) {
   return (
-    <div className="flex flex-wrap items-center gap-3">
+    <div className="flex flex-wrap items-center gap-4">
       {!active && (
         <Button
           className="w-full sm:w-fit sm:min-w-36"
           type="button"
-          variant="primary"
+          variant="default"
           disabled={disabled}
           onClick={onBegin}
         >
@@ -160,15 +164,16 @@ function GoalActions({
       )}
       {goalChanged && (
         <>
-          <Button
-            type="submit"
-            variant={active ? "primary" : "outline"}
-            size="small"
-            disabled={disabled}
-          >
+          <Button type="submit" variant="default" size="default" disabled={disabled}>
             Save goal
           </Button>
-          <Button type="button" variant="link" size="small" disabled={busy} onClick={onCancel}>
+          <Button
+            type="button"
+            variant="secondary"
+            size="default"
+            disabled={busy}
+            onClick={onCancel}
+          >
             Cancel
           </Button>
         </>

@@ -62,7 +62,7 @@ internal static partial class SyncHandlers
         if (settings["requestRetention"] is not JsonValue retention || !retention.TryGetValue<double>(out var r) || r < .7 || r > .97) return false;
         foreach (var (key, max) in new[] { ("presets", 100), ("savedSearches", 100), ("filteredDecks", 100), ("suspendedCardIds", 200000), ("browserColumns", 8) })
             if (settings[key] is not null && (settings[key] is not JsonArray array || array.Count > max)) return false;
-        foreach (var (key, min, max) in new[] { ("dailyNewLimit", 0, 1000), ("dailyReviewLimit", 0, 10000), ("leechThreshold", 2, 100), ("maximumInterval", 1, 36500) })
+        foreach (var (key, min, max) in new[] { ("dailyNewLimit", 0, 1000), ("dailyReviewLimit", 0, 10000), ("leechThreshold", 2, 100), ("maximumInterval", 1, 36500), ("studyDayStartHour", 0, 23), ("learnAheadMinutes", 0, 60) })
             if (settings[key] is not null && (IntegerNode(settings[key]) is not { } n || n < min || n > max)) return false;
         foreach (var key in new[] { "learningSteps", "relearningSteps", "easyDays", "weights" })
         {

@@ -1,3 +1,4 @@
+import { NativeWorkflowSections } from "@recall/ui-native";
 import { NativeReviewerSettings } from "./NativeReviewerSettings";
 import { NativeTodayStudyLimits } from "./NativeTodayStudyLimits";
 import { NativeStudyPolicyFields } from "./NativeStudyPolicyFields";
@@ -28,9 +29,8 @@ export function NativeSchedulerEditor({
     dailyNewLimit: editor.dailyNewLimit,
     leechThreshold: editor.leechThreshold,
   });
-  return (
-    <View className="gap-3 border-t border-recall-line py-4">
-      <Text className="text-lg font-bold text-recall-ink">Review settings</Text>
+  const sectionContent1 = (
+    <>
       <Text className="text-sm text-recall-muted">
         Higher retention means more reviews. Start at 90%. New-card limits apply across all
         subjects. Learning steps come first; limits defer returning cards while retaining backlog
@@ -46,6 +46,7 @@ export function NativeSchedulerEditor({
         20,
       )}
       <NativeStudyPolicyFields
+        workspace
         policy={settings}
         disabled={locked}
         onChange={(next) => {
@@ -57,6 +58,10 @@ export function NativeSchedulerEditor({
           });
         }}
       />
+    </>
+  );
+  const sectionContent2 = (
+    <>
       <NativeReviewerSettings
         settings={settings}
         disabled={locked}
@@ -71,16 +76,6 @@ export function NativeSchedulerEditor({
           setEditor({ ...editor, settings: next });
         }}
       />
-      {workspace && (
-        <NativeParameterFitting
-          workspace={workspace}
-          settings={settings}
-          disabled={locked}
-          onChange={(next) => {
-            setEditor({ ...editor, settings: next });
-          }}
-        />
-      )}
       <NativeAdvancedScheduling
         policy={settings}
         disabled={locked}
@@ -88,16 +83,6 @@ export function NativeSchedulerEditor({
           setEditor({ ...editor, settings: { ...settings, ...policy } });
         }}
       />
-      {workspace && (
-        <NativeStudyPresets
-          workspace={workspace}
-          settings={settings}
-          disabled={locked}
-          onChange={(next) => {
-            setEditor({ ...editor, settings: next });
-          }}
-        />
-      )}
       {workspace && (
         <NativeStudyCardSettings
           workspace={workspace}
@@ -108,6 +93,64 @@ export function NativeSchedulerEditor({
           }}
         />
       )}
+    </>
+  );
+  const sectionContent3 = (
+    <>
+      {workspace && (
+        <NativeStudyPresets
+          workspace={workspace}
+          settings={settings}
+          disabled={locked}
+          onChange={(next) => {
+            setEditor({ ...editor, settings: next });
+          }}
+        />
+      )}
+    </>
+  );
+  const sectionContent4 = (
+    <>
+      {workspace && (
+        <NativeParameterFitting
+          workspace={workspace}
+          settings={settings}
+          disabled={locked}
+          onChange={(next) => {
+            setEditor({ ...editor, settings: next });
+          }}
+        />
+      )}
+    </>
+  );
+  return (
+    <View className="gap-3 border-t border-recall-line py-4">
+      <Text className="text-lg font-bold text-recall-ink">Review settings</Text>
+      <NativeWorkflowSections
+        label="Review settings sections"
+        sections={[
+          {
+            id: "daily",
+            label: "Daily study",
+            content: sectionContent1,
+          },
+          {
+            id: "scheduling",
+            label: "Scheduling",
+            content: sectionContent2,
+          },
+          {
+            id: "presets",
+            label: "Presets",
+            content: sectionContent3,
+          },
+          {
+            id: "fitting",
+            label: "Personalization",
+            content: sectionContent4,
+          },
+        ]}
+      />
       <NativeButton
         label={pending ? "Saving…" : "Save review settings"}
         disabled={locked}
@@ -124,7 +167,7 @@ export function NativeSchedulerEditor({
       />
       <Text className="text-sm text-recall-muted">
         Save to apply these changes. Settings stay private and are included in workspace backups. A
-        study day follows this device’s local calendar.
+        study day follows the configured local start hour.
       </Text>
     </View>
   );

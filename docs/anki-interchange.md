@@ -1,5 +1,10 @@
 # Anki interchange
 
+Real-world compatibility checks use five pinned, CC BY 4.0 packages. All five import and
+reimport successfully; remote media is marked with visible placeholders and approval warnings. See the
+[fixture results and attribution](../packages/verification/fixtures/anki-open-decks/README.md).
+Run them offline with `pnpm test anki-open-decks.test.ts`.
+
 Import `.apkg` or `.colpkg` from the library's **Import Anki deck** action. Review the proposed cards,
 attachment counts, review counts and warnings before approving. Imports create a fresh Knowledge Area when there are no matching cards. Matching Anki note GUIDs
 and template ordinals update existing content while retaining local card identities, schedules,
@@ -14,24 +19,48 @@ Collection packages import bounded content, not Anki preferences or an entire wo
 The platform SQLite adapters read legacy `collection.anki2`, uncompressed `collection.anki21`
 and normalized v18 collections from `.anki21b` packages. Modern packages use bounded
 Zstandard decompression and protobuf decoding for their media manifest and template metadata.
+Each Zstandard entry must contain exactly one complete frame; concatenated or skippable frames
+are rejected before decoding so a later frame cannot bypass the decoded-window bound.
 
 Supported content includes Basic, reversed Basic, numbered and nested Cloze deletions, and custom normal
 note types whose templates contain static field substitutions such as `{{English}}`.
 `{{FrontSide}}` and nested/inverse conditional field sections are also supported. Imported HTML is reduced to safe text and verified image/audio
-attachments. Styling, JavaScript, arbitrary filters and executable template
+attachments. HTTP(S) and protocol-relative image/audio references are replaced with visible
+placeholders; they are never fetched. The preview warns how many source media references
+were omitted. Re-export from Anki with bundled media to retain those attachments. Missing local
+files, unsafe URL schemes and unsupported packaged media still fail with recovery guidance. Styling, JavaScript, arbitrary filters and executable template
 code are not retained; unsupported template operations are rejected before approval.
 
 Where field names and sizes fit Recall's safe note model, imports preserve shared fields,
 note types, template relationships and linked Cloze source text in the note library. Other
 representable cards remain usable as independent cards. Review the preview because sanitization
-changes visual formatting. Native Anki image-occlusion notes with unrotated rectangles and ellipses are imported as editable
+changes visual formatting. The compatibility report counts changed fields and omitted unreferenced
+attachments and shows up to five source/safe-text comparisons (first 1,000 characters each). Source
+markup is displayed as escaped text, never executed. Review this evidence and the card preview
+before approving. Unsupported executable templates still fail rather than silently degrading. Native Anki image-occlusion notes with unrotated rectangles and ellipses are imported as editable
 image masks, including grouped targets and hide-one/hide-all modes. Rotations, polygons, text
 annotations, custom mask colors and mixed hide modes are rejected explicitly; they are not silently
 flattened into text. The original note type's reviewer scripts are never executed.
 
-The package limit is 50 MB, with at most 50,000 imported cards/notes, 250,000 review rows and
-100 media assets. Each attachment is limited to 20 MB. Additional bounds cover expanded ZIP
-size, SQLite size, protobuf size and expansion ratios. The same bounds apply to collection packages. Parsing remains bounded and in memory.
+The package limit is 100 MB, with at most 50,000 imported cards/notes, 250,000 review rows and
+2,000 media assets. Each attachment is limited to 20 MB. Additional bounds cover expanded ZIP
+size, SQLite size, protobuf size and expansion ratios. APKG export uses the same attachment-count,
+compressed-byte and total database-plus-media budgets so supported media collections can be exported again. The same bounds apply to collection packages. Archive extraction runs in bounded compressed chunks. Browser/Electron imports expose progress,
+pause/resume and cancellation between archive chunks, media assets and card batches. Pausing retains
+the current in-memory processing position. Closing cancels processing without approving or saving
+workspace changes. Only when you opt in to **Keep the chosen package on this device**, a single pending source
+package (which may contain private study history) is saved locally in IndexedDB when storage is
+available, so **Resume import** can recover the chosen file after reopening the app; it deliberately
+revalidates that untrusted source from the beginning. Successful approval clears the saved package;
+**Discard saved package** removes it explicitly and reports deletion failures without hiding the retained file. Device-data erasure also drains pending source writes and removes the saved package; later writes are blocked by the same erasure fence. If draft storage is unavailable or full, the active
+import still works but cannot survive a reload; the import progress and preview show that the
+source could not be kept. This is not a durable decoded-media checkpoint or
+fully streaming SQLite reader: the compressed source, extracted database and validated media still
+have bounded in-memory residency. Mobile uses the same validated importer without these web draft
+controls. The decoded budget remains 100 MB, including the modern database plus media. The compressed cap
+is now 100 MB to accommodate already compressed media; compressed source plus decoded content
+can occupy up to about 200 MB before SQLite and object overhead. Native imports yield between
+chunks and assets as well. Very large collections still require splitting.
 
 ## Scheduling and history
 
@@ -82,7 +111,7 @@ Use **Export deck ZIP** for a full-fidelity Recall transfer. APKG text templates
 Recall rich formatting, image masks, typed-answer normalization or speech preferences. The
 Recall ZIP format retains supported content and, when explicitly selected, its private history.
 A full workspace backup remains the recovery format for deleted-card history and the complete
-workspace.
+workspace. Portable Recall packages accept up to 2,010 files and 100 MB in both compressed and expanded content, retaining the existing per-attachment validation and ZIP expansion-ratio protections. A regression round-trips 2,000 distinct media assets so an imported media-heavy deck remains exportable. These limits are independent of the smaller legacy Knowledge Area ZIP format.
 
 ## Verification limits
 

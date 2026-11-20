@@ -12,6 +12,7 @@ export function reviewerKeyAction(
   )
     return "reveal";
   if (!revealed) return undefined;
+  if (key === "Enter" || (key === " " && settings.shortcuts.reveal === " ")) return "good";
   return (["again", "hard", "good", "easy"] as const).find(
     (action) => settings.shortcuts[action].toLowerCase() === key.toLowerCase(),
   );

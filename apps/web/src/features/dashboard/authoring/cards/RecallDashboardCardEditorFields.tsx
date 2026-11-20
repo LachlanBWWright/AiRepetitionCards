@@ -9,7 +9,7 @@ export function RecallDashboardCardEditorFields({ cardSaving, children }: Props)
   return (
     <fieldset
       disabled={cardSaving}
-      className="grid gap-3"
+      className="grid gap-4"
       style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}
     >
       {children}

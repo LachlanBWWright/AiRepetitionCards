@@ -1,8 +1,11 @@
-import type { Dispatch, SetStateAction } from "react";
+import { useState } from "react";
+import { FieldDescription } from "@recall/ui-web/components/field";
+import { Label } from "@recall/ui-web/components/label";
+import type { Dispatch, SetStateAction, ReactNode } from "react";
 import type { MediaReference } from "@recall/domain";
 import type { LearningArea } from "@/features/workspace/types";
 import { Button } from "@/components/ui/Button";
-import { MediaFilePreview } from "@/features/dashboard/layout/RecallDashboardSupport";
+import { CardMediaInput } from "./CardMediaInput";
 import {
   Accordion,
   AccordionContent,
@@ -13,6 +16,7 @@ import { Checkbox } from "@recall/ui-web/components/checkbox";
 import { Textarea } from "@recall/ui-web/components/textarea";
 
 type Props = {
+  readonly mediaTools?: ReactNode;
   readonly objectives: LearningArea["objectives"] | undefined;
   readonly objectiveIds: readonly string[];
   readonly setObjectiveIds: Dispatch<SetStateAction<readonly string[]>>;
@@ -45,7 +49,7 @@ function ObjectiveCheckbox({
   readonly setObjectiveIds: Props["setObjectiveIds"];
 }) {
   return (
-    <label className="flex items-center gap-2">
+    <Label className="flex items-center gap-2">
       <Checkbox
         checked={checked}
         onCheckedChange={(value) => {
@@ -53,7 +57,7 @@ function ObjectiveCheckbox({
         }}
       />
       {title}
-    </label>
+    </Label>
   );
 }
 
@@ -68,7 +72,7 @@ function ObjectiveSelection({
 }) {
   if (!objectives?.length) return null;
   return (
-    <fieldset>
+    <fieldset className="grid gap-2">
       <legend>Learning objectives</legend>
       {objectives.map((objective) => (
         <ObjectiveCheckbox
@@ -99,7 +103,6 @@ function SourceAttachments({
             </span>
             <Button
               type="button"
-              className="inline-flex min-h-8 items-center rounded-md px-2 text-sm text-[var(--ink)] underline-offset-4 hover:bg-[var(--surface-hover)] hover:underline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
               onClick={() => {
                 setRemovedMediaIds((current) => [...current, reference.id]);
               }}
@@ -113,43 +116,38 @@ function SourceAttachments({
 }
 
 export function RecallDashboardCardDetails(props: Props) {
+  const [section, setSection] = useState("");
   return (
-    <Accordion type="single" collapsible>
+    <Accordion type="single" collapsible value={section} onValueChange={setSection}>
       <AccordionItem value="card-details">
-        <AccordionTrigger>Card details</AccordionTrigger>
-        <AccordionContent>
+        <AccordionTrigger>Tags, objectives and media</AccordionTrigger>
+        <AccordionContent forceMount hidden={section !== "card-details"} className="grid gap-4">
           <ObjectiveSelection
             objectives={props.objectives}
             objectiveIds={props.objectiveIds}
             setObjectiveIds={props.setObjectiveIds}
           />
-          <label htmlFor="card-tags">Tags</label>
-          <Textarea
-            rows={2}
-            id="card-tags"
-            aria-describedby="card-tags-help"
-            value={props.tags}
-            onChange={(event) => {
-              props.setTags(event.target.value);
-            }}
-            placeholder="e.g. exam, fundamentals"
-          />
-          <small id="card-tags-help">Separate tags with commas.</small>
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="card-tags">Tags</Label>
+            <Textarea
+              rows={2}
+              id="card-tags"
+              aria-describedby="card-tags-help"
+              value={props.tags}
+              onChange={(event) => {
+                props.setTags(event.target.value);
+              }}
+              placeholder="e.g. exam, fundamentals"
+            />
+            <FieldDescription id="card-tags-help">Separate tags with commas.</FieldDescription>
+          </div>
           <SourceAttachments
             sourceMedia={props.sourceMedia}
             removedMediaIds={props.removedMediaIds}
             setRemovedMediaIds={props.setRemovedMediaIds}
           />
-          <label htmlFor="card-media">Attach image or audio (20 MB max)</label>
-          <input
-            id="card-media"
-            type="file"
-            accept="image/jpeg,image/png,image/gif,image/webp,audio/mpeg,audio/ogg,audio/wav,audio/mp4,audio/webm"
-            onChange={(event) => {
-              props.setMediaFile(event.currentTarget.files?.[0] ?? null);
-            }}
-          />
-          {props.mediaFile && <MediaFilePreview file={props.mediaFile} />}
+          <CardMediaInput file={props.mediaFile} onAttach={props.setMediaFile} />
+          {props.mediaTools}
         </AccordionContent>
       </AccordionItem>
     </Accordion>

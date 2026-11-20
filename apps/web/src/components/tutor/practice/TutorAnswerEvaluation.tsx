@@ -21,8 +21,8 @@ export function TutorAnswerEvaluation({
       {evaluation.misconception && <p>{evaluation.misconception}</p>}
       {evaluation.suggestedAction === "propose-card" && canPropose && (
         <Button
-          variant="secondary"
-          size="small"
+          variant="default"
+          size="default"
           type="button"
           disabled={busy}
           onClick={() => {

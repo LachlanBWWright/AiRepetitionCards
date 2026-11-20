@@ -1,3 +1,4 @@
+import { NativeCollapsible } from "@recall/ui-native";
 import { useState } from "react";
 import { Text, TextInput, View } from "react-native";
 import { createNativeStudyIntakeActions } from "./native-study-material-intake-workflow";
@@ -51,27 +52,22 @@ export function NativeStudyMaterialsPanelIntake({
     },
   );
   const button = (label: string, action: () => void, blocked = disabled) => (
-    <NativeButton
-      key={label}
-      label={label}
-      onPress={action}
-      disabled={blocked}
-      className="py-[10px] px-[4px]"
-      labelClassName="text-recall-surface text-[12px] font-bold"
-    />
+    <NativeButton key={label} label={label} onPress={action} disabled={blocked} />
   );
 
   return (
-    <View className="gap-[10px]">
+    <View className="gap-4">
       <Text className="text-recall-ink text-[14px] font-bold">Add material</Text>
-      <Text className="text-recall-muted text-[11px] leading-[16px]">Name</Text>
-      <TextInput
-        accessibilityLabel="Material name"
-        value={name}
-        onChangeText={setName}
-        maxLength={200}
-        className="p-[10px] rounded-[8px] bg-recall-paper text-recall-ink"
-      />
+      <View className="gap-2">
+        <Text className="text-recall-muted text-[11px] leading-[16px]">Name</Text>
+        <TextInput
+          accessibilityLabel="Material name"
+          value={name}
+          onChangeText={setName}
+          maxLength={200}
+          className="w-full min-h-12 rounded-xl bg-recall-paper px-3 text-base text-recall-ink"
+        />
+      </View>
       <TextInput
         accessibilityLabel="Paste study material"
         value={paste}
@@ -79,20 +75,23 @@ export function NativeStudyMaterialsPanelIntake({
         multiline
         maxLength={1000000}
         placeholder="Paste your study notes here"
-        className="p-[10px] rounded-[8px] bg-recall-paper text-recall-ink min-h-[120px] max-h-[260px]"
+        className="w-full min-h-[120px] max-h-[260px] rounded-xl bg-recall-paper px-3 py-3 text-base text-recall-ink"
       />
-      <View className="flex-row flex-wrap gap-[7px]">
+      <View className="gap-2">
         {button("Check pasted text", actions.checkPaste, disabled || !paste.trim())}
         {button("Upload document", actions.uploadDocument)}
       </View>
-      {button(showOcr ? "Close scanned import" : "Scanned PDF or image", () => {
-        setShowOcr((current) => !current);
-      })}
-      <View className={showOcr ? "gap-[10px]" : "hidden"}>
+      <NativeCollapsible
+        title="Scanned PDF or image"
+        open={showOcr}
+        onToggle={() => {
+          setShowOcr((current) => !current);
+        }}
+      >
         <Text className="text-recall-muted text-[11px] leading-[16px]">
           PDF pages (up to 20). English text recognition.
         </Text>
-        <View className="flex-row flex-wrap gap-[7px]">
+        <View className="gap-2">
           <Text className="text-recall-muted text-[11px] leading-[16px]">From page</Text>
           <TextInput
             accessibilityLabel="First OCR page"
@@ -100,7 +99,7 @@ export function NativeStudyMaterialsPanelIntake({
             onChangeText={setOcrFirst}
             keyboardType="number-pad"
             maxLength={6}
-            className="p-[10px] rounded-[8px] bg-recall-paper text-recall-ink"
+            className="w-full min-h-12 rounded-xl bg-recall-paper px-3 text-base text-recall-ink"
           />
           <Text className="text-recall-muted text-[11px] leading-[16px]">To page</Text>
           <TextInput
@@ -109,11 +108,11 @@ export function NativeStudyMaterialsPanelIntake({
             onChangeText={setOcrLast}
             keyboardType="number-pad"
             maxLength={6}
-            className="p-[10px] rounded-[8px] bg-recall-paper text-recall-ink"
+            className="w-full min-h-12 rounded-xl bg-recall-paper px-3 text-base text-recall-ink"
           />
           {button("Upload scan", actions.uploadScan, disabled)}
         </View>
-      </View>
+      </NativeCollapsible>
     </View>
   );
 }

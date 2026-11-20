@@ -33,7 +33,7 @@ export function SavedActivityPluginRow({
           <p className="text-sm">{activity.fallback}</p>
           <Button
             disabled={disabled}
-            variant="secondary"
+            variant="default"
             onClick={() => {
               void onPrepareExport(activity);
             }}
@@ -45,7 +45,7 @@ export function SavedActivityPluginRow({
       {migrationTarget && (
         <Button
           disabled={disabled}
-          variant="secondary"
+          variant="default"
           onClick={() => {
             void onPrepareMigration(activity);
           }}

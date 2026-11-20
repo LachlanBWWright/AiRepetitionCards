@@ -159,6 +159,26 @@ export type AnkiImportError = {
     | "media-too-large"
     | "invalid-proposal";
 };
+export type AnkiImportProgress = {
+  readonly phase: "archive" | "media" | "cards";
+  readonly completed: number;
+  readonly total: number;
+};
+/** A checkpoint may wait for a user to resume; interrupting the Effect cancels safely. */
+export type AnkiImportControl = {
+  readonly checkpoint?: (progress: AnkiImportProgress) => Effect.Effect<void>;
+};
+export type AnkiCompatibilityReport = {
+  readonly changedFieldCount: number;
+  readonly omittedUnreferencedAttachments: number;
+  readonly omittedRemoteMedia: number;
+  readonly samples: readonly {
+    readonly noteGuid: string;
+    readonly fieldName: string;
+    readonly original: string;
+    readonly imported: string;
+  }[];
+};
 export type AnkiImportProposal = {
   readonly area: LearningArea;
   readonly media: readonly StoredMediaAsset[];
@@ -166,6 +186,7 @@ export type AnkiImportProposal = {
   readonly excludedReviewCount: number;
   readonly suspendedCardIds?: readonly import("@recall/domain").AssessmentId[];
   readonly warnings?: readonly string[];
+  readonly compatibility?: AnkiCompatibilityReport;
   readonly provenance: {
     readonly format: "anki-apkg";
     readonly deckNames: readonly string[];

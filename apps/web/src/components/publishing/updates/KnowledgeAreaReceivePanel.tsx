@@ -1,3 +1,4 @@
+import { Label } from "@recall/ui-web/components/label";
 import { areaMediaReferences } from "@recall/application";
 import { Effect } from "effect";
 import type { KnowledgeArea } from "@recall/domain";
@@ -96,15 +97,19 @@ export function KnowledgeAreaReceivePanel({
 
   return (
     <div
-      className={`${embedded ? "border-t pt-5" : "rounded-xl border p-5 "}flex flex-col items-stretch gap-3 [&>label]:grid [&>label]:gap-2 [&>label]:text-sm [&>label]:font-semibold`}
+      className={`${embedded ? "border-t pt-5" : "rounded-xl border p-5 "}flex flex-col items-stretch gap-4 [&>label]:grid [&>label]:gap-2 [&>label]:text-sm [&>label]:font-semibold`}
     >
       <h3 className="text-base font-semibold">Receive a shared area</h3>
       {upstreamArea && (
         <div
-          className={embedded ? "mt-2 border-t pt-4" : "mt-2 rounded-xl bg-muted/50 p-4"}
+          className={
+            embedded
+              ? "flex flex-col gap-3 border-t pt-4"
+              : "flex flex-col gap-3 rounded-xl bg-muted/50 p-4"
+          }
           aria-label="Upstream updates"
         >
-          <p className="mb-0 text-sm font-semibold">Upstream updates</p>
+          <p className="text-sm font-semibold">Upstream updates</p>
           <p>
             Check for newer public versions of the original area. Your copy and review history stay
             unchanged until you choose a separate copy.
@@ -136,7 +141,7 @@ export function KnowledgeAreaReceivePanel({
         </div>
       )}
 
-      <label>
+      <Label>
         Version ID
         <Input
           value={versionId}
@@ -145,8 +150,8 @@ export function KnowledgeAreaReceivePanel({
           }}
           placeholder="Paste a shared version ID"
         />
-      </label>
-      <label>
+      </Label>
+      <Label>
         Access token <span className="font-normal text-muted-foreground">if required</span>
         <Input
           value={token}
@@ -155,18 +160,24 @@ export function KnowledgeAreaReceivePanel({
           }}
           placeholder="Paste link token"
         />
-      </label>
+      </Label>
       <Button type="button" disabled={busy || !versionId.trim()} onClick={() => void receive()}>
         Preview shared area
       </Button>
       {publication && (
-        <div className={embedded ? "mt-2 border-t pt-4" : "mt-2 rounded-xl bg-muted/50 p-4"}>
-          <p className="mb-0 text-sm font-semibold">Shared area details</p>
+        <div
+          className={
+            embedded
+              ? "flex flex-col gap-3 border-t pt-4"
+              : "flex flex-col gap-3 rounded-xl bg-muted/50 p-4"
+          }
+        >
+          <p className="text-sm font-semibold">Shared area details</p>
           <h4 className="text-base font-semibold">{publication.document.title}</h4>
           <p className="text-sm text-muted-foreground">
             {publication.document.description || "No description provided."}
           </p>
-          <dl className="my-4 grid gap-2">
+          <dl className="grid gap-2">
             <div className="flex justify-between gap-4 text-sm">
               <dt className="text-muted-foreground">Attribution</dt>
               <dd className="m-0 text-right font-semibold">

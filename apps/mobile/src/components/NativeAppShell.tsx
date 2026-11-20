@@ -1,15 +1,9 @@
+import { NativeButton } from "@recall/ui-native";
+
 /// <reference types="nativewind/types" />
 
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
-import {
-  KeyboardAvoidingView,
-  Keyboard,
-  Platform,
-  Pressable,
-  ScrollView,
-  Text,
-  View,
-} from "react-native";
+import { KeyboardAvoidingView, Keyboard, Platform, ScrollView, Text, View } from "react-native";
 import {
   NavigationContainer,
   DefaultTheme,
@@ -40,6 +34,7 @@ import {
 
 type NativeAppPanels = Readonly<Record<NativeAppTab, ReactNode>>;
 type NativeAppShellContextValue = {
+  readonly syncStatus: ReactNode;
   readonly panels: NativeAppPanels;
   readonly areas: NativeAppShellProps["areas"];
   readonly activeAreaId: string | null;
@@ -49,6 +44,7 @@ type NativeAppShellContextValue = {
 };
 
 export type NativeAppShellProps = {
+  readonly syncStatus?: ReactNode;
   readonly today: ReactNode;
   readonly library: ReactNode;
   readonly tutor: ReactNode;
@@ -131,13 +127,12 @@ function EmptyTutorPrompt({ onOpenLibrary }: { readonly onOpenLibrary: () => voi
       <Text className="text-base leading-6 text-recall-muted">
         Choose a deck in Library to practice.
       </Text>
-      <Pressable
-        accessibilityRole="button"
+      <NativeButton
+        label="Open Library"
+        variant="default"
         onPress={onOpenLibrary}
-        className="self-start rounded-control bg-recall-green p-recall-md"
-      >
-        <Text className="font-semibold text-recall-darkGreen">Open Library</Text>
-      </Pressable>
+        className="self-start"
+      />
     </View>
   );
 }
@@ -167,6 +162,7 @@ const webTabOptions: Readonly<Record<NativeAppTab, BottomTabNavigationOptions>> 
 
 /** Keeps tab scenes mounted and delegates mobile tabs to native iOS/Android controls. */
 export function NativeAppShell({
+  syncStatus,
   today,
   library,
   tutor,
@@ -183,6 +179,7 @@ export function NativeAppShell({
   const navigationRef = useNavigationContainerRef<NativeAppTabParamList>();
   const [localTab, setLocalTab] = useState<NativeAppTab>(initialTab);
   const contextValue: NativeAppShellContextValue = {
+    syncStatus,
     panels: { Today: today, Library: library, Tutor: tutor, Sharing: sharing, Account: account },
     areas,
     activeAreaId,
@@ -304,6 +301,7 @@ function NativeAppPanelScreen() {
   if (tab === NativeAppTab.Library)
     return (
       <SafeAreaView className="flex-1 bg-recall-paper" edges={Platform.OS === "web" ? [] : ["top"]}>
+        {context.syncStatus}
         {areas.length > 0 && onSelectArea && (
           <View className="px-4">
             <NativeSelect
@@ -324,6 +322,7 @@ function NativeAppPanelScreen() {
 
   return (
     <SafeAreaView className="flex-1 bg-recall-paper" edges={Platform.OS === "web" ? [] : ["top"]}>
+      {context.syncStatus}
       <KeyboardAvoidingView
         className="flex-1"
         behavior={Platform.OS === "ios" ? "padding" : "height"}

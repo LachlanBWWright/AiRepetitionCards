@@ -116,7 +116,13 @@ export function DeckVersionPreview({
         <Alert variant="destructive" role="alert">
           <AlertDescription className="flex flex-wrap items-center justify-between gap-3">
             <span>{error}</span>
-            <Button type="button" variant="outline" size="sm" onClick={retry} disabled={loading}>
+            <Button
+              type="button"
+              variant="default"
+              size="default"
+              onClick={retry}
+              disabled={loading}
+            >
               Retry
             </Button>
           </AlertDescription>
@@ -216,7 +222,7 @@ function PublishedVersionSampleCard({
       {revealed ? (
         <p className="whitespace-pre-wrap border-t pt-3 text-sm">{back}</p>
       ) : (
-        <Button type="button" variant="outline" size="sm" onClick={onReveal}>
+        <Button type="button" variant="default" size="default" onClick={onReveal}>
           Reveal answer
         </Button>
       )}

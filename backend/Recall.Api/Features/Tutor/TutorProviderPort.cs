@@ -8,6 +8,7 @@ namespace Recall.Api.Features.Tutor;
 public enum TutorProviderFailureKind
 {
     NotConfigured,
+    ManagedNotEntitled,
     RateLimited,
     ProviderQuotaExceeded,
     SharedBudgetExceeded,
@@ -82,24 +83,7 @@ public sealed class OpenAiTutorProvider(HttpClient client, IConfiguration config
         using var message = new HttpRequestMessage(HttpMethod.Post, "https://api.openai.com/v1/responses");
         message.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
         message.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-        message.Content = JsonContent.Create(new
-        {
-            model = request.Model,
-            store = false,
-            max_output_tokens = request.MaximumOutputTokens,
-            instructions = fullInstructions,
-            input = request.Input,
-            text = new
-            {
-                format = new
-                {
-                    type = "json_schema",
-                    name = request.Operation.Replace("-", "_", StringComparison.Ordinal),
-                    strict = true,
-                    schema = request.OutputSchema
-                }
-            }
-        });
+        message.Content = TutorProviderPayload.Content("openai", request);
 
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(RequestTimeout);
@@ -109,8 +93,9 @@ public sealed class OpenAiTutorProvider(HttpClient client, IConfiguration config
             await using var stream = await response.Content.ReadAsStreamAsync(timeout.Token);
             using var document = await JsonDocument.ParseAsync(stream, cancellationToken: timeout.Token);
             var root = document.RootElement;
+            var returnedModel = root.ValueKind == JsonValueKind.Object && root.TryGetProperty("model", out var identity) && identity.ValueKind == JsonValueKind.String && identity.GetString() is { Length: > 0 and <= 200 } named ? named : request.Model;
             var responseUsage = root.ValueKind == JsonValueKind.Object && root.TryGetProperty("usage", out var responseUsageJson)
-                ? ReadUsage(responseUsageJson, request.Model)
+                ? ReadUsage(responseUsageJson, returnedModel)
                 : null;
             if (!response.IsSuccessStatusCode)
             {
@@ -144,7 +129,7 @@ public sealed class OpenAiTutorProvider(HttpClient client, IConfiguration config
                     {
                         using var outputDocument = JsonDocument.Parse(text.GetString() ?? string.Empty);
                         return new Result<TutorProviderReply, TutorProviderFailure>.Success(new TutorProviderReply(
-                            outputDocument.RootElement.Clone(), responseUsage ?? new TutorProviderUsage(null, null, request.Model)));
+                            outputDocument.RootElement.Clone(), responseUsage ?? new TutorProviderUsage(null, null, returnedModel)));
                     }
                     catch (JsonException)
                     {
@@ -158,7 +143,7 @@ public sealed class OpenAiTutorProvider(HttpClient client, IConfiguration config
         {
             return Fail(TutorProviderFailureKind.Unavailable);
         }
-        catch (TaskCanceledException) when (!cancellationToken.IsCancellationRequested)
+        catch (OperationCanceledException)
         {
             return Fail(TutorProviderFailureKind.Unavailable);
         }
@@ -180,7 +165,7 @@ public sealed class OpenAiTutorProvider(HttpClient client, IConfiguration config
 
     private static int? ReadTokenCount(JsonElement usage, string name) =>
         usage.ValueKind == JsonValueKind.Object && usage.TryGetProperty(name, out var token) &&
-        token.TryGetInt32(out var count) && count >= 0 ? count : null;
+        token.ValueKind == JsonValueKind.Number && token.TryGetInt32(out var count) && count >= 0 ? count : null;
 
     private static Result<TutorProviderReply, TutorProviderFailure> Fail(TutorProviderFailureKind kind, TutorProviderUsage? usage = null) =>
         new Result<TutorProviderReply, TutorProviderFailure>.Failure(new TutorProviderFailure(kind, usage));

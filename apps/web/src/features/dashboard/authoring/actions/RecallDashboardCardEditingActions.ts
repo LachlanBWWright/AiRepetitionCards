@@ -19,6 +19,7 @@ export function createRecallDashboardCardEditingActions(
     | "setEditingCardId"
     | "setFront"
     | "setBack"
+    | "setExplanation"
     | "setImageOcclusion"
     | "setCardKind"
     | "setClozeText"
@@ -45,6 +46,7 @@ export function createRecallDashboardCardEditingActions(
     setEditingCardId,
     setFront,
     setBack,
+    setExplanation,
     setImageOcclusion,
     setCardKind,
     setClozeText,
@@ -78,6 +80,7 @@ export function createRecallDashboardCardEditingActions(
     setEditingCardId(latestCard.id);
     setFront(latestCard.front);
     setBack(latestCard.back);
+    setExplanation(latestCard.explanation ?? "");
     setImageOcclusion(latestCard.imageOcclusion);
     setCardKind(latestCard.cloze ? "cloze" : "basic");
     setClozeText(latestCard.cloze?.text ?? "");

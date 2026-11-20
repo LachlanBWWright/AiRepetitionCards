@@ -13,7 +13,15 @@ import {
 } from "@recall/application";
 import { ObjectiveIdSchema, type LearningArea } from "@recall/domain";
 import { Button } from "@/components/ui/Button";
-import { Alert, AlertDescription, Input, Textarea } from "@recall/ui-web";
+import {
+  Alert,
+  AlertDescription,
+  Input,
+  Textarea,
+  FieldLabel,
+  Field,
+  FieldDescription,
+} from "@recall/ui-web";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -44,13 +52,13 @@ type Props = {
   readonly initialSaveFailure?: AreaSettingsSaveFailure;
   readonly createId?: () => string;
 };
-const fieldStyle: CSSProperties = { display: "grid", gap: 6 };
+const fieldStyle: CSSProperties = { display: "flex", flexDirection: "column", gap: 8 };
 const panelStyle: CSSProperties = {
-  display: "grid",
+  display: "flex",
+  flexDirection: "column",
   gap: 16,
   border: 0,
-  borderTop: "1px solid var(--border, #d8ded3)",
-  padding: "20px 0",
+  padding: 0,
 };
 const nullable = (value: string): string | null => (value.trim() ? value : null);
 const initialSettings = (area: LearningArea): AreaSettings => {
@@ -195,16 +203,14 @@ export function KnowledgeAreaSettings({
   };
   return (
     <form
-      className="grid gap-5"
+      className="mx-auto flex w-full max-w-3xl flex-col gap-6"
       aria-busy={busy}
       onSubmit={(event) => {
         void save(event);
       }}
     >
-      <div>
-        <h2 className="mb-2 text-lg font-semibold">{area.title} settings</h2>
-      </div>
-      <fieldset disabled={busy} className="grid min-w-0 gap-5 border-0 p-0">
+      <h2 className="m-0 text-lg font-semibold">{area.title} settings</h2>
+      <fieldset disabled={busy} className="flex min-w-0 flex-col gap-6 border-0 p-0">
         {feedback && (
           <Alert
             role={feedback.kind === "error" ? "alert" : "status"}
@@ -217,18 +223,12 @@ export function KnowledgeAreaSettings({
           <h3 className="m-0 text-base font-semibold" id={`${prefix}-details`}>
             Details
           </h3>
-          <label style={fieldStyle}>
+          <FieldLabel style={fieldStyle}>
             Description
             <Textarea rows={3} value={draft.description ?? ""} onChange={updateDescription} />
-          </label>
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
-              gap: 16,
-            }}
-          >
-            <label style={fieldStyle}>
+          </FieldLabel>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <FieldLabel style={fieldStyle}>
               Language
               <Input
                 required
@@ -237,13 +237,22 @@ export function KnowledgeAreaSettings({
                 value={draft.language}
                 onChange={updateLanguage}
               />
-            </label>
-            <label style={fieldStyle}>
-              Tags
-              <Textarea rows={2} placeholder="biology, cells" value={tags} onChange={updateTags} />
-              <small>Separate tags with commas.</small>
-            </label>
-            <label style={fieldStyle}>
+            </FieldLabel>
+            <Field style={fieldStyle}>
+              <FieldLabel htmlFor={`${prefix}-tags`}>Tags</FieldLabel>
+              <Textarea
+                id={`${prefix}-tags`}
+                aria-describedby={`${prefix}-tags-help`}
+                rows={2}
+                placeholder="biology, cells"
+                value={tags}
+                onChange={updateTags}
+              />
+              <FieldDescription id={`${prefix}-tags-help`}>
+                Separate tags with commas.
+              </FieldDescription>
+            </Field>
+            <FieldLabel style={fieldStyle}>
               License
               <Input
                 maxLength={120}
@@ -251,8 +260,8 @@ export function KnowledgeAreaSettings({
                 value={draft.licence ?? ""}
                 onChange={updateLicence}
               />
-            </label>
-            <label style={fieldStyle}>
+            </FieldLabel>
+            <FieldLabel style={fieldStyle}>
               Attribution
               <Textarea
                 rows={2}
@@ -261,7 +270,7 @@ export function KnowledgeAreaSettings({
                 value={draft.attribution ?? ""}
                 onChange={updateAttribution}
               />
-            </label>
+            </FieldLabel>
           </div>
         </section>
         <KnowledgeAreaSettingsAiInstructions prefix={prefix} ai={draft.ai} onChange={updateAi} />
@@ -271,7 +280,7 @@ export function KnowledgeAreaSettings({
           onChange={updateObjectives}
           onAdd={addObjective}
         />
-        <div>
+        <div className="flex flex-wrap gap-2">
           <Button type="submit">{busy ? "Saving settings…" : "Save settings"}</Button>
           <Button
             type="button"

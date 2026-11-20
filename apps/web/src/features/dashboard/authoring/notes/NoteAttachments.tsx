@@ -4,7 +4,8 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@recall/ui-web/components/dropdown-menu";
-import { useRef } from "react";
+import { useRef, useState } from "react";
+import { MediaAttachmentEditor } from "./media/MediaAttachmentEditor";
 import { Paperclip, FileAudio, Image, X } from "lucide-react";
 import type { NoteAuthoringModel } from "@recall/react";
 import { Input } from "@recall/ui-web/components/input";
@@ -13,14 +14,15 @@ import { readNoteMediaFile } from "./note-media-file";
 
 export function NoteAttachments({ model }: { readonly model: NoteAuthoringModel }) {
   const input = useRef<HTMLInputElement>(null);
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
   return (
     <div className="grid gap-2">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
         <Button
           type="button"
-          variant="ghost"
-          size="small"
-          className="-ml-2 gap-2 text-muted-foreground"
+          variant="default"
+          size="sm"
+          className="-ml-2 gap-2"
           disabled={model.busy || (model.note.media?.length ?? 0) >= 20}
           onClick={() => {
             input.current?.click();
@@ -41,10 +43,23 @@ export function NoteAttachments({ model }: { readonly model: NoteAuthoringModel 
         disabled={model.busy || (model.note.media?.length ?? 0) >= 20}
         onChange={(event) => {
           const file = event.currentTarget.files?.[0];
-          if (file) model.addAttachment(readNoteMediaFile(file));
+          if (file) setPendingFile(file);
           event.currentTarget.value = "";
         }}
       />
+      {pendingFile && (
+        <MediaAttachmentEditor
+          key={`${pendingFile.name}-${String(pendingFile.lastModified)}`}
+          file={pendingFile}
+          onCancel={() => {
+            setPendingFile(null);
+          }}
+          onAttach={(file) => {
+            model.addAttachment(readNoteMediaFile(file));
+            setPendingFile(null);
+          }}
+        />
+      )}
       {(model.note.media ?? []).map((media, index) => {
         const Icon = media.mimeType.startsWith("image/") ? Image : FileAudio;
         return (
@@ -61,9 +76,9 @@ export function NoteAttachments({ model }: { readonly model: NoteAuthoringModel 
             </span>
             <Button
               type="button"
-              size="icon"
-              variant="ghost"
-              className="size-8 shrink-0"
+              size="icon-sm"
+              variant="default"
+              className="shrink-0"
               aria-label={`Remove attachment ${String(index + 1)}`}
               disabled={model.busy}
               onClick={() => {
@@ -84,7 +99,7 @@ function ExistingImages({ model }: { readonly model: NoteAuthoringModel }) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button type="button" variant="ghost" size="small" disabled={model.busy}>
+        <Button type="button" variant="default" size="sm" disabled={model.busy}>
           Reuse an image
         </Button>
       </DropdownMenuTrigger>

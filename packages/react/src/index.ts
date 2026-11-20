@@ -47,3 +47,24 @@ export { useReviewerControls } from "./review/use-reviewer-controls";
 export { useParameterFitting } from "./study/use-parameter-fitting";
 
 export { useWorkspaceRecovery } from "./study/use-workspace-recovery";
+
+export { useSubjectTutor } from "./tutor/use-subject-tutor";
+
+export { useReviewRepair } from "./tutor/use-review-repair";
+export * from "./study/use-equation-editor";
+export {
+  useCodingActivity,
+  type CodingActivityOptions,
+} from "./activities/coding/use-coding-activity";
+
+export { useLuaActivity, type LuaActivityWorkspaceProps } from "./activities/lua/use-lua-activity";
+export { useLuaAuthoringPreview } from "./activities/lua/use-lua-authoring-preview";
+
+export { useAiFunding, type AiFundingPorts } from "./tutor/use-ai-funding";
+
+export { useAgentHandover } from "./interchange/use-agent-handover";
+export type {
+  AgentHandoverProps,
+  AgentTransferPorts,
+  AgentHandoverModel,
+} from "./interchange/use-agent-handover";

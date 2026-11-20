@@ -4,6 +4,7 @@ import {
   executeBudgetedTutorRequest,
   type TutorHttpRequest,
 } from "@recall/application";
+import { readNativeAiFunding } from "./native-managed-ai";
 import { nativeLocalBudget } from "./native-local-ai-budget";
 import * as Crypto from "expo-crypto";
 import { withNativeRequest } from "../native-http";
@@ -38,6 +39,14 @@ function sendTutorRequest(
   return Effect.tryPromise({
     try: async () => {
       const token = await getAccessToken();
+      if (
+        request.method === "POST" &&
+        (!accountId || (await Effect.runPromise(readNativeAiFunding(accountId))) !== "managed")
+      )
+        return {
+          status: 403,
+          body: { error: "Choose Recall managed AI in Account before sending a request." },
+        };
       if (getAccountId() !== accountId)
         return { status: 401, body: { error: "The selected account changed. Try again." } };
       return await withNativeRequest(
@@ -45,6 +54,8 @@ function sendTutorRequest(
         {
           method: request.method,
           headers: {
+            "x-recall-ai-funding": "managed",
+            "x-recall-ai-request-id": Crypto.randomUUID(),
             ...(token === null ? {} : { authorization: `Bearer ${token}` }),
             ...(request.body === undefined ? {} : { "content-type": "application/json" }),
           },
@@ -52,6 +63,17 @@ function sendTutorRequest(
         },
         async (response) => {
           try {
+            if (
+              !(await getAccessToken()) ||
+              getAccountId() !== accountId ||
+              (request.method === "POST" &&
+                accountId &&
+                (await Effect.runPromise(readNativeAiFunding(accountId))) !== "managed")
+            )
+              return {
+                status: 409,
+                body: { error: "The selected account or AI funding changed. Reopen AI help." },
+              };
             return { status: response.status, body: (await response.json()) as unknown };
           } catch {
             return { status: response.status, body: null };

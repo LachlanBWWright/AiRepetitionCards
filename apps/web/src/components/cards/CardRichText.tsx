@@ -1,5 +1,11 @@
 import { InlineImage } from "../ui/InlineImage";
-import { cardAppearanceMetrics, parseRichContent, type RichInline } from "@recall/application";
+import {
+  cardAppearanceMetrics,
+  cardImageSize,
+  parseRichContent,
+  type RichInline,
+  type RichBlock,
+} from "@recall/application";
 import type { CardAppearance } from "@recall/domain";
 import { CardEquation } from "./CardEquation";
 
@@ -13,10 +19,12 @@ function Inline({
   item,
   mediaUrls,
   fontSize,
+  imageSize,
 }: {
   readonly item: RichInline;
   readonly mediaUrls: Props["mediaUrls"];
   readonly fontSize: number;
+  readonly imageSize: number;
 }) {
   switch (item.kind) {
     case "strong":
@@ -33,7 +41,8 @@ function Inline({
         <InlineImage
           src={url}
           alt={item.text || "Card image"}
-          className="my-2 inline-block max-h-72 max-w-full object-contain"
+          className="my-2 inline-block max-w-full object-contain"
+          style={{ maxHeight: imageSize }}
         />
       ) : (
         <span>[Image: {item.text || item.mediaId}]</span>
@@ -59,38 +68,62 @@ export function CardRichText({ text, mediaUrls, className, appearance }: Props) 
         }
       : undefined;
   return (
-    <div className={className} style={style}>
+    <div className={className} style={style} dir={appearance?.direction ?? "auto"}>
       {parseRichContent(text).map((block, index) => (
-        <div
+        <RichTextBlock
           key={index}
-          className={
-            block.kind === "heading"
-              ? "font-bold"
-              : block.kind === "quote"
-                ? "border-l-2 pl-3 italic"
-                : "min-h-[1em]"
-          }
-        >
-          {block.kind === "bullet" && "• "}
-          {block.kind === "number" && `${String(block.number)}. `}
-          {block.kind === "math" ? (
-            <CardEquation
-              source={block.content[0]?.text ?? ""}
-              display
-              fontSize={metrics?.fontSize ?? 20}
-            />
-          ) : (
-            block.content.map((item, inlineIndex) => (
-              <Inline
-                key={inlineIndex}
-                item={item}
-                mediaUrls={mediaUrls}
-                fontSize={metrics?.fontSize ?? 20}
-              />
-            ))
-          )}
-        </div>
+          block={block}
+          mediaUrls={mediaUrls}
+          fontSize={metrics?.fontSize ?? 20}
+          imageSize={cardImageSize(appearance)}
+        />
       ))}
+    </div>
+  );
+}
+
+function RichTextBlock({
+  block,
+  mediaUrls,
+  fontSize,
+  imageSize,
+}: {
+  readonly block: RichBlock;
+  readonly mediaUrls: Props["mediaUrls"];
+  readonly fontSize: number;
+  readonly imageSize: number;
+}) {
+  if (block.kind === "code")
+    return (
+      <pre className="my-3 max-w-full overflow-x-auto rounded-md bg-muted p-3 text-sm">
+        <code data-language={block.language}>{block.content[0]?.text}</code>
+      </pre>
+    );
+  return (
+    <div
+      className={
+        block.kind === "heading"
+          ? "font-bold"
+          : block.kind === "quote"
+            ? "border-l-2 pl-3 italic"
+            : "min-h-[1em]"
+      }
+    >
+      {block.kind === "bullet" && "• "}
+      {block.kind === "number" && `${String(block.number)}. `}
+      {block.kind === "math" ? (
+        <CardEquation source={block.content[0]?.text ?? ""} display fontSize={fontSize} />
+      ) : (
+        block.content.map((item, index) => (
+          <Inline
+            key={index}
+            item={item}
+            mediaUrls={mediaUrls}
+            fontSize={fontSize}
+            imageSize={imageSize}
+          />
+        ))
+      )}
     </div>
   );
 }

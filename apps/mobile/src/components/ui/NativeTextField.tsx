@@ -46,7 +46,7 @@ export function NativeTextField({
         {...inputProps}
       />
       {error ? (
-        <Text accessibilityRole="alert" className="text-sm text-destructive">
+        <Text accessibilityRole="alert" className="text-sm text-recall-dangerForeground">
           {error}
         </Text>
       ) : null}

@@ -144,7 +144,7 @@ export function DeckUpdatesInbox({ api, onReviewVersion }: Props) {
         )}
         <Button
           className="ml-auto"
-          variant="outline"
+          variant="default"
           disabled={busyId !== null}
           onClick={() => void refresh()}
         >
@@ -201,7 +201,7 @@ function DeckUpdateInboxRow({
         <p className="mt-2 whitespace-pre-wrap text-sm">{update.releaseNotes}</p>
       )}
       <div className="mt-3 flex flex-wrap gap-2">
-        <Button variant="outline" disabled={busy} onClick={onReview}>
+        <Button variant="default" disabled={busy} onClick={onReview}>
           {reviewAction}
         </Button>
         {!update.seen && (

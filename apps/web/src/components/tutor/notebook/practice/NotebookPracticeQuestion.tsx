@@ -70,7 +70,7 @@ export function NotebookPracticeQuestion({
       <div className="flex flex-wrap gap-3">
         <Button
           type="button"
-          variant="primary"
+          variant="default"
           disabled={networkDisabled || !draft.answer.trim()}
           onClick={() => {
             onSubmit(draft.answer);
@@ -80,8 +80,8 @@ export function NotebookPracticeQuestion({
         </Button>
         <Button
           type="button"
-          variant="secondary"
-          size="small"
+          variant="default"
+          size="default"
           disabled={draftDisabled}
           onClick={onSaveDraft}
         >
@@ -89,8 +89,8 @@ export function NotebookPracticeQuestion({
         </Button>
         <Button
           type="button"
-          variant="secondary"
-          size="small"
+          variant="default"
+          size="default"
           disabled={networkDisabled}
           onClick={() => {
             onSubmit("I don't know yet.", "guess");

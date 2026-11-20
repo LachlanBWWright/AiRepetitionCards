@@ -33,7 +33,7 @@ export function NativeImageOcclusionEditor({
     return (
       <NativeButton
         label="Add image occlusion"
-        tone="soft"
+        variant="default"
         disabled={disabled}
         onPress={() => {
           const image = images[0];
@@ -59,7 +59,7 @@ export function NativeImageOcclusionEditor({
         <NativeButton
           key={image.id}
           label={`${image.id === value.imageMediaId ? "Selected: " : "Use "}image ${String(index + 1)}`}
-          tone="soft"
+          variant="default"
           disabled={disabled}
           onPress={() => {
             onChange({ ...value, imageMediaId: image.id });
@@ -68,11 +68,11 @@ export function NativeImageOcclusionEditor({
       ))}
       <NativeButton
         label={value.mode === "hide-one" ? "Hide one, guess one" : "Hide all, guess one"}
-        tone="soft"
-        disabled={disabled}
+        variant="default"
         onPress={() => {
           onChange({ ...value, mode: value.mode === "hide-one" ? "hide-all" : "hide-one" });
         }}
+        disabled={disabled}
       />
       {uri && (
         <>
@@ -107,7 +107,7 @@ export function NativeImageOcclusionEditor({
         <NativeButton
           key={shape}
           label={`Add ${shape}`}
-          tone="soft"
+          variant="default"
           disabled={disabled || value.masks.length >= 100}
           onPress={() => {
             onChange({
@@ -119,7 +119,7 @@ export function NativeImageOcclusionEditor({
       ))}
       <NativeButton
         label="Remove image occlusion"
-        tone="soft"
+        variant="default"
         disabled={disabled}
         onPress={() => {
           onChange(undefined);

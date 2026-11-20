@@ -6,7 +6,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@recall/ui-web/components/accordion";
-import { Input } from "@recall/ui-web";
+import { Input, FieldLabel, Tooltip, TooltipContent, TooltipTrigger } from "@recall/ui-web";
 import { KnowledgeAreaSettingsObjectiveDetails } from "./KnowledgeAreaSettingsObjectiveDetails";
 
 type Objective = AreaSettings["objectives"][number];
@@ -18,13 +18,13 @@ type Props = {
   readonly prefix: string;
 };
 
-const fieldStyle = { display: "grid", gap: 6 } as const;
+const fieldStyle = { display: "flex", flexDirection: "column", gap: 8 } as const;
 const panelStyle = {
-  display: "grid",
+  display: "flex",
+  flexDirection: "column",
   gap: 16,
   border: 0,
-  borderTop: "1px solid var(--border, #d8ded3)",
-  padding: "20px 0",
+  padding: 0,
 } as const;
 function updateObjective(
   objectives: AreaSettings["objectives"],
@@ -83,21 +83,14 @@ function ObjectiveDetailsAccordion({
 export function KnowledgeAreaSettingsObjectives({ objectives, onChange, onAdd, prefix }: Props) {
   return (
     <section aria-labelledby={`${prefix}-objectives`} style={panelStyle}>
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          gap: 12,
-        }}
-      >
+      <div className="flex flex-wrap items-center justify-between gap-4">
         <h3 className="m-0 text-base font-semibold" id={`${prefix}-objectives`}>
           Learning objectives
         </h3>
         <Button
           type="button"
-          variant="secondary"
-          size="small"
+          variant="default"
+          size="default"
           onClick={onAdd}
           disabled={objectives.length >= 200}
         >
@@ -106,9 +99,20 @@ export function KnowledgeAreaSettingsObjectives({ objectives, onChange, onAdd, p
       </div>
       {objectives.length === 0 && <p style={{ margin: 0 }}>No objectives yet.</p>}
       {objectives.map((objective, index) => (
-        <fieldset key={objective.id} style={{ ...panelStyle, minWidth: 0 }}>
-          <legend>Objective {index + 1}</legend>
-          <label style={fieldStyle}>
+        <section
+          key={objective.id}
+          aria-label={`Objective ${String(index + 1)}`}
+          className="flex min-w-0 flex-col gap-4"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span>Objective {index + 1}</span>
+            <RemoveObjectiveButton
+              onRemove={() => {
+                onChange(removeObjective(objectives, objective.id));
+              }}
+            />
+          </div>
+          <FieldLabel style={fieldStyle}>
             Title
             <Input
               required
@@ -117,27 +121,29 @@ export function KnowledgeAreaSettingsObjectives({ objectives, onChange, onAdd, p
                 onChange(updateObjectiveTitle(objectives, objective.id, event.target.value));
               }}
             />
-          </label>
+          </FieldLabel>
           <ObjectiveDetailsAccordion
             objective={objective}
             objectives={objectives}
             onChange={onChange}
           />
-          <div>
-            <Button
-              type="button"
-              variant="danger"
-              size="small"
-              onClick={() => {
-                onChange(removeObjective(objectives, objective.id));
-              }}
-              title="Unlink this objective from cards without deleting their review history"
-            >
-              Remove objective
-            </Button>
-          </div>
-        </fieldset>
+        </section>
       ))}
     </section>
+  );
+}
+
+function RemoveObjectiveButton({ onRemove }: { readonly onRemove: () => void }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button type="button" variant="default" size="sm" onClick={onRemove}>
+          Remove objective
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent>
+        Unlink this objective from cards without deleting their review history
+      </TooltipContent>
+    </Tooltip>
   );
 }

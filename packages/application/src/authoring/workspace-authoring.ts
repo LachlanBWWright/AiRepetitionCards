@@ -1,3 +1,4 @@
+import { applyAgentChanges } from "../interchange/agent/changes";
 import { MAX_COLLECTION_CARDS } from "@recall/domain";
 import {
   restoreWorkspaceCheckpoint,
@@ -170,6 +171,13 @@ export function applyWorkspaceAuthoringCommand(
         Effect.mapError(authoringFailure),
         Effect.map((next) => ({ workspace: next, message: "Collection recovery saved." })),
       );
+    if (command.kind === "apply-agent-changes")
+      return yield* applyAgentChanges(
+        workspace,
+        command.proposal,
+        now,
+        applyWorkspaceAuthoringCommand,
+      );
     const areaId = command.kind === "save-area" ? command.id : command.areaId;
     switch (command.kind) {
       case "save-note": {
@@ -275,6 +283,18 @@ export function applyWorkspaceAuthoringCommand(
         return { workspace: next, selectedAreaId: areaId, message: "Card created." };
       }
       case "create-cards": {
+        if (
+          command.sourceCardId &&
+          !workspace.areas
+            .find((area) => area.id === command.areaId)
+            ?.cards.some((card) => card.id === command.sourceCardId)
+        )
+          return yield* Effect.fail(
+            failure(
+              "stale-content",
+              "The source card was removed. Reopen card help before saving.",
+            ),
+          );
         const next = yield* createAuthoredCards(workspace, command.areaId, command.cards, now);
         return {
           workspace: next,

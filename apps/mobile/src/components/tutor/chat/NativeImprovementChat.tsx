@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+import type { AgentDialogue } from "@recall/application";
 import { NativeChatRoom } from "./NativeChatRoom";
 import { Text, View } from "react-native";
 import { NativeButton } from "@recall/ui-native";
@@ -5,7 +7,13 @@ import { improvementMessages, improvementOpening } from "@recall/application";
 import { NativeKnowledgeNotebookProposal } from "../notebook/proposals/NativeKnowledgeNotebookProposal";
 import { NotebookSection } from "../notebook/NativeKnowledgeNotebookTypes";
 import type { NativeNotebookModel } from "../notebook/useNativeKnowledgeNotebookModel";
-export function NativeImprovementChat({ model }: { readonly model: NativeNotebookModel }) {
+export function NativeImprovementChat({
+  model,
+  renderHandover,
+}: {
+  readonly model: NativeNotebookModel;
+  readonly renderHandover?: ((history: AgentDialogue) => ReactNode) | undefined;
+}) {
   const history = improvementMessages(model.notebook);
   const messages = history.length
     ? history
@@ -27,6 +35,7 @@ export function NativeImprovementChat({ model }: { readonly model: NativeNoteboo
   }
   return (
     <NativeChatRoom
+      tools={renderHandover?.(history)}
       label="Improve"
       greeting="What would you like to improve?"
       placeholder="Message Improve…"

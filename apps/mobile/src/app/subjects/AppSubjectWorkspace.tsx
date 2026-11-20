@@ -35,8 +35,12 @@ export function AppSubjectWorkspace({
       return;
     if (
       model.activeArea &&
-      studyQueue(model.workspace, model.activeArea, model.now, localStudyDay(model.now)).cards
-        .length > 0
+      studyQueue(
+        model.workspace,
+        model.activeArea,
+        model.now,
+        localStudyDay(model.now, model.workspace.schedulerSettings?.studyDayStartHour),
+      ).cards.length > 0
     )
       return;
     const next = nextStudyArea(model.workspace, model.now);
@@ -55,7 +59,7 @@ export function AppSubjectWorkspace({
       <View className="gap-3 px-4 pt-3">
         <NativeButton
           label="Recall / Home"
-          tone="soft"
+          variant="default"
           onPress={() => {
             model.setActiveTab(NativeAppTab.Today);
           }}

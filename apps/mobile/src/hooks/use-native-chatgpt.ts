@@ -1,3 +1,5 @@
+import { useAiFunding } from "@recall/react";
+import { nativeAiFundingPorts } from "../storage/ai/native-managed-ai";
 import { useCallback, useEffect, useState } from "react";
 import { Effect, Either } from "effect";
 import * as Linking from "expo-linking";
@@ -11,14 +13,18 @@ import { nativeChatGPTPlan } from "../storage/ai/native-chatgpt-tutor";
 import type { NativeChatGPTModel } from "../storage/ai/chatgpt-plan-client";
 import type { ChatGPTAuthFailure, ChatGPTAuthStatus } from "../storage/auth/chatgpt-auth";
 
-export function useNativeChatGPTAuth() {
+export function useNativeChatGPTAuth(owner: string | null) {
+  const managedFunding = useAiFunding(owner, nativeAiFundingPorts);
   const [available, setAvailable] = useState(false);
   const [ready, setReady] = useState(false);
   const [status, setStatus] = useState<ChatGPTAuthStatus>({ activeClientId: null, accounts: [] });
   const [busy, setBusy] = useState(false);
   const [signingIn, setSigningIn] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
-  const [tutorMode, setTutorMode] = useState<"chatgpt" | "hosted">("chatgpt");
+  const tutorMode: "hosted" | "chatgpt" = managedFunding.mode === "managed" ? "hosted" : "chatgpt";
+  const setTutorMode = (mode: "chatgpt" | "hosted") => {
+    managedFunding.select(mode === "hosted" ? "managed" : "byo");
+  };
   const [selection, setSelection] = useState<{
     readonly clientId: string | null;
     readonly slug: string;
@@ -113,6 +119,10 @@ export function useNativeChatGPTAuth() {
   return {
     connectionEpoch,
     tutorMode,
+    managedStatusMessage: managedFunding.unavailableReason,
+    managedRequestsUsed: managedFunding.status?.requestsUsed,
+    managedRequestLimit: managedFunding.status?.requestLimit,
+    refreshManagedAccess: managedFunding.refresh,
     setTutorMode,
     models,
     model,

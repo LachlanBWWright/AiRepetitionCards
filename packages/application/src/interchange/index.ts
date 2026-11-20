@@ -1,3 +1,4 @@
+export { MAX_ARCHIVE_BYTES as MAX_ANKI_PACKAGE_BYTES } from "./anki/anki-import-archive";
 export { fromKnowledgeArea, toKnowledgeArea } from "./knowledge-area-interchange";
 
 export { exportDelimitedCards, importDelimitedCards } from "./delimited-interchange";
@@ -11,6 +12,9 @@ export { decodeAnkiV18Collection } from "./anki/anki-v18";
 export type { AnkiV18CollectionRows } from "./anki/anki-v18";
 
 export type {
+  AnkiImportControl,
+  AnkiImportProgress,
+  AnkiCompatibilityReport,
   AnkiCardRow,
   AnkiCollection,
   AnkiImportError,
@@ -55,3 +59,5 @@ export type { AnkiExportFailure, AnkiSqliteWriter, AnkiSqlStatement } from "./an
 
 export { applyAnkiImport } from "./anki/anki-reimport";
 export type { AnkiReimportFailure } from "./anki/anki-reimport";
+
+export * from "./agent";

@@ -87,6 +87,12 @@ export function createRecallDashboardDeletionActions(
     requestConfirmation(
       `Delete “${latest.title}” and its ${String(latest.cards.length)} cards? Its review history will be retained.`,
       () => commitDeletion({ command, baseline, label: latest.title, error: "", stale: false }),
+      undefined,
+      {
+        title: `Delete “${latest.title}”?`,
+        confirmLabel: "Delete subject",
+        variant: "destructive",
+      },
     );
 
     return Promise.resolve(undefined);
@@ -144,6 +150,8 @@ export function createRecallDashboardDeletionActions(
     requestConfirmation(
       `Delete this study card from “${latestArea.title}”?\n\n${latestCard.front}\n\nIts review history will remain.`,
       () => commitDeletion({ command, baseline, label: latestCard.front, error: "", stale: false }),
+      undefined,
+      { title: "Delete this card?", confirmLabel: "Delete card", variant: "destructive" },
     );
 
     return Promise.resolve(undefined);

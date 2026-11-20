@@ -1,10 +1,4 @@
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@recall/ui-web/components/collapsible";
-import { Button } from "@recall/ui-web";
-import { ChevronDown } from "lucide-react";
+import { DashboardAgentHandover } from "./DashboardAgentHandover";
 import type { ComponentProps, ReactNode } from "react";
 import type { KnowledgeArea } from "@recall/domain";
 import { LocalChatGPTTutor } from "@/components/tutor/connection/LocalChatGPTTutor";
@@ -27,14 +21,14 @@ function SubjectAIContent({
   onApprove,
   api,
   sessionNamespace,
-  research,
   modelSelection,
   unavailableReason,
+  connectionPrompt,
 }: Props & {
   readonly sessionNamespace: string;
-  readonly research: ReactNode;
   readonly modelSelection: ChatModelSelection | undefined;
   readonly unavailableReason: string | null;
+  readonly connectionPrompt: ReactNode;
   readonly api: NonNullable<ComponentProps<typeof KnowledgeNotebookPanel>["api"]>;
 }) {
   return (
@@ -43,11 +37,15 @@ function SubjectAIContent({
         <div className="flex min-h-0 flex-1 flex-col">
           <RecallSubjectTutor
             area={document}
+            renderHandover={(history) => (
+              <DashboardAgentHandover model={model} areaId={document.id} conversation={history} />
+            )}
+            conversationScope={`${model.workspace.syncOwnerId ?? "local"}:${sessionNamespace}`}
             modelSelection={modelSelection}
             api={api}
             disabled={model.reviewSaving || model.reviewSaveFailed || Boolean(unavailableReason)}
             unavailableReason={unavailableReason}
-            tools={research ? <ChatResearch>{research}</ChatResearch> : undefined}
+            connectionPrompt={connectionPrompt}
           />
         </div>
       )}
@@ -62,9 +60,13 @@ function SubjectAIContent({
                 : "hidden"
           }
         >
+          {connectionPrompt}
           <KnowledgeNotebookPanel
             key={materialsActive ? "materials" : "improve"}
             sessionOnly={!materialsActive}
+            renderHandover={(history) => (
+              <DashboardAgentHandover model={model} areaId={document.id} conversation={history} />
+            )}
             experience="chat"
             modelSelection={modelSelection}
             aiUnavailableReason={unavailableReason}
@@ -107,30 +109,16 @@ export function RecallSubjectAI(props: Props) {
         onApprove={props.onApprove}
         renderContent={(api, context) => (
           <SubjectAIContent
-            key={context.sessionNamespace}
+            key={`${context.sessionNamespace}:${props.model.workspace.syncOwnerId ?? "local"}`}
             {...props}
             api={api}
             sessionNamespace={context.sessionNamespace}
-            research={context.research}
             modelSelection={context.modelSelection}
             unavailableReason={context.unavailableReason}
+            connectionPrompt={context.connectionPrompt}
           />
         )}
       />
     </div>
-  );
-}
-
-function ChatResearch({ children }: { readonly children: ReactNode }) {
-  return (
-    <Collapsible>
-      <CollapsibleTrigger asChild>
-        <Button variant="link" className="h-auto p-0 text-xs text-muted-foreground">
-          Research tools
-          <ChevronDown aria-hidden="true" className="size-3" />
-        </Button>
-      </CollapsibleTrigger>
-      <CollapsibleContent className="pt-4">{children}</CollapsibleContent>
-    </Collapsible>
   );
 }

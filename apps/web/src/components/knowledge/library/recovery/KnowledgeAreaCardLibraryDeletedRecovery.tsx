@@ -1,5 +1,5 @@
 import type { CardVersion, LearningArea, Workspace } from "@recall/domain";
-import { Button } from "@recall/ui-web";
+
 import {
   Collapsible,
   CollapsibleContent,
@@ -28,10 +28,8 @@ export function KnowledgeAreaCardLibraryDeletedRecovery({
   if (versions.length === 0) return null;
 
   return (
-    <Collapsible className="py-4">
-      <CollapsibleTrigger asChild>
-        <Button variant="secondary">Deleted cards ({versions.length})</Button>
-      </CollapsibleTrigger>
+    <Collapsible>
+      <CollapsibleTrigger>Deleted cards ({versions.length})</CollapsibleTrigger>
       <CollapsibleContent>
         {versions.map((version) => (
           <KnowledgeAreaCardLibraryDeletedCardRow

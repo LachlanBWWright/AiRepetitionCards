@@ -17,7 +17,8 @@ restarts its countdown. Timed ratings use the same save workflow as manual ratin
 failed saves keep the normal retry barrier and cannot advance to another card.
 
 Web/Electron shortcuts accept five distinct letters, numbers, or a space. Enter
-also reveals the answer. Defaults retain Space/Enter to reveal and 1–4 to rate.
+also reveals the answer. After reveal, Enter selects Good; Space also selects Good
+when Space is the configured reveal key. Defaults retain Space/Enter to reveal and 1–4 to rate.
 Shortcuts are ignored in inputs, interactive controls, dialogs and during saves.
 The native app uses touch controls; external-keyboard adapter support remains a
 platform limitation even though the shared preferences travel with the workspace.
@@ -32,3 +33,15 @@ siblings until the next study day. Each category inherits the previous overall
 bury setting until explicitly changed. Repetitions of a card already reviewed
 today remain available. Presets can override these scheduling choices; reviewer
 interaction preferences remain workspace-wide.
+
+**Help with this card** pauses rating controls and auto-advance while open. Explain and inspection
+results do not grade the card. Split and prerequisite suggestions remain proposals until explicitly
+approved through the ordinary revision-checked authoring workflow.
+
+## Manual burial
+
+Study tools offers **Bury until tomorrow** for this card or all cards from its shared
+note, including siblings routed to other subjects. Burial expires at the next local
+study-day boundary and changes neither schedules nor answer history. **Unbury cards**
+restores manually buried cards early; automatic sibling rules still apply. Burial
+settings synchronize and remain separate from suspension and learning presets.

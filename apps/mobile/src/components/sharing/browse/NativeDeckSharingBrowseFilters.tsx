@@ -107,7 +107,7 @@ export function NativeDeckSharingBrowseFiltersView({
       />
       <NativeButton
         label="Search public decks"
-        tone="soft"
+        variant="default"
         disabled={busy}
         onPress={() => {
           onSearch(null);

@@ -25,7 +25,7 @@ export function ReviewerTimer({
       )}
       {canAutoAdvance && (
         <Button
-          variant="secondary"
+          variant="default"
           size="sm"
           disabled={disabled}
           onClick={toggle}

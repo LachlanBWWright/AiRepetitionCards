@@ -52,23 +52,29 @@ export function useAppStorageEffects(
     let mounted = true;
     const isMounted = () => mounted;
     const generation = workspaceLifetime.generation();
-    void Effect.runPromise(Effect.either(readNativeTutorSessionId(activeTutorAreaId))).then(
-      (result) => {
-        if (
-          !isMounted() ||
-          Either.isLeft(result) ||
-          workspaceLifetime.isBlocked() ||
-          workspaceLifetime.generation() !== generation
-        )
-          return;
-        setNativeTutorSessionIds((current) => ({
-          ...current,
-          [activeTutorAreaId]: result.right,
-        }));
-      },
-    );
+    void Effect.runPromise(
+      Effect.either(readNativeTutorSessionId(activeTutorAreaId, tutorScope)),
+    ).then((result) => {
+      if (
+        !isMounted() ||
+        Either.isLeft(result) ||
+        workspaceLifetime.isBlocked() ||
+        workspaceLifetime.generation() !== generation
+      )
+        return;
+      setNativeTutorSessionIds((current) => ({
+        ...current,
+        [`${tutorScope}:${activeTutorAreaId}`]: result.right,
+      }));
+    });
     return () => {
       mounted = false;
     };
-  }, [activeTutorAreaId, operationGeneration, workspaceLifetime, setNativeTutorSessionIds]);
+  }, [
+    activeTutorAreaId,
+    tutorScope,
+    operationGeneration,
+    workspaceLifetime,
+    setNativeTutorSessionIds,
+  ]);
 }

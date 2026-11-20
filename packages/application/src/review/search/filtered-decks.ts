@@ -1,4 +1,5 @@
 import { Effect, Schema } from "effect";
+import { isManuallyBuried } from "../administration/manual-burial";
 import {
   FilteredDeckSchema,
   type LearningArea,
@@ -23,7 +24,9 @@ export function rebuildFilteredDeck(
     );
     const entries = yield* searchStudyCards(workspace, deck.query, now, deck.areaId);
     const active = entries.filter(
-      ({ card }) => !workspace.schedulerSettings?.suspendedCardIds?.includes(card.id),
+      ({ card }) =>
+        !workspace.schedulerSettings?.suspendedCardIds?.includes(card.id) &&
+        !isManuallyBuried(workspace, card.id, now),
     );
     const score = (entry: (typeof active)[number]) =>
       deck.order === "weakest"

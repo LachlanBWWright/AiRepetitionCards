@@ -17,7 +17,7 @@ test("web card editor resets duplicate consent when the answer changes", async (
     await dialog.getByLabel("Answer", { exact: true }).fill("ATP powers cellular processes.");
     assert.equal(await consent.isChecked(), false);
     assert.equal(
-      await dialog.getByRole("button", { name: "Save and add another", exact: true }).isDisabled(),
+      await dialog.getByRole("button", { name: "Save & add another", exact: true }).isDisabled(),
       true,
     );
   });

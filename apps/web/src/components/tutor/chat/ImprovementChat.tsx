@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+import type { AgentDialogue } from "@recall/application";
 import { improvementMessages, improvementOpening } from "@recall/application";
 import { Button } from "@recall/ui-web";
 import { Alert } from "@recall/ui-web/components/alert";
@@ -10,7 +12,9 @@ export function ImprovementChat({
   model,
   modelSelection,
   unavailableReason,
+  renderHandover,
 }: {
+  readonly renderHandover?: ((history: AgentDialogue) => ReactNode) | undefined;
   readonly model: KnowledgeNotebookModel;
   readonly modelSelection?: ChatModelSelection | undefined;
   readonly unavailableReason?: string | null | undefined;
@@ -31,6 +35,7 @@ export function ImprovementChat({
   }
   return (
     <ChatRoom
+      tools={renderHandover?.(history)}
       label="Improve"
       modelSelection={modelSelection}
       inputId={`improve-message-${model.knowledgeArea.id}`}
@@ -68,13 +73,13 @@ export function ImprovementChat({
           {model.unsaved && (
             <Alert>
               Your conversation has unsaved changes.
-              <Button variant="secondary" disabled={model.busy} onClick={retrySave}>
+              <Button variant="default" disabled={model.busy} onClick={retrySave}>
                 Retry save
               </Button>
             </Alert>
           )}
           {!model.loaded && !model.demo && (
-            <Button variant="secondary" disabled={model.busy} onClick={model.reloadNotebook}>
+            <Button variant="default" disabled={model.busy} onClick={model.reloadNotebook}>
               Retry loading conversation
             </Button>
           )}

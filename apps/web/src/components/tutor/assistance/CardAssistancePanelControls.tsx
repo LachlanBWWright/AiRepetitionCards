@@ -23,8 +23,8 @@ export function CardAssistancePanelActionButton({
 }) {
   return (
     <Button
-      variant="secondary"
-      size="small"
+      variant="default"
+      size="default"
       type="button"
       disabled={disabled}
       onClick={() => {
@@ -49,7 +49,7 @@ export function CardAssistancePanelInstructions({
 }) {
   const id = useId();
   return (
-    <div className="grid gap-2">
+    <div className="flex flex-col gap-2">
       <Label htmlFor={id} className="text-sm">
         What should change?
       </Label>
@@ -76,7 +76,7 @@ export function CardAssistancePanelInstructions({
       />
       <Button
         className="justify-self-end"
-        size="small"
+        size="default"
         type="button"
         disabled={disabled || !instruction.trim()}
         onClick={onSuggest}

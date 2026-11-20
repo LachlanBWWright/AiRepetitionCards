@@ -9,7 +9,7 @@ export function DeckQualityPanel({ issues }: { readonly issues: readonly DeckQua
         <h3 id="deck-quality-title" className="font-semibold">
           Deck quality
         </h3>
-        <Badge variant={blockers > 0 ? "destructive" : "secondary"}>
+        <Badge variant={blockers > 0 ? "destructive" : "default"}>
           {blockers > 0
             ? `${String(blockers)} publishing blocker${blockers === 1 ? "" : "s"}`
             : `${String(issues.length)} suggestion${issues.length === 1 ? "" : "s"}`}

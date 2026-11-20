@@ -14,6 +14,10 @@ public static class LearningActivityEndpoints
             .WithApiRateLimit(ApiRateLimitScope.WorkspaceSync);
         learning.MapPost("/assess", (HttpContext http, LearningActivityOperations operations, CancellationToken token) => operations.AssessAsync(http, token))
             .WithApiRateLimit(ApiRateLimitScope.TutorWrite);
+        learning.MapPost("/execute", (HttpContext http, LearningActivityOperations operations, CancellationToken token) => operations.AssessAsync(http, token, executeOnly: true))
+            .WithApiRateLimit(ApiRateLimitScope.TutorWrite);
+        learning.MapPost("/lua", (HttpContext http, LearningActivityOperations operations, CancellationToken token) => operations.ExecuteLuaAsync(http, token))
+            .WithApiRateLimit(ApiRateLimitScope.TutorWrite);
         learning.MapPost("/question", (HttpContext http, LearningActivityOperations operations, CancellationToken token) => operations.QuestionAsync(http, token))
             .WithApiRateLimit(ApiRateLimitScope.TutorWrite);
         return endpoints;

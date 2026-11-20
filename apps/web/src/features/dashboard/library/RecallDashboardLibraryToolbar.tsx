@@ -1,3 +1,4 @@
+import { SubjectHomeLink } from "../navigation/SubjectHomeLink";
 import { DashboardView } from "@/features/dashboard/navigation/dashboard-navigation";
 import { Button } from "@/components/ui/Button";
 import { Plus } from "lucide-react";
@@ -21,24 +22,22 @@ export function RecallDashboardLibraryToolbar({ model }: { readonly model: Recal
   }
   return (
     <div className="flex flex-wrap items-center justify-between gap-4">
-      <div className="min-w-0 space-y-2">
+      <div className="flex min-w-0 flex-col gap-2">
         {activeView === DashboardView.Library && libraryDeckOpen && area && (
-          <Button
-            variant="link"
-            className="h-auto p-0 text-sm text-muted-foreground"
-            onClick={() => {
-              setActiveView(DashboardView.Library);
+          <SubjectHomeLink
+            onNavigate={() => {
+              setActiveView(DashboardView.Today);
             }}
           >
             Home / Subjects
-          </Button>
+          </SubjectHomeLink>
         )}
         <h1 className="break-words text-3xl font-semibold tracking-tight">
           {activeView === DashboardView.Library
             ? libraryDeckOpen && area
               ? area.title
               : "Library"
-            : "Workspace data"}
+            : "Workspace insights"}
         </h1>
         {activeView === DashboardView.Library && !libraryDeckOpen && (
           <p className="text-sm text-muted-foreground">Choose a subject to manage its cards.</p>

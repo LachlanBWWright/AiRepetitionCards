@@ -125,8 +125,8 @@ export function DeckSharingPanelBrowseFilters({
         onSearch();
       }}
     >
-      <div className="flex flex-wrap gap-3">
-        <div className="relative min-w-48 flex-1">
+      <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] gap-3 lg:flex lg:flex-wrap">
+        <div className="relative col-span-2 min-w-0 lg:min-w-48 lg:flex-1">
           <Search
             className="pointer-events-none absolute left-3 top-3 size-4 text-muted-foreground"
             aria-hidden="true"
@@ -147,7 +147,7 @@ export function DeckSharingPanelBrowseFilters({
             onOwnedOnlyChange(value === "mine");
           }}
         >
-          <SelectTrigger className="w-40" aria-label="Deck collection">
+          <SelectTrigger className="w-full lg:w-48" aria-label="Deck collection">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -155,11 +155,16 @@ export function DeckSharingPanelBrowseFilters({
             <SelectItem value="mine">My published decks</SelectItem>
           </SelectContent>
         </Select>
-        <Button type="submit" variant="outline" disabled={busy}>
+        <Button type="submit" variant="default" disabled={busy}>
           Search
         </Button>
         {hasFilters ? (
-          <Button type="button" variant="link" onClick={onClearFilters}>
+          <Button
+            type="button"
+            className="col-span-2 lg:col-auto"
+            variant="default"
+            onClick={onClearFilters}
+          >
             Clear filters
           </Button>
         ) : null}

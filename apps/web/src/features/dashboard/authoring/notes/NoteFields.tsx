@@ -1,3 +1,4 @@
+import { Label } from "@recall/ui-web/components/label";
 import type { NoteAuthoringModel } from "@recall/react";
 import { RichTextEditor } from "@/components/cards/RichTextEditor";
 import { useId } from "react";
@@ -42,9 +43,9 @@ function NoteField({
   const id = useId();
   return (
     <div className="grid gap-0 overflow-hidden rounded-xl border border-border bg-background/40 focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20">
-      <label htmlFor={id} className="px-4 pt-4 pb-2 text-sm font-medium">
+      <Label htmlFor={id} className="px-4 pt-4 pb-2 text-sm font-medium">
         {label}
-      </label>
+      </Label>
       <RichTextEditor
         id={id}
         value={value}

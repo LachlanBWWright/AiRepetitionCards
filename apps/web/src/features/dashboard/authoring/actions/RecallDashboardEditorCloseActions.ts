@@ -22,6 +22,7 @@ export function createRecallDashboardEditorCloseActions(
     | "setEditingCardId"
     | "setFront"
     | "setBack"
+    | "setExplanation"
     | "setImageOcclusion"
     | "setCardKind"
     | "setClozeText"
@@ -52,6 +53,7 @@ export function createRecallDashboardEditorCloseActions(
     setEditingCardId,
     setFront,
     setBack,
+    setExplanation,
     setImageOcclusion,
     setCardKind,
     setClozeText,
@@ -90,6 +92,7 @@ export function createRecallDashboardEditorCloseActions(
     setEditingCardId(null);
     setFront("");
     setBack("");
+    setExplanation("");
     setImageOcclusion(undefined);
     setCardKind("basic");
     setClozeText("");

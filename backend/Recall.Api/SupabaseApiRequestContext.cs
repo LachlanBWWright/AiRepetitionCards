@@ -48,6 +48,13 @@ internal sealed record SupabaseApiRequestContext(
             return new SupabaseApiRequestResult.Unauthenticated();
         }
 
+        var expectedOwner = httpContext.Request.Headers["x-recall-workspace-owner"].ToString();
+        if (string.IsNullOrEmpty(expectedOwner)) expectedOwner = httpContext.Request.Headers["x-recall-owner"].ToString();
+        var aiRequest = httpContext.Request.Path.StartsWithSegments("/api/v1/tutor") ||
+            httpContext.Request.Path.StartsWithSegments("/api/v1/activities") || httpContext.Request.Path == "/api/v1/ai/capabilities";
+        if (aiRequest && !string.IsNullOrEmpty(expectedOwner) && (!Guid.TryParseExact(expectedOwner, "D", out var expected) || expected != identity.UserId))
+            return new SupabaseApiRequestResult.Unauthenticated();
+
         return new SupabaseApiRequestResult.Authenticated(
             new SupabaseApiRequestContext(projectUri, publishableKey, accessToken, identity.UserId));
     }

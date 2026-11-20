@@ -1,3 +1,5 @@
+import { interactiveActivityPlugins } from "./interactive/plugins";
+import type { InteractiveActivityPresentation } from "./interactive/presentation";
 import { Effect, Schema } from "effect";
 import {
   CodingPayloadSchema,
@@ -46,6 +48,7 @@ export type ActivityPresentation = {
   readonly rubric: string;
   readonly reference: string;
   readonly code: boolean;
+  readonly interactive?: InteractiveActivityPresentation;
 };
 /** Plugins are trusted registrations. Imported activity payloads cannot register implementations. */
 export type ActivityPlugin = {
@@ -155,6 +158,7 @@ function rubricPlugin(
   };
 }
 export const builtinActivityRegistry: ActivityRegistry = [
+  ...interactiveActivityPlugins,
   rubricPlugin("recall.basic", "Recall", "recall"),
   rubricPlugin("recall.cloze", "Cloze", "recall"),
   rubricPlugin("recall.short-answer", "Short answer", "reasoning"),

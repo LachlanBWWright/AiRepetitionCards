@@ -1,3 +1,4 @@
+import { NativeCollapsibleTrigger, NativeCollapsibleContent } from "@recall/ui-native";
 import { Text, TextInput, ScrollView, View } from "react-native";
 import { NativeButton } from "../../ui/NativeButton";
 import type { NativeNotebookModel } from "./useNativeKnowledgeNotebookModel";
@@ -22,15 +23,14 @@ export function NativeKnowledgeNotebookConcepts({
   return (
     <>
       {" "}
-      <NativeButton
-        label={showConcepts ? "Hide concepts" : "Concepts"}
-        onPress={() => {
+      <NativeCollapsibleTrigger
+        open={showConcepts}
+        title="Concepts"
+        onToggle={() => {
           setShowConcepts((current) => !current);
         }}
-        className={"py-[9px] px-[4px]"}
-        labelClassName="text-recall-darkGreen text-[11px] font-bold"
       />
-      <View className={showConcepts ? "gap-[11px]" : "hidden"}>
+      <NativeCollapsibleContent open={showConcepts}>
         <View className={"flex-row flex-wrap gap-[7px]"}>
           <TextInput
             accessibilityLabel="Add a concept"
@@ -47,10 +47,6 @@ export function NativeKnowledgeNotebookConcepts({
               })
             }
             label="Add"
-            className={
-              "min-h-[36px] justify-center items-center px-[10px] rounded-[10px] bg-transparent"
-            }
-            labelClassName="text-recall-darkGreen text-[11px] font-bold"
           />
         </View>
         <Text className={"text-recall-muted text-[11px] leading-[16px]"}>
@@ -70,7 +66,7 @@ export function NativeKnowledgeNotebookConcepts({
             />
           ))}
         </ScrollView>
-      </View>
+      </NativeCollapsibleContent>
     </>
   );
 }
@@ -92,8 +88,6 @@ function NativeKnowledgeNotebookConcept({
         onPress={() => {
           setExpandedConceptId((current) => (current === concept.id ? null : concept.id));
         }}
-        className={"py-[9px] px-[4px]"}
-        labelClassName="text-recall-ink text-[13px] font-bold"
       />
       {expandedConceptId === concept.id ? (
         <>

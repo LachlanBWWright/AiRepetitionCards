@@ -10,6 +10,7 @@ using Recall.Api.Features.Sync;
 using Recall.Api.Features.Tutor;
 using Recall.Api.Features.Learning;
 using Recall.Api.Contracts;
+using Recall.Api.Hosting;
 using Recall.Infrastructure.SupabaseAuth;
 using Recall.Infrastructure.SupabaseWorkspaceRead;
 
@@ -49,7 +50,10 @@ builder.Services.AddHttpClient<TutorPrivacyOperations>();
 builder.Services.AddTransient<TutorApiOperations>();
 builder.Services.AddTransient<LearningActivityOperations>();
 builder.Services.AddHttpClient<OpenAiTutorProvider>();
-builder.Services.AddTransient<ITutorProvider>(services => services.GetRequiredService<OpenAiTutorProvider>());
+builder.Services.AddHttpClient<AnthropicTutorProvider>();
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddTransient<ManagedAiStore>();
+builder.Services.AddTransient<ITutorProvider, ManagedTutorProvider>();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
 {
@@ -86,6 +90,7 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
+app.UseTrustedWebProxy(builder.Configuration);
 app.UseForwardedHeaders(forwardedHeaders);
 app.UseApiRequestObservation();
 app.UseSupabaseSsrBearer();
@@ -105,6 +110,7 @@ app.MapAccountEndpoints();
 app.MapSyncEndpoints();
 app.MapPublishingEndpoints();
 app.MapTutorEndpoints();
+app.MapManagedAiEndpoints();
 app.MapLearningActivityEndpoints();
 
 app.MapGet("/api/v1/workspace", async (

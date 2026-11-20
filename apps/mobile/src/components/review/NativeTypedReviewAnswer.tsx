@@ -30,7 +30,7 @@ export function NativeTypedReviewAnswer({
             autoCapitalize="none"
             onChangeText={typed.setAnswer}
             onSubmitEditing={onReveal}
-            className="border border-recall-line rounded-lg p-3 text-recall-ink"
+            className="w-full min-h-12 border border-recall-line rounded-xl px-3 py-3 text-base text-recall-ink"
           />
         </>
       ) : (

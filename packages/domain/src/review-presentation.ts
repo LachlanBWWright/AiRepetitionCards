@@ -14,12 +14,21 @@ export const SpeechFieldSettingsSchema = Schema.Struct({
 export const CardAppearanceSchema = Schema.Struct({
   font: Schema.Literal("sans", "serif", "mono"),
   size: Schema.Literal("small", "medium", "large"),
-  align: Schema.Literal("left", "center"),
+  align: Schema.Literal("left", "center", "right"),
   lineSpacing: Schema.Literal("compact", "comfortable"),
+  direction: Schema.optional(Schema.Literal("auto", "ltr", "rtl")),
+  imageSize: Schema.optional(Schema.Literal("small", "medium", "large")),
 });
 export type CardAppearance = typeof CardAppearanceSchema.Type;
 export const ReviewPresentationSchema = Schema.Struct({
   appearance: Schema.optional(CardAppearanceSchema),
+  fieldAppearance: Schema.optional(
+    Schema.Struct({
+      front: Schema.optional(CardAppearanceSchema),
+      back: Schema.optional(CardAppearanceSchema),
+      explanation: Schema.optional(CardAppearanceSchema),
+    }),
+  ),
   typedAnswer: Schema.optional(TypedAnswerSettingsSchema),
   speech: Schema.optional(
     Schema.Struct({

@@ -55,7 +55,7 @@ function AreaSettingsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[calc(100dvh-2rem)] gap-5 overflow-y-auto sm:max-w-3xl">
+      <DialogContent className="max-h-[calc(100dvh-2rem)] gap-6 overflow-y-auto sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle>Subject settings</DialogTitle>
           <DialogDescription>Update {area.title}.</DialogDescription>
@@ -159,12 +159,16 @@ export function RecallDashboardCardLibrary({ model }: { readonly model: RecallDa
     return validation.valid ? libraryNotes.flush() : Promise.resolve(false);
   }
   return (
-    <div className="min-w-0 space-y-6" hidden={!libraryDeckOpen || !area}>
+    <div className="flex min-w-0 flex-col gap-6" hidden={!libraryDeckOpen || !area}>
       {area && (
         <LearningActivitiesPanel
           key={`activities:${notesScope}:${area.id}`}
           renderContainer={(content) => (
-            <RecallSubjectActivityDialog initialActivityId={localActivityId} onAdd={addCard}>
+            <RecallSubjectActivityDialog
+              initialActivityId={localActivityId}
+              onAdd={addCard}
+              disabled={!model.workspaceUnlocked || cardSaving || libraryMutation !== null}
+            >
               {content}
             </RecallSubjectActivityDialog>
           )}

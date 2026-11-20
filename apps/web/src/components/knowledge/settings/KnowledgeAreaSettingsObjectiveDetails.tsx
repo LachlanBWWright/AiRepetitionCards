@@ -1,5 +1,5 @@
 import type { AreaSettings } from "@recall/application";
-import { Textarea } from "@recall/ui-web";
+import { Textarea, FieldLabel, FieldDescription } from "@recall/ui-web";
 import { Checkbox } from "@recall/ui-web/components/checkbox";
 
 type Objective = AreaSettings["objectives"][number];
@@ -11,7 +11,7 @@ type Props = {
   readonly onChange: (objectives: Objectives) => void;
 };
 
-const fieldStyle = { display: "grid", gap: 6 } as const;
+const fieldStyle = { display: "flex", flexDirection: "column", gap: 8 } as const;
 const nullable = (value: string): string | null => (value.trim() ? value : null);
 
 function togglePrerequisite(
@@ -51,11 +51,15 @@ function PrerequisiteChoices({ objective, objectives, onChange }: Props) {
   };
 
   return (
-    <fieldset style={{ border: 0, padding: 0, margin: 0, display: "grid", gap: 8 }}>
+    <fieldset
+      style={{ border: 0, padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: 8 }}
+    >
       <legend style={{ marginBottom: 8 }}>Prerequisites</legend>
-      {objectives.length < 2 && <small>Add another objective to choose prerequisites.</small>}
+      {objectives.length < 2 && (
+        <FieldDescription>Add another objective to choose prerequisites.</FieldDescription>
+      )}
       {choices.map((prerequisite) => (
-        <label key={prerequisite.id} style={{ display: "flex", gap: 8 }}>
+        <FieldLabel key={prerequisite.id} style={{ display: "flex", gap: 8 }}>
           <Checkbox
             checked={objective.prerequisiteIds.includes(prerequisite.id)}
             onCheckedChange={(checked) => {
@@ -63,7 +67,7 @@ function PrerequisiteChoices({ objective, objectives, onChange }: Props) {
             }}
           />
           {prerequisite.title || "Untitled objective"}
-        </label>
+        </FieldLabel>
       ))}
     </fieldset>
   );
@@ -73,8 +77,8 @@ export function KnowledgeAreaSettingsObjectiveDetails(props: Props) {
   const { objective, objectives, onChange } = props;
 
   return (
-    <div style={{ display: "grid", gap: 16 }}>
-      <label style={fieldStyle}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      <FieldLabel style={fieldStyle}>
         Description
         <Textarea
           rows={2}
@@ -85,7 +89,7 @@ export function KnowledgeAreaSettingsObjectiveDetails(props: Props) {
             );
           }}
         />
-      </label>
+      </FieldLabel>
       <PrerequisiteChoices {...props} />
     </div>
   );

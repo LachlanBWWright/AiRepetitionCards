@@ -14,7 +14,7 @@ export function NativeDeckUpdatePanel(props: DeckUpdateProps) {
       {!model.baseline ? (
         <NativeButton
           label="Compare with original version"
-          tone="soft"
+          variant="default"
           disabled={model.busy}
           onPress={() => void model.load()}
         />

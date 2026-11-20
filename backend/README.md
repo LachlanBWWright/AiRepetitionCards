@@ -56,7 +56,7 @@ The verifier accepts only loopback HTTP(S) origins, creates run-scoped Auth user
 
 ## Learning activities
 
-The ASP.NET API serves `GET/POST /api/v1/activities`, `POST /api/v1/activities/assess`, and `POST /api/v1/activities/question`. Requests are authenticated against the caller's canonical workspace and activity/attempt IDs. Library payloads are bounded and validated before service-role compare-and-swap writes; direct authenticated writes to the backing RPC are disabled. Assessment and question results remain proposals until the learner accepts them. Hosted assessment uses the existing tutor provider and budget controls. Coding activity runs use the preconfigured `recall-code-runner:1` container; the API does not build an image or run learner code in the API process. See the root [README](../README.md#offline-use-and-optional-services) for client and activity behavior.
+The ASP.NET API serves `GET/POST /api/v1/activities`, `POST /api/v1/activities/assess`, `POST /api/v1/activities/execute` (Run/Submit), `POST /api/v1/activities/lua`, and `POST /api/v1/activities/question`. Requests are authenticated against the caller's canonical workspace and activity/attempt IDs. Library payloads are bounded and validated before service-role compare-and-swap writes; direct authenticated writes to the backing RPC are disabled. Assessment and question results remain proposals until the learner accepts them. Hosted assessment uses the existing tutor provider and budget controls. Coding activity runs use the preconfigured `recall-code-runner:2` container; the API does not build an image or run learner code in the API process. See the root [README](../README.md#offline-use-and-optional-services) for client and activity behavior.
 
 ## Automated contract verification
 
@@ -80,3 +80,7 @@ checks authenticated content and paged study sync, linked-family atomicity and r
 and removes its scoped fixtures. Credentials are never printed. Add `--publishing` to run the
 existing publishing acceptance in the same API process. Omit `--local-supabase` and supply the
 explicit `RECALL_INTEGRATION_SUPABASE_*` variables to choose another loopback test stack.
+
+Lua activities require Docker and a locally built `recall-lua-runner:1` image: `docker build -t recall-lua-runner:1 packages/infra-lua` from the repository root. Set `RECALL_LUA_IMAGE` to override it. The authenticated endpoint limits execution to two concurrent containers and preserves drafts on runtime failure. Validate locally with `python3 backend/scripts/verify-api.py --interactive --local-supabase --port 5020`.
+
+Managed AI supports server-funded OpenAI and Anthropic deployments with administrator-granted allowances. It is disabled by default. Apply the managed AI migration and configure deployments, current tariffs, grants, both budget gates and server-only credentials before enabling it. See [managed AI setup and accounting](../docs/managed-ai-foundation.md). `/api/v1/ai/capabilities` provides authenticated allowance status; existing tutor and adaptive activity endpoints use the same admission ledger.

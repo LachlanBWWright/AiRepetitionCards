@@ -72,7 +72,7 @@ function AreaEditor({
       {
         <NativeButton
           label={pending ? "Saving…" : editor.mode === "create" ? "Create subject" : "Save changes"}
-          tone="soft"
+          variant="default"
           disabled={locked}
           onPress={() => {
             submit(

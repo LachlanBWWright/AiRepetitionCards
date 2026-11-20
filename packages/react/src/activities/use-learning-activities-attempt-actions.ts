@@ -3,6 +3,8 @@
 import { Effect } from "effect";
 import {
   acceptLearningAttempt,
+  codingPresentation,
+  luaRuntimeProvenance,
   assessLearningActivity,
   decodeActivityLibrary,
   presentLearningActivity,
@@ -101,7 +103,13 @@ export function useLearningActivityAttemptActions(
     setStage(0);
     setResponse({
       presentedPrompts: content.prompts,
-      answers: content.options.length ? [] : content.prompts.map(() => ""),
+      answers: content.options.length
+        ? []
+        : content.prompts.map((_, index) =>
+            entry.pluginId === "recall.coding" && index === 0
+              ? (codingPresentation(entry)?.starterCode ?? "")
+              : "",
+          ),
       selectedOptionIds: [],
       selfScore: 0.5,
       assistance: "none",
@@ -194,7 +202,15 @@ export function useLearningActivityAttemptActions(
       submittedAt: identity.submittedAt,
       acceptedAt,
     };
-    void run(acceptLearningAttempt(library, attempt, registry), async (next) => {
+    const operation =
+      activity.pluginId === "recall.lua"
+        ? luaRuntimeProvenance(response).pipe(
+            Effect.flatMap((runtime) =>
+              acceptLearningAttempt(library, { ...attempt, runtime }, registry),
+            ),
+          )
+        : acceptLearningAttempt(library, attempt, registry);
+    void run(operation, async (next) => {
       const saved = await persist(next);
       if (!alive.current) return;
       if (saved) {

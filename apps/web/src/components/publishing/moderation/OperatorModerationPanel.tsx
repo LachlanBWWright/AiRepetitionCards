@@ -1,5 +1,7 @@
 "use client";
 
+import { EmptyState } from "@recall/ui-web";
+
 import { readRef } from "@/lib/read-ref";
 
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -138,7 +140,7 @@ export function OperatorModerationPanel({ api }: Props) {
             {openReports} open reports · access is checked by the server.
           </p>
         </div>
-        <Button variant="outline" disabled={busyId !== null} onClick={() => void load()}>
+        <Button variant="default" disabled={busyId !== null} onClick={() => void load()}>
           Refresh queue
         </Button>
       </header>
@@ -152,9 +154,11 @@ export function OperatorModerationPanel({ api }: Props) {
           Loading moderation queue…
         </p>
       ) : reports.length === 0 ? (
-        <p className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">
-          No reports are available.
-        </p>
+        <EmptyState
+          className="rounded-lg border border-dashed p-6"
+          title="No reports"
+          description="No reports are available."
+        />
       ) : (
         <div className="grid gap-4">
           {reports.map((report) => (
@@ -215,7 +219,7 @@ function ModerationReportCard({
       <p className="whitespace-pre-wrap rounded-lg bg-muted/40 p-3 text-sm">{report.message}</p>
       <div className="flex flex-wrap gap-2">
         <Button
-          variant="outline"
+          variant="default"
           disabled={busy}
           onClick={() => {
             onUpdateReport(report.status === "open" ? "resolved" : "open");
@@ -243,7 +247,7 @@ function ModerationReportCard({
         </div>
         <div className="flex flex-wrap items-start gap-2">
           <Button
-            variant="outline"
+            variant="default"
             disabled={busy || !canChangeVisibility}
             onClick={() => {
               onUpdateDeck("hidden");

@@ -49,6 +49,7 @@ export function resumeLibraryDraft(
       kind: draft.cardKind,
       front: draft.front,
       back: draft.back,
+      explanation: draft.explanation ?? "",
       ...(draft.cardKind === "cloze"
         ? { cloze: { text: draft.clozeText, deletionIndex: Number(draft.clozeIndex) } }
         : {}),

@@ -1,4 +1,6 @@
-import { Pressable, Text, View } from "react-native";
+import { NativeButton } from "@recall/ui-native";
+
+import { Text, View } from "react-native";
 import type { KnowledgeAreaDiff } from "@recall/application";
 import type { KnowledgeArea } from "@recall/domain";
 import { NativeDeckUpdatePanel } from "./updates/NativeDeckUpdatePanel";
@@ -70,18 +72,14 @@ export function NativePublishingPanelReceiveDetails({
           onSave={onUpdate}
         />
       ) : null}
-      <Pressable
-        accessibilityRole="button"
+      <NativeButton
+        label="Add a personal copy"
+        variant="default"
         disabled={busy}
         onPress={() => {
           onFork();
         }}
-        className={
-          "min-h-[42px] justify-center items-center px-[14px] rounded-[9px] bg-recall-darkGreen"
-        }
-      >
-        <Text className={"text-recall-surface font-bold text-[12px]"}>Add a personal copy</Text>
-      </Pressable>
+      />
     </View>
   );
 }

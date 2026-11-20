@@ -75,3 +75,4 @@ export {
   applyMediaTrashPurge,
   type MediaTrashPurgeResult,
 } from "./maintenance/purge-media-trash";
+export { createStarterWorkspace } from "./starters/starter-workspace";

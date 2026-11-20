@@ -1,4 +1,6 @@
-import { Pressable, Text, TextInput } from "react-native";
+import { NativeButton } from "@recall/ui-native";
+
+import { Text, TextInput } from "react-native";
 import { designTokens } from "@recall/design-tokens";
 import type {
   NativePublishingPanelProps,
@@ -68,18 +70,14 @@ export function NativePublishingPanelReceive(props: NativePublishingPanelReceive
             className={"min-h-[42px] px-[12px] rounded-[9px] bg-recall-paper text-recall-ink"}
             value={token}
           />
-          <Pressable
-            accessibilityRole="button"
+          <NativeButton
+            label="Preview shared area"
+            variant="default"
             disabled={busy || !versionId.trim()}
             onPress={() => {
               onReceive();
             }}
-            className={"min-h-[40px] justify-center items-center border-b border-recall-line"}
-          >
-            <Text className={"text-recall-darkGreen font-bold text-[12px]"}>
-              Preview shared area
-            </Text>
-          </Pressable>
+          />
           <NativePublishingPanelReceiveDetails
             publication={publication}
             comparison={comparison}

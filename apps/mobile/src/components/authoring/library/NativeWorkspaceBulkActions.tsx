@@ -91,16 +91,18 @@ export function NativeWorkspaceBulkActions({
       <View className="gap-2">
         <NativeButton
           label="Select visible cards"
-          tone="soft"
+          variant="secondary"
           disabled={locked || bulkAction !== null || filteredCount === 0}
           onPress={onSelectVisible}
         />
-        <Text accessibilityLiveRegion="polite">{selectedIds.length} selected</Text>
+        <Text accessibilityLiveRegion="polite" className="text-sm text-recall-muted">
+          {selectedIds.length} selected
+        </Text>
         {selectedIds.length > 0 && (
           <>
             <NativeButton
               label="Add tags"
-              tone="soft"
+              variant="secondary"
               disabled={locked}
               onPress={() => {
                 onBegin("tags");
@@ -108,7 +110,7 @@ export function NativeWorkspaceBulkActions({
             />
             <NativeButton
               label="Move cards"
-              tone="soft"
+              variant="secondary"
               disabled={locked || (workspace?.areas.length ?? 0) < 2}
               onPress={() => {
                 onBegin("move");
@@ -116,7 +118,7 @@ export function NativeWorkspaceBulkActions({
             />
             <NativeButton
               label="Delete selected"
-              tone="soft"
+              variant="destructive"
               disabled={locked}
               onPress={() => {
                 onBegin("delete");
@@ -124,7 +126,7 @@ export function NativeWorkspaceBulkActions({
             />
             <NativeButton
               label="Clear selection"
-              tone="soft"
+              variant="secondary"
               disabled={locked || bulkAction !== null}
               onPress={onClearSelection}
             />
@@ -133,8 +135,8 @@ export function NativeWorkspaceBulkActions({
       </View>
       {bulkAction && (
         <View className="gap-3 rounded-xl border border-recall-line p-4">
-          <Text className="text-lg font-bold">{bulkActionTitle(bulkAction)}</Text>
-          <Text>
+          <Text className="text-lg font-bold text-recall-ink">{bulkActionTitle(bulkAction)}</Text>
+          <Text className="text-sm leading-6 text-recall-muted">
             {selectedIds.length} selected. {bulkActionDescription(bulkAction)}
           </Text>
           {bulkAction === "tags" && renderField("Tags (comma separated)", bulkTags, onChangeTags)}
@@ -158,7 +160,7 @@ export function NativeWorkspaceBulkActions({
           )}
           <NativeButton
             label="Cancel bulk action"
-            tone="soft"
+            variant="secondary"
             disabled={pending}
             onPress={onCancel}
           />
@@ -185,7 +187,7 @@ function MoveDestinations({
         <NativeButton
           key={deck.id}
           label={`${selectedId === deck.id ? "Selected: " : ""}${deck.title}`}
-          tone="soft"
+          variant="secondary"
           disabled={disabled}
           onPress={chooseDestinationHandler(onChoose, deck.id)}
         />

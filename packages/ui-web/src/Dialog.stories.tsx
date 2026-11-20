@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from "@storybook/react";
 import { useState } from "react";
 import { Button } from "./Button";
 import { Dialog } from "./Dialog";
+import { DialogFooter } from "./components/dialog";
 import { StatusBadge } from "./StatusBadge";
 
 function DeleteAreaAction({
@@ -14,7 +15,7 @@ function DeleteAreaAction({
   readonly onDelete: () => void;
 }) {
   return (
-    <Button variant="danger" disabled={saving} aria-busy={saving} onClick={onDelete}>
+    <Button variant="destructive" disabled={saving} aria-busy={saving} onClick={onDelete}>
       {saving ? "Deleting…" : failed ? "Try deleting again" : "Delete area"}
     </Button>
   );
@@ -51,7 +52,7 @@ function Confirmation({
         <h2>Biology foundations</h2>
         <p>24 cards · 4 learning objectives</p>
         <Button
-          variant="danger"
+          variant="destructive"
           disabled={deleted}
           onClick={() => {
             setOpen(true);
@@ -78,12 +79,12 @@ function Confirmation({
                 <StatusBadge tone="danger">Could not delete area. Try again.</StatusBadge>
               </p>
             )}
-            <div className="mt-4 flex flex-wrap gap-2.5">
-              <Button variant="secondary" disabled={saving} onClick={keepArea}>
+            <DialogFooter>
+              <Button variant="default" disabled={saving} onClick={keepArea}>
                 Keep area
               </Button>
               <DeleteAreaAction saving={saving} failed={failed} onDelete={deleteArea} />
-            </div>
+            </DialogFooter>
           </div>
         </Dialog>
       )}

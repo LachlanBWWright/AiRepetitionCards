@@ -22,7 +22,8 @@
     "./published-fork": "./src/publishing/published-fork.ts",
     "./published-updates": "./src/publishing/published-updates.ts",
     "./database.types": "./src/database.types.ts",
-    "./tutor-privacy": "./src/tutor/tutor-privacy.ts"
+    "./tutor-privacy": "./src/tutor/tutor-privacy.ts",
+    "./google-sign-in": "./src/auth/google-sign-in.ts"
   },
   "dependencies": {
     "@recall/ai-core": "workspace:*",

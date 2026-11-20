@@ -1,5 +1,5 @@
 import { identifyObjectiveGaps } from "@recall/ai-core";
-import { summarizeReviews } from "@recall/application";
+import { localStudyDay, summarizeReviews } from "@recall/application";
 import { orderReviewEvents } from "@recall/sync-core";
 import type { LearningArea, Workspace } from "@/features/workspace/types";
 
@@ -8,7 +8,9 @@ export function summarizeDashboardReviews(
   area: LearningArea | undefined,
   now: Date,
 ) {
-  const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const dayStart = new Date(
+    localStudyDay(now.getTime(), workspace.schedulerSettings?.studyDayStartHour).startsAt,
+  );
   const weekStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6);
   const events = workspace.reviewEvents ?? [];
   const practice = {

@@ -1,3 +1,7 @@
+import { RubricScoreSelect } from "./RubricScoreSelect";
+import type { LuaRuntime } from "@recall/application";
+import { CodingActivityWorkspace } from "./coding/CodingActivityWorkspace";
+import { LuaActivityWorkspace } from "./lua/LuaActivityWorkspace";
 import type { Dispatch, ReactNode, SetStateAction } from "react";
 import {
   AlertDialog,
@@ -12,10 +16,14 @@ import {
 import { Button, Checkbox, Label, Textarea } from "@recall/ui-web";
 import { useLearningActivities } from "../../../hooks/use-learning-activities";
 
+import { InteractiveActivityWorkspace } from "./interactive/InteractiveActivityWorkspace";
+import { CardRichText } from "../../cards/CardRichText";
+
 type LearningActivitiesPanelModel = ReturnType<typeof useLearningActivities>;
 
 type LearningActivitiesPanelAttemptProps = {
   readonly model: LearningActivitiesPanelModel;
+  readonly luaRuntime?: LuaRuntime | undefined;
   readonly locked: boolean;
   readonly customInteraction: ReactNode;
   readonly acceptsSelfAssessment: boolean;
@@ -27,6 +35,7 @@ type LearningActivitiesPanelAttemptProps = {
 
 export function LearningActivitiesPanelAttempt({
   model,
+  luaRuntime,
   locked,
   customInteraction,
   acceptsSelfAssessment,
@@ -38,6 +47,57 @@ export function LearningActivitiesPanelAttempt({
   const activity = model.activity;
   const presentation = model.presentation;
   if (!activity || !presentation) return null;
+  const assessmentLabel =
+    presentation.options.length > 0 ||
+    model.activePlugin?.capabilities.assessment === "deterministic"
+      ? "Check answer"
+      : "Review assessment";
+  const coding = activity.pluginId === "recall.coding";
+  const lua = activity.pluginId === "recall.lua";
+  const interactive = Boolean(presentation.interactive);
+  const interaction =
+    customInteraction ??
+    (coding ? (
+      <CodingActivityWorkspace model={model} disabled={locked} />
+    ) : lua ? (
+      luaRuntime ? (
+        <LuaActivityWorkspace
+          key={`${activity.id}:${String(activity.revision)}`}
+          activity={activity}
+          response={model.response}
+          runtime={luaRuntime}
+          onResponse={model.setResponse}
+          disabled={locked || !!model.result}
+        />
+      ) : (
+        <div role="status">
+          <CardRichText text={activity.fallback} className="text-sm" />
+          <p className="text-sm text-muted-foreground">
+            The activity runtime is unavailable. Your draft is preserved; use the fallback for
+            manual study.
+          </p>
+        </div>
+      )
+    ) : interactive ? (
+      <InteractiveActivityWorkspace
+        presentation={presentation}
+        response={model.response}
+        disabled={locked || !!model.result}
+        onChange={model.setResponse}
+      />
+    ) : null);
+  const reviseResponse = () => {
+    if (interactive)
+      model.setResponse((current) => ({
+        ...current,
+        interaction: {
+          ...current.interaction,
+          retries: (current.interaction?.retries ?? 0) + 1,
+          firstTry: false,
+        },
+      }));
+    model.revise();
+  };
   const selectSelfAssessment = (score: number) => {
     model.setResponse((current) => ({ ...current, selfScore: score }));
   };
@@ -59,7 +119,7 @@ export function LearningActivitiesPanelAttempt({
   const followUpButton =
     activity.pluginId === "recall.interrogation" && presentation.prompts.length < 10 ? (
       <Button
-        variant="secondary"
+        variant="default"
         disabled={locked || model.response.answers.some((answer) => !answer.trim())}
         onClick={model.followUp}
       >
@@ -69,7 +129,7 @@ export function LearningActivitiesPanelAttempt({
   return (
     <div className="grid gap-3 rounded-lg border p-4">
       <h3 className="font-semibold">{activity.title}</h3>
-      {presentation.code && (
+      {presentation.code && !coding && (
         <p className="text-sm text-muted-foreground">
           Write a JavaScript solve function. Run it in the isolated test runner, or assess it
           against the rubric.
@@ -81,8 +141,8 @@ export function LearningActivitiesPanelAttempt({
           suggestions require your approval.
         </p>
       )}
-      {customInteraction}
-      {!customInteraction &&
+      {interaction}
+      {!interaction &&
         presentation.prompts.map((prompt, index) =>
           index <= model.stage ? (
             <ActivityPromptAnswer
@@ -99,7 +159,7 @@ export function LearningActivitiesPanelAttempt({
             />
           ) : null,
         )}
-      {!customInteraction &&
+      {!interaction &&
         presentation.options.map((option) => (
           <Label key={option.id} className="flex items-center gap-3">
             <Checkbox
@@ -112,35 +172,30 @@ export function LearningActivitiesPanelAttempt({
             {option.text}
           </Label>
         ))}
-      <p className="whitespace-pre-wrap text-sm">Rubric: {presentation.rubric}</p>
-      {model.stage < presentation.prompts.length - 1 ? (
-        <Button
-          disabled={locked || !model.response.answers[model.stage]?.trim()}
-          onClick={() => {
-            model.setStage((current) => current + 1);
-          }}
-        >
-          Next question
-        </Button>
-      ) : (
-        !model.result && (
-          <>
-            {presentation.options.length === 0 && (
-              <>
-                {selfAssessment}
-                {referenceControl}
-              </>
-            )}
-            <Button disabled={locked} onClick={model.assess}>
-              {presentation.options.length ||
-              model.activePlugin?.capabilities.assessment === "deterministic"
-                ? "Check answer"
-                : "Review assessment"}
-            </Button>
-          </>
-        )
-      )}
-      {!model.result &&
+      <CardRichText text={`Rubric: ${presentation.rubric}`} className="text-sm" />
+      {!coding &&
+        (model.stage < presentation.prompts.length - 1 ? (
+          <Button
+            disabled={locked || !model.response.answers[model.stage]?.trim()}
+            onClick={() => {
+              model.setStage((current) => current + 1);
+            }}
+          >
+            Next question
+          </Button>
+        ) : (
+          !model.result && (
+            <>
+              {presentation.options.length === 0 && selfAssessment}
+              {presentation.options.length === 0 && referenceControl}
+              <Button disabled={locked} onClick={model.assess}>
+                {assessmentLabel}
+              </Button>
+            </>
+          )
+        ))}
+      {!coding &&
+        !model.result &&
         hasServices &&
         canHostAssessment &&
         presentation.options.length === 0 &&
@@ -161,7 +216,7 @@ export function LearningActivitiesPanelAttempt({
           <Button disabled={locked || !!model.result} onClick={model.approveQuestion}>
             Use this follow-up
           </Button>
-          <Button variant="secondary" disabled={locked} onClick={model.dismissQuestion}>
+          <Button variant="default" disabled={locked} onClick={model.dismissQuestion}>
             Dismiss suggestion
           </Button>
         </div>
@@ -185,16 +240,16 @@ export function LearningActivitiesPanelAttempt({
           <Button disabled={locked} onClick={model.accept}>
             Accept and record attempt
           </Button>
-          <Button variant="secondary" disabled={locked} onClick={model.revise}>
+          <Button variant="default" disabled={locked} onClick={reviseResponse}>
             Revise response
           </Button>
         </div>
       )}
-      <Button variant="secondary" disabled={locked || !!model.result} onClick={model.keep}>
+      <Button variant="default" disabled={locked || !!model.result} onClick={model.keep}>
         Save progress and close
       </Button>
       <Button
-        variant="secondary"
+        variant="default"
         disabled={locked}
         onClick={() => {
           onLeavingChange(true);
@@ -239,7 +294,7 @@ function ActivityPromptAnswer({
 }) {
   return (
     <div className="grid gap-2">
-      <p className="whitespace-pre-wrap">{prompt}</p>
+      <CardRichText text={prompt} className="text-sm" />
       {showAnswer && (
         <>
           <Label htmlFor={`activity-answer-${String(index)}`}>Your response {index + 1}</Label>
@@ -268,31 +323,7 @@ function SelfAssessment({
   readonly disabled: boolean;
   readonly onSelect: (score: number) => void;
 }) {
-  const scores = [
-    { value: 0, label: "Needs work" },
-    { value: 0.5, label: "Partially meets rubric" },
-    { value: 1, label: "Meets rubric" },
-  ];
-  return (
-    <div className="grid gap-2">
-      <Label>How does your response meet the rubric?</Label>
-      <div className="flex flex-wrap gap-2">
-        {scores.map((score) => (
-          <Button
-            key={score.value}
-            variant="secondary"
-            aria-pressed={selectedScore === score.value}
-            disabled={disabled}
-            onClick={() => {
-              onSelect(score.value);
-            }}
-          >
-            {score.label}
-          </Button>
-        ))}
-      </div>
-    </div>
-  );
+  return <RubricScoreSelect value={selectedScore} disabled={disabled} onSelect={onSelect} />;
 }
 
 function ActivityReference({
@@ -308,10 +339,10 @@ function ActivityReference({
 }) {
   return (
     <div className="grid gap-2">
-      <Button variant="secondary" disabled={disabled} onClick={onReveal}>
+      <Button variant="default" disabled={disabled} onClick={onReveal}>
         Reveal reference (marks assistance)
       </Button>
-      {shown && <pre className="whitespace-pre-wrap text-sm">{reference}</pre>}
+      {shown && <CardRichText text={reference} className="text-sm" />}
     </div>
   );
 }

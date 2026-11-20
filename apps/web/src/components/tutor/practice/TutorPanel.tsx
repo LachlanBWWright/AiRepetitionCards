@@ -31,7 +31,7 @@ import {
 } from "@recall/application";
 import type { KnowledgeArea, ReviewEvent } from "@recall/domain";
 import { Effect, Either } from "effect";
-import { type ComponentProps, type ReactNode, useMemo } from "react";
+import { type ComponentProps, useMemo } from "react";
 import { KnowledgeNotebookPanel } from "../notebook/KnowledgeNotebookPanel";
 import { TutorQuickQuestions } from "./TutorQuickQuestions";
 import { applyTutorPanelAssistance } from "./tutorPanelAssistance";
@@ -86,7 +86,6 @@ export function TutorPanel({
   reviewEvents,
   onStartReview,
   initialActivity,
-  research,
   clock = Date.now,
   searchTarget,
 }: {
@@ -107,7 +106,6 @@ export function TutorPanel({
   reviewEvents?: readonly ReviewEvent[];
   onStartReview?: () => void;
   readonly initialActivity?: "materials" | undefined;
-  readonly research?: ReactNode;
   clock?: () => number;
   searchTarget?: WorkspaceSearchTarget;
 }) {
@@ -298,7 +296,6 @@ export function TutorPanel({
       key={`${sessionNamespace}:${knowledgeArea.id}`}
       knowledgeArea={knowledgeArea}
       initialActivity={initialActivity ?? (initialState ? "quick" : "practice")}
-      research={research}
       practiceTopics={visibleGaps}
       onPracticeTopic={startTargetedQuiz}
       quickQuestionsBusy={busy}

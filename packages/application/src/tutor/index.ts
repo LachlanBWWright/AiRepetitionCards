@@ -58,3 +58,14 @@ export {
 } from "./chat/improvement-chat";
 
 export { DEFAULT_TUTOR_MODEL, selectTutorModel } from "./chat/tutor-model-selection";
+
+export * from "./chat/conversation-store";
+
+export * from "./proposals/review-repair";
+
+export * from "./routing/ai-access";
+export * from "./routing/managed-ai-routing";
+export * from "./routing/managed-ai-client";
+export * from "./routing/ai-funding-store";
+
+export { reviewRepairCopy, reviewRepairApprovalNote } from "./proposals/review-repair-copy";

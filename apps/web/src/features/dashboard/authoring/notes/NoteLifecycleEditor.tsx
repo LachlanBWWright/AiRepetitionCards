@@ -1,3 +1,6 @@
+import { Alert } from "@recall/ui-web/components/alert";
+import { FieldError } from "@recall/ui-web/components/field";
+import { Label } from "@recall/ui-web/components/label";
 import { useState } from "react";
 import { Either } from "effect";
 import type { NoteAuthoringModel } from "@recall/react";
@@ -24,7 +27,7 @@ function SourceSelect({
   readonly onChange: (value: string) => void;
 }) {
   return (
-    <label className="grid gap-1 text-sm">
+    <Label className="grid gap-2 text-sm">
       {label}
       <Select
         value={value || "__new"}
@@ -32,7 +35,7 @@ function SourceSelect({
           onChange(value === "__new" ? "" : value);
         }}
       >
-        <SelectTrigger aria-label={label}>
+        <SelectTrigger className="w-full" aria-label={label}>
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
@@ -44,7 +47,7 @@ function SourceSelect({
           ))}
         </SelectContent>
       </Select>
-    </label>
+    </Label>
   );
 }
 export function NoteLifecycleEditor({ model }: { readonly model: NoteAuthoringModel }) {
@@ -53,7 +56,7 @@ export function NoteLifecycleEditor({ model }: { readonly model: NoteAuthoringMo
     <div className="grid gap-3">
       {model.type.fields.map((field, index) => (
         <div key={field.name} className="grid gap-2 border-b pb-3">
-          <label className="grid gap-1 text-sm">
+          <Label className="grid gap-2 text-sm">
             Field name
             <Input
               value={names[field.name] ?? field.name}
@@ -62,12 +65,12 @@ export function NoteLifecycleEditor({ model }: { readonly model: NoteAuthoringMo
                 setNames({ ...names, [field.name]: event.target.value });
               }}
             />
-          </label>
+          </Label>
           <div className="flex flex-wrap gap-2">
             <Button
               type="button"
-              size="small"
-              variant="secondary"
+              size="sm"
+              variant="default"
               disabled={
                 !names[field.name] ||
                 names[field.name] === field.name ||
@@ -83,8 +86,8 @@ export function NoteLifecycleEditor({ model }: { readonly model: NoteAuthoringMo
             </Button>
             <Button
               type="button"
-              size="small"
-              variant="secondary"
+              size="sm"
+              variant="default"
               disabled={index === 0}
               onClick={() => {
                 model.moveField(field.name, -1);
@@ -94,8 +97,8 @@ export function NoteLifecycleEditor({ model }: { readonly model: NoteAuthoringMo
             </Button>
             <Button
               type="button"
-              size="small"
-              variant="secondary"
+              size="sm"
+              variant="default"
               disabled={index === model.type.fields.length - 1}
               onClick={() => {
                 model.moveField(field.name, 1);
@@ -105,8 +108,8 @@ export function NoteLifecycleEditor({ model }: { readonly model: NoteAuthoringMo
             </Button>
             <Button
               type="button"
-              size="small"
-              variant="secondary"
+              size="sm"
+              variant="default"
               disabled={model.type.fields.length === 1}
               onClick={() => {
                 model.removeField(field.name);
@@ -118,7 +121,7 @@ export function NoteLifecycleEditor({ model }: { readonly model: NoteAuthoringMo
         </div>
       ))}
       {model.savedNote && (
-        <label className="grid gap-1 text-sm">
+        <Label className="grid gap-2 text-sm">
           Change note type
           <Select
             value={model.type.id}
@@ -127,12 +130,12 @@ export function NoteLifecycleEditor({ model }: { readonly model: NoteAuthoringMo
               if (type) model.convertType(type);
             }}
           >
-            <SelectTrigger aria-label="Change note type">
+            <SelectTrigger className="w-full" aria-label="Change note type">
               <SelectValue />
             </SelectTrigger>
             <NoteTypeOptions model={model} />
           </Select>
-        </label>
+        </Label>
       )}
       {model.savedNote && model.sourceType && model.savedNote.typeId !== model.type.id && (
         <>
@@ -167,15 +170,10 @@ export function NoteLifecycleEditor({ model }: { readonly model: NoteAuthoringMo
 }
 export function NoteLifecycleImpact({ model }: { readonly model: NoteAuthoringModel }) {
   const plan = model.lifecyclePlan;
-  if (Either.isLeft(plan))
-    return (
-      <p role="alert" className="text-sm">
-        {plan.left.message}
-      </p>
-    );
+  if (Either.isLeft(plan)) return <FieldError>{plan.left.message}</FieldError>;
   if (!plan.right.requiresConfirmation) return null;
   return (
-    <div className="grid gap-2 rounded border border-destructive/50 p-3 text-sm">
+    <Alert variant="destructive" className="grid gap-2">
       {plan.right.removed.length > 0 && (
         <p>
           {plan.right.removed.length} {plan.right.removed.length === 1 ? "card" : "cards"} will move
@@ -201,7 +199,7 @@ export function NoteLifecycleImpact({ model }: { readonly model: NoteAuthoringMo
           {value.field}: {value.value}
         </p>
       ))}
-      <label className="flex items-center gap-2">
+      <Label className="flex items-center gap-2">
         <Checkbox
           checked={model.migration?.confirmRemoval ?? false}
           onCheckedChange={(value) => {
@@ -209,8 +207,8 @@ export function NoteLifecycleImpact({ model }: { readonly model: NoteAuthoringMo
           }}
         />
         Apply these removals when saving
-      </label>
-    </div>
+      </Label>
+    </Alert>
   );
 }
 

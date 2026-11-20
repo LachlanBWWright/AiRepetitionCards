@@ -15,7 +15,7 @@ export function ChatModelPicker({
   readonly selection?: ChatModelSelection | undefined;
   readonly busy: boolean;
 }) {
-  if (!selection) return <span className="px-2 text-xs text-muted-foreground">Server model</span>;
+  if (!selection) return null;
   return (
     <Select
       value={selection.value}

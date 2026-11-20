@@ -1,5 +1,6 @@
 import type { ChangeEvent } from "react";
 import { Text, View } from "react-native";
+import { designTokens } from "@recall/design-tokens";
 
 type NativeSelectOption = { readonly label: string; readonly value: string };
 
@@ -18,8 +19,20 @@ export function NativeSelect({
 }) {
   return (
     <View style={{ gap: 4 }}>
-      <Text>{label}</Text>
+      <Text style={{ color: designTokens.color.muted, fontSize: 13 }}>{label}</Text>
       <select
+        data-native-control-mock="picker"
+        style={{
+          minHeight: 48,
+          border: `1px solid ${designTokens.color.line}`,
+          borderRadius: 10,
+          padding: "10px 12px",
+          background: designTokens.color.surface,
+          color: designTokens.color.ink,
+          fontSize: 16,
+          width: "100%",
+          opacity: disabled ? 0.5 : 1,
+        }}
         aria-label={label}
         value={value}
         disabled={disabled}
@@ -64,3 +77,14 @@ export function NativeTimePicker({
 export { NativeTextField } from "../../../packages/ui-native/src/NativeTextField";
 
 export { NativeButton } from "../../../packages/ui-native/src/NativeButton";
+export { NativeButtonPrimitive } from "../../../packages/ui-native/src/NativeButton";
+export {
+  NativeCollapsible,
+  NativeCollapsibleTrigger,
+  NativeCollapsibleContent,
+} from "../../../packages/ui-native/src/NativeCollapsible";
+
+export { NativeButtonText } from "../../../packages/ui-native/src/NativeButtonText";
+export { NativeWorkflowSections } from "../../../packages/ui-native/src/NativeWorkflowSections";
+
+export { NativeNavigationLink } from "../../../packages/ui-native/src/NativeNavigationLink";

@@ -10,13 +10,14 @@ import { NativeKnowledgeNotebookQueue } from "./proposals/NativeKnowledgeNoteboo
 import { NativeKnowledgeNotebookHistory } from "./practice/NativeKnowledgeNotebookHistory";
 import { NativeKnowledgeNotebookProposal } from "./proposals/NativeKnowledgeNotebookProposal";
 import { NativeKnowledgeNotebookSettings } from "./NativeKnowledgeNotebookSettings";
+import { NativeCollapsibleContent, NativeCollapsibleTrigger } from "@recall/ui-native";
 export function NativeKnowledgeNotebookPanel(props: NativeKnowledgeNotebookProps) {
   const state = useNativeKnowledgeNotebookModel(props);
   const model = props.activityOverride
     ? { ...state, section: NotebookSection.StudyMaterials }
     : state;
   if (props.experience === "chat" && !props.activityOverride)
-    return <NativeImprovementChat model={model} />;
+    return <NativeImprovementChat model={model} renderHandover={props.renderHandover} />;
   const {
     searchedConcept,
     searchedEvidence,
@@ -94,21 +95,13 @@ export function NativeKnowledgeNotebookPanel(props: NativeKnowledgeNotebookProps
       <View className={props.activityOverride ? "hidden" : "flex-row flex-wrap gap-[7px]"}>
         {notebookSections.map((item) => (
           <NativeButton
+            selected={section === item}
+            variant="secondary"
             key={item}
             label={item}
             onPress={() => {
               setSection(item);
             }}
-            className={
-              section === item
-                ? "py-[9px] px-[10px] bg-recall-darkGreen rounded-[5px]"
-                : "py-[9px] px-[4px]"
-            }
-            labelClassName={
-              section === item
-                ? "text-recall-surface text-[12px] font-bold"
-                : "text-recall-darkGreen text-[11px] font-bold"
-            }
           />
         ))}
       </View>
@@ -137,29 +130,22 @@ export function NativeKnowledgeNotebookPanel(props: NativeKnowledgeNotebookProps
             })
           }
           label="Retry saving notebook"
-          className={
-            "min-h-[40px] justify-center items-center px-[13px] rounded-[10px] bg-recall-darkGreen"
-          }
-          labelClassName="text-recall-surface text-[12px] font-bold"
         />
       ) : null}
-      <NativeButton
-        label={showSettings ? "Close notebook settings" : "Notebook settings"}
-        onPress={() => {
-          setShowSettings((current) => !current);
-        }}
-        className={"py-[9px] px-[4px]"}
-        labelClassName="text-recall-darkGreen text-[11px] font-bold"
-      />
+      {notebook ? (
+        <NativeCollapsibleTrigger
+          open={showSettings}
+          title="Notebook settings"
+          onToggle={() => {
+            setShowSettings((current) => !current);
+          }}
+        />
+      ) : null}
       {loadFailed ? (
         <NativeButton
           disabled={busy || !mayWrite()}
           onPress={clearNotebook}
           label="Clear unreadable notebook"
-          className={
-            "min-h-[36px] justify-center items-center px-[10px] rounded-[10px] bg-transparent"
-          }
-          labelClassName="text-recall-darkGreen text-[11px] font-bold"
         />
       ) : null}
       {!notebook && section !== NotebookSection.ReviewSuggestions ? (
@@ -181,10 +167,6 @@ export function NativeKnowledgeNotebookPanel(props: NativeKnowledgeNotebookProps
               })
             }
             label={section === NotebookSection.StudyMaterials ? "Start" : "Start tutor practice"}
-            className={
-              "min-h-[40px] justify-center items-center px-[13px] rounded-[10px] bg-recall-darkGreen"
-            }
-            labelClassName="text-recall-surface text-[12px] font-bold"
           />
         </>
       ) : notebook ? (
@@ -193,7 +175,9 @@ export function NativeKnowledgeNotebookPanel(props: NativeKnowledgeNotebookProps
           <NativeKnowledgeNotebookQueue model={model} />
           <NativeKnowledgeNotebookHistory model={model} />
           <NativeKnowledgeNotebookProposal model={model} />
-          <NativeKnowledgeNotebookSettings model={model} />
+          <NativeCollapsibleContent open={showSettings}>
+            <NativeKnowledgeNotebookSettings model={model} />
+          </NativeCollapsibleContent>
         </>
       ) : null}
       {busy ? (

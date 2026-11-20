@@ -1,3 +1,4 @@
+import { Label } from "@recall/ui-web/components/label";
 import type { ReviewPresentation, TypedAnswerSettings } from "@recall/domain";
 import { Checkbox } from "@recall/ui-web/components/checkbox";
 import { SpeechFieldSettings } from "./SpeechFieldSettings";
@@ -26,13 +27,14 @@ export function ReviewPresentationSettings({
     <Accordion type="single" collapsible>
       <AccordionItem value="presentation">
         <AccordionTrigger>Appearance, answer and pronunciation</AccordionTrigger>
-        <AccordionContent className="grid gap-3">
+        <AccordionContent className="grid gap-6">
           <CardAppearanceSettings
             value={value?.appearance}
             onChange={(appearance) => {
               onChange({ ...value, appearance });
             }}
           />
+          <FieldAppearanceSettings value={value} onChange={onChange} />
           <TypedOptions
             typed={typed}
             onChange={(typedAnswer) => {
@@ -68,7 +70,7 @@ function TypedOptions({
   return (
     <div className="grid gap-2">
       {typedOptions.map(([key, label]) => (
-        <label className="flex gap-2 items-center" key={key}>
+        <Label className="flex gap-2 items-center" key={key}>
           <Checkbox
             checked={typed[key]}
             onCheckedChange={(checked) => {
@@ -76,7 +78,37 @@ function TypedOptions({
             }}
           />
           {label}
-        </label>
+        </Label>
+      ))}
+    </div>
+  );
+}
+
+function FieldAppearanceSettings({
+  value,
+  onChange,
+}: {
+  readonly value: ReviewPresentation | undefined;
+  readonly onChange: (value: ReviewPresentation) => void;
+}) {
+  return (
+    <div className="grid gap-4">
+      {(["front", "back", "explanation"] as const).map((field) => (
+        <fieldset key={field} className="flex min-w-0 flex-col gap-2">
+          <legend>
+            {field === "front" ? "Question" : field === "back" ? "Answer" : "Explanation"}{" "}
+            appearance override
+          </legend>
+          <CardAppearanceSettings
+            value={value?.fieldAppearance?.[field]}
+            onChange={(appearance) => {
+              onChange({
+                ...value,
+                fieldAppearance: { ...value?.fieldAppearance, [field]: appearance },
+              });
+            }}
+          />
+        </fieldset>
       ))}
     </div>
   );

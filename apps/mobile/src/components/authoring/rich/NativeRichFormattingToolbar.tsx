@@ -1,3 +1,7 @@
+import { NativeCollapsibleTrigger } from "@recall/ui-native";
+import { useEquationEditor } from "@recall/react";
+import { cardEquationError } from "@recall/infra-rich-content";
+import { NativeEquationEditor } from "./NativeEquationEditor";
 import type { MediaReference } from "@recall/domain";
 import { useState } from "react";
 import { View } from "react-native";
@@ -18,6 +22,7 @@ type Props = {
   readonly media?: readonly MediaReference[];
   readonly showPreview?: boolean;
   readonly selection?: RichSelection;
+  readonly maxLength?: number;
   readonly onEdit?: (edit: RichEdit) => void;
 };
 const actions = [
@@ -26,7 +31,6 @@ const actions = [
   ["code", "Code", "</>"],
   ["bullet", "Bulleted list", "•"],
   ["number", "Numbered list", "1."],
-  ["math", "Equation", "∑"],
 ] as const satisfies readonly (readonly [RichInsertion, string, string])[];
 export function NativeRichFormattingToolbar({
   value,
@@ -36,7 +40,9 @@ export function NativeRichFormattingToolbar({
   showPreview = true,
   selection = { start: value.length, end: value.length },
   onEdit,
+  maxLength,
 }: Props) {
+  const equation = useEquationEditor(cardEquationError);
   const [preview, setPreview] = useState(false);
   const apply = (edit: RichEdit) => {
     if (onEdit) onEdit(edit);
@@ -50,34 +56,52 @@ export function NativeRichFormattingToolbar({
             key={kind}
             label={glyph}
             accessibilityLabel={label}
-            tone="soft"
-            className="min-h-12 min-w-11 rounded-lg px-2"
-            labelClassName={kind === "italic" ? "italic text-base" : "text-base font-medium"}
+            variant="secondary"
+            className="min-w-11"
+
             disabled={disabled ?? false}
             onPress={() => {
               apply(formatRichSelection(value, selection, kind));
             }}
           />
         ))}
+        <NativeButton
+          label="∑"
+          accessibilityLabel="Equation"
+          variant="secondary"
+          disabled={disabled ?? false}
+          onPress={() => {
+            equation.open(value, selection, maxLength);
+          }}
+        />
         {showPreview && (
-          <NativeButton
-            label={preview ? "Hide preview" : "Preview"}
-            tone="soft"
-            onPress={() => {
+          <NativeCollapsibleTrigger
+            open={preview}
+            title="Preview"
+            onToggle={() => {
               setPreview(!preview);
             }}
           />
         )}
       </View>
+      <NativeEquationEditor
+        editor={equation}
+        disabled={disabled ?? false}
+        onInsert={() => {
+          const edit = equation.edit();
+          if (!edit) return;
+          apply(edit);
+          equation.close();
+        }}
+      />
       {media
         .filter((item) => item.mimeType.startsWith("image/"))
         .map((item, index) => (
           <NativeButton
             key={item.id}
             label={`Insert attached image ${String(index + 1)}`}
-            tone="soft"
-            className="min-h-10 rounded-lg px-3"
-            labelClassName="text-xs font-medium"
+            variant="secondary"
+
             disabled={disabled ?? false}
             onPress={() => {
               apply(

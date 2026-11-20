@@ -11,22 +11,36 @@ type Props = {
 
 export function RecallDashboardCardEditorActions(props: Props) {
   return (
-    <DialogFooter className="flex flex-wrap items-center justify-end gap-2">
+    <DialogFooter className="grid grid-cols-[auto_minmax(0,1fr)] sm:flex sm:justify-between">
+      <Button
+        size="default"
+        variant="secondary"
+        type="button"
+        disabled={props.saving}
+        onClick={props.onCancel}
+        className="order-2 sm:order-0"
+      >
+        Cancel
+      </Button>
       {!props.editing && (
         <Button
-          size="small"
+          size="default"
+          variant="secondary"
           type="submit"
           disabled={props.saving || !props.duplicatesAccepted || !props.canSave}
           data-save-another="true"
+          className="order-3 sm:order-1 sm:ml-auto"
         >
-          Save and add another
+          Save &amp; add another
         </Button>
       )}
-      <Button size="small" type="button" onClick={props.onCancel}>
-        Cancel
-      </Button>
-      <Button size="small" type="submit" disabled={props.saving || !props.canSave}>
-        {props.saving ? "Saving card…" : props.editing ? "Save changes" : "Save and finish"}
+      <Button
+        size="default"
+        type="submit"
+        disabled={props.saving || !props.canSave}
+        className="order-1 col-span-2 sm:order-2 sm:col-auto"
+      >
+        {props.saving ? "Saving card…" : props.editing ? "Save changes" : "Save card"}
       </Button>
     </DialogFooter>
   );

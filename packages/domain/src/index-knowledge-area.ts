@@ -18,6 +18,7 @@ const AssessmentOriginSchema = Schema.Union(
 
 export const FlashcardAssessmentContentSchema = Schema.Struct({
   kind: Schema.Literal("basic"),
+  explanation: Schema.optional(Schema.String.pipe(Schema.maxLength(10_000))),
   presentation: Schema.optional(ReviewPresentationSchema),
   imageOcclusion: Schema.optional(ImageOcclusionSchema),
   id: AssessmentIdSchema,
@@ -34,6 +35,7 @@ export const FlashcardAssessmentContentSchema = Schema.Struct({
 
 export const ClozeAssessmentContentSchema = Schema.Struct({
   kind: Schema.Literal("cloze"),
+  explanation: Schema.optional(Schema.String.pipe(Schema.maxLength(10_000))),
   presentation: Schema.optional(ReviewPresentationSchema),
   imageOcclusion: Schema.optional(ImageOcclusionSchema),
   id: AssessmentIdSchema,

@@ -10,16 +10,16 @@
   "scripts": {
     "dev": "node scripts/prepare-dev.mjs && electron-vite dev --watch",
     "build": "node ../web/scripts/prepare-ocr-assets.mjs desktop && electron-vite build",
-    "package": "node ../web/scripts/prepare-ocr-assets.mjs desktop && electron-vite build && electron-builder --dir",
-    "dist:linux": "node ../web/scripts/prepare-ocr-assets.mjs desktop && electron-vite build && electron-builder --linux AppImage --x64 --publish never",
-    "dist:mac": "node ../web/scripts/prepare-ocr-assets.mjs desktop && electron-vite build && electron-builder --mac dmg zip --x64 --publish never -c.mac.identity=null",
-    "dist:mac:arm64": "node ../web/scripts/prepare-ocr-assets.mjs desktop && electron-vite build && electron-builder --mac dmg zip --arm64 --publish never -c.mac.identity=null",
-    "dist:windows": "node ../web/scripts/prepare-ocr-assets.mjs desktop && electron-vite build && electron-builder --win nsis --x64 --publish never",
+    "package": "node ../web/scripts/prepare-ocr-assets.mjs desktop && electron-vite build && electron-builder --config scripts/electron-builder.cjs --dir",
+    "dist:linux": "node ../web/scripts/prepare-ocr-assets.mjs desktop && electron-vite build && electron-builder --config scripts/electron-builder.cjs --linux AppImage --x64 --publish never",
+    "dist:mac": "node ../web/scripts/prepare-ocr-assets.mjs desktop && electron-vite build && electron-builder --config scripts/electron-builder.cjs --mac dmg zip --x64 --publish never -c.mac.identity=null",
+    "dist:mac:arm64": "node ../web/scripts/prepare-ocr-assets.mjs desktop && electron-vite build && electron-builder --config scripts/electron-builder.cjs --mac dmg zip --arm64 --publish never -c.mac.identity=null",
+    "dist:windows": "node ../web/scripts/prepare-ocr-assets.mjs desktop && electron-vite build && electron-builder --config scripts/electron-builder.cjs --win nsis --x64 --publish never",
     "typecheck": "tsc --noEmit",
     "lint": "eslint --max-warnings=0",
-    "dist:mac:signed": "node ../web/scripts/prepare-ocr-assets.mjs desktop && electron-vite build && electron-builder --mac dmg zip --x64 --publish never -c.forceCodeSigning=true -c.mac.hardenedRuntime=true -c.mac.notarize=true",
-    "dist:mac:arm64:signed": "node ../web/scripts/prepare-ocr-assets.mjs desktop && electron-vite build && electron-builder --mac dmg zip --arm64 --publish never -c.forceCodeSigning=true -c.mac.hardenedRuntime=true -c.mac.notarize=true",
-    "dist:windows:signed": "node ../web/scripts/prepare-ocr-assets.mjs desktop && electron-vite build && electron-builder --win nsis --x64 --publish never -c.forceCodeSigning=true -c.win.signExecutable=true"
+    "dist:mac:signed": "node ../web/scripts/prepare-ocr-assets.mjs desktop && electron-vite build && electron-builder --config scripts/electron-builder.cjs --mac dmg zip --x64 --publish never -c.forceCodeSigning=true -c.mac.hardenedRuntime=true -c.mac.notarize=true",
+    "dist:mac:arm64:signed": "node ../web/scripts/prepare-ocr-assets.mjs desktop && electron-vite build && electron-builder --config scripts/electron-builder.cjs --mac dmg zip --arm64 --publish never -c.forceCodeSigning=true -c.mac.hardenedRuntime=true -c.mac.notarize=true",
+    "dist:windows:signed": "node ../web/scripts/prepare-ocr-assets.mjs desktop && electron-vite build && electron-builder --config scripts/electron-builder.cjs --win nsis --x64 --publish never -c.forceCodeSigning=true -c.win.signExecutable=true"
   },
   "build": {
     "appId": "com.recall.study",
@@ -80,13 +80,16 @@
     "@recall/application": "workspace:*",
     "@recall/domain": "workspace:*",
     "@recall/infra-openai": "workspace:*",
+    "@recall/infra-supabase": "workspace:*",
     "@recall/local-store": "workspace:*",
+    "@recall/react": "workspace:*",
     "@recall/ui-web": "workspace:*",
     "@supabase/supabase-js": "2.117.2",
     "@swc/core": "1.16.13",
     "@types/node": "^24.10.0",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19",
+    "@types/semver": "7.7.1",
     "@vitejs/plugin-react": "^5.0.0",
     "effect": "^3.22.2",
     "electron": "44.5.1",
@@ -99,7 +102,9 @@
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "typescript": "^5",
-    "vite": "7.3.6",
-    "@recall/react": "workspace:*"
+    "vite": "7.3.6"
+  },
+  "dependencies": {
+    "electron-updater": "6.8.3"
   }
 }
